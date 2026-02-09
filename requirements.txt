@@ -1,0 +1,11 @@
+# Core Dependencies
+requests>=2.31.0
+pydantic>=2.0.0
+
+# Development & Testing
+pytest>=7.4.0
+black>=23.0.0
+pylint>=2.17.0
+
+# Logging & Utilities
+python-dotenv>=1.0.0
