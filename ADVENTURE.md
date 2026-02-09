@@ -121,18 +121,45 @@ adventure_path/
 
 ---
 
-### 🟡 Section 02: Campaign Setting (PLACEHOLDER)
+### 🟡 Section 02: Campaign Setting (ACTIVE)
 
-**Status:** ⧖ **Ready for content** - Structure defined, awaiting campaign details
+**Status:** ✅ **Campaign framework complete** - Core campaign structure fully specified
 
-**Purpose:** Define campaign-specific elements that override world defaults.
+**Purpose:** Define campaign-specific elements (tone, scope, player freedoms, faction rules)
 
-**Planned Content:**
-- CAMPAIGN_OVERVIEW.md - Campaign arc, timeline, scale
-- THEME_AND_TONE.md - Emotional tone (gritty? heroic? noir?)
-- FACTIONS_AND_POWERS.md - Major players, enemies, allies
-- LONG_ARC_THREATS.md - Main antagonists and their goals
-- PLAYER_AGENCY_RULES.md - What choices matter in this campaign
+#### Currently Defined:
+
+1. **[CAMPAIGN_OVERVIEW.md](adventure_path/02_campaign_setting/CAMPAIGN_OVERVIEW.md)** (158 lines)
+   - ✅ Campaign Name: Rise of the Runelords in Varisia
+   - ✅ System: Pathfinder 1e
+   - ✅ Geographic/Narrative scope: Varisia, local → world-altering arc
+   - ✅ Six narrative phases (Lvl 1–16+): Local Defenders → Final Reckoning
+   - ✅ Central themes: Ancient sin momentum, civilization fragility, knowledge danger
+   - ✅ Failure/Recovery model: Permanent but campaign-adaptive
+
+2. **[THEME_AND_TONE.md](adventure_path/02_campaign_setting/THEME_AND_TONE.md)** (218 lines)
+   - ✅ Emotional logic and descriptive framing guidelines
+   - ✅ Core thematic pillars: Ancient sin, civilization fragility, knowledge danger
+   - ✅ Tone escalation and NPC behavior patterns
+   - ✅ GM instructions for maintaining campaign atmosphere
+
+3. **[PLAYER_AGENCY_RULES.md](adventure_path/02_campaign_setting/PLAYER_AGENCY_RULES.md)** (123 lines)
+   - ✅ Constrained agency model: Players choose *how*, not *whether*
+   - ✅ Guaranteed freedoms: approach choice, alliance forming, retreat, failure tolerance
+   - ✅ Explicit constraints: No opting out, no off-genre escape, no world-rewriting
+   - ✅ Avoidance is treated as a player choice, not an escape route
+
+4. **[FACTIONS_AND_POWERS.md](adventure_path/02_campaign_setting/FACTIONS_AND_POWERS.md)** (207 lines)
+   - ✅ Faction design principles: persistence, hierarchy, realism
+   - ✅ Major campaign factions: Thassilonian Remnants, The Runelords, Sandpoint powers, wilderness threats
+   - ✅ Faction interaction logic and adaptation patterns
+   - ✅ Rules against invention drift; existing factions prioritized
+
+5. **[NPC_MEMORY_AND_CONTINUITY.md](adventure_path/02_campaign_setting/NPC_MEMORY_AND_CONTINUITY.md)** (✅ ACTIVE)
+   - ✅ Named NPCs persist unless explicitly removed
+   - ✅ NPC competence scales with role
+   - ✅ Returning to locations reuses established NPCs
+   - ✅ Prevents NPC churn and town inconsistency
 
 ---
 
@@ -249,4 +276,4 @@ When the GM encounters conflicting rules or facts:
 
 ---
 
-**Status Updated:** Feb 9, 2026 | **Total Defined Rules:** ~1,118 lines | **Complete Sections:** 1 (00) | **In Progress:** 1 (01) | **Placeholder:** 3 (02, 03, 90)
+**Status Updated:** Feb 10, 2026 | **Total Defined Rules:** ~1,838 lines | **Complete Sections:** 2 (00, 02) | **In Progress:** 1 (01) | **Placeholder:** 2 (03, 90)

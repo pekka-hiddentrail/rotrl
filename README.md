@@ -24,15 +24,11 @@ rotrl/
 │   └── main.py                    # Entry point
 │
 ├── adventure_path/                # Campaign rules & lore (AUTHORITY HIERARCHY)
-│   ├── 00_system_authority/       # Non-negotiable GM rules (ACTIVE)
-│   │   ├── GM_OPERATING_RULES.md
-│   │   ├── ADJUDICATION_PRINCIPLES.md
-│   │   ├── COMBAT_AND_POSITIONING.md
-│   │   └── PF1E_RULES_SCOPE.md
-│   ├── 01_world_setting/          # World lore & cosmology (placeholder)
-│   ├── 02_campaign_setting/       # Campaign-specific rules (placeholder)
-│   ├── 03_books/                  # Adventure modules
-│   └── 90_shared_references/      # Shared lookup tables
+│   ├── 00_system_authority/       # Non-negotiable GM rules (✅ ACTIVE, ~720 lines)
+│   ├── 01_world_setting/          # World lore & cosmology (🟡 IN PROGRESS, ~400 lines)
+│   ├── 02_campaign_setting/       # Campaign-specific rules (✅ ACTIVE, ~700 lines)
+│   ├── 03_books/                  # Adventure modules (placeholder)
+│   └── 90_shared_references/      # Shared lookup tables (placeholder)
 │
 ├── .agents/                       # Agent instruction prompts & personas
 ├── .skills/                       # Rules reference prompts
@@ -42,7 +38,8 @@ rotrl/
 ├── outputs/                       # Game session logs and results
 ├── bootstrap.py                   # Quick Ollama test & response printer
 ├── requirements.txt               # Python dependencies
-├── ADVENTURE.md                   # Adventure path structure & status
+├── ADVENTURE.md                   # Adventure path structure & hierarchy
+├── CAMPAIGN.md                    # Campaign settings overview & phases
 ├── CONTEXT.md                     # Development context for AI
 └── README.md                      # This file
 ```
@@ -84,11 +81,16 @@ Modular adventure files defining:
   - World Operating Rules (prevents hallucination, controls improvisation)
   - Golarion/Varisia setting specifics
   - Thassilon ancient empire context
-- **02_campaign_setting/** - Campaign tone, factions, main threats (placeholder)
+- **02_campaign_setting/** (✅ ACTIVE) - Campaign structure, tone, player agency, factions (~700 lines)
+  - Six narrative phases (Lvl 1–16+) with escalating scope
+  - Theme and emotional tone guidance
+  - Player agency guarantees and constraints
+  - Faction persistence and NPC continuity rules
 - **03_books/** - Adventure modules and encounters
 - **90_shared_references/** - Shared lookup tables and utilities
 
-See [ADVENTURE.md](ADVENTURE.md) for detailed structure and current status.
+See [ADVENTURE.md](ADVENTURE.md) for detailed structure and current status.  
+See [CAMPAIGN.md](CAMPAIGN.md) for campaign settings overview.
 
 ### Instruction Prompts (`.agents/`, `.skills/`, `.tools/`, `.config/`)
 These dot-prefixed folders contain instruction prompts and persona definitions:
@@ -202,22 +204,27 @@ adventure = ExampleAdventure()
 dm.conduct_session(party, adventure)
 ```
 
-## Development Status
+## Current Project Status
 
-### ✅ Complete
-- [x] Project structure (src/, adventure_path/, prompts)
-- [x] System Authority rules (~720 lines of GM behavior)
-- [x] Ollama integration (bootstrap.py, hello_world.py)
-- [x] Python environment setup (Python 3.13, virtual env)
-- [x] Adventure path hierarchy system
+### Configuration & Rules (✅ ~1,838 lines complete)
+- ✅ **System Authority** (00_system_authority/): GM behavior, adjudication, rules scope — **720 lines**
+- 🟡 **World Setting** (01_world_setting/): Golarion/Varisia canon, world operating rules — **~400 lines** (in progress)
+- ✅ **Campaign Settings** (02_campaign_setting/): RotRL structure, 6 narrative phases, player agency — **~700 lines**
+- 🔴 **Adventure Modules** (03_books/): Not yet started
+- 🔴 **Shared References** (90_shared_references/): Not yet started
 
-### 🟡 In Progress
-- [ ] World Setting (~400 lines - RotRL canon, Varisia lore, world rules)
-- [ ] Populate Campaign Setting (02_campaign_setting/)
+### Code & Infrastructure (✅ Complete)
+- ✅ Project structure (src/, adventure_path/, prompts)
+- ✅ Ollama integration (bootstrap.py, hello_world.py)
+- ✅ Python 3.13 virtual environment
+- ✅ Authority hierarchy system (5-tier)
+
+### Core Systems (🟡 In Progress)
 - [ ] Base agent framework (src/agents/agent.py)
 - [ ] Pathfinder 1e mechanics engine (src/skills/)
+- [ ] World Setting detail (complementary lore)
 
-### 🔴 Not Started
+### Gameplay Features (🔴 Not Started)
 - [ ] DM orchestration logic
 - [ ] Player agent autonomy
 - [ ] Adventure modules (03_books/)
@@ -233,11 +240,25 @@ dm.conduct_session(party, adventure)
 - **Efficient**: Works on modest hardware (~2.5GB LLM model)
 - **Deterministic**: Same seed → same outcome (reproducible games)
 
-## Project Layout
+## Documentation
 
-See [ADVENTURE.md](ADVENTURE.md) for a comprehensive guide to the campaign structure and authority hierarchy.
+This project has extensive rules and configuration documentation organized by authority:
 
-See [CONTEXT.md](CONTEXT.md) for AI development context.
+- **[ADVENTURE.md](ADVENTURE.md)** — Overview of the 5-tier authority hierarchy, links to all config files, status tracking
+- **[CAMPAIGN.md](CAMPAIGN.md)** — Rise of the Runelords campaign specifics: 6 narrative phases (Lvl 1–16+), player agency rules, faction definitions
+- **[CONTEXT.md](CONTEXT.md)** — Development guidance for AI assistants working on this project
+
+**Config Folder Hierarchy:**
+```
+adventure_path/
+├── 00_system_authority/        ← How GM thinks, decides, and adjudicates
+├── 01_world_setting/           ← Golarion/Varisia lore and world rules 
+├── 02_campaign_setting/        ← Rise of the Runelords structure, tone, themes
+├── 03_books/                   ← Individual adventures (not yet populated)
+└── 90_shared_references/       ← Shared tables and utilities (not yet populated)
+```
+
+Higher sections override lower sections — no conflicts possible by design.
 
 ## License
 
@@ -245,10 +266,7 @@ See [CONTEXT.md](CONTEXT.md) for AI development context.
 
 ---
 
-**Current Status**: 
-- ✅ Infrastructure: Project structure, Ollama integration, System Authority rules complete
-- 🟡 Campaign Lore: World Setting (Rise of the Runelords/Varisia) emerging in progress
-- 🟡 Core Systems: Agent framework and Pathfinder mechanics in progress
-- 🔴 Gameplay: Adventure modules and agent autonomy pending
+**Current Status**: Foundation + Campaign Lore ✅ COMPLETE | Core Systems 🟡 IN PROGRESS | Gameplay 🔴 TODO
 
-**Updated**: Feb 9, 2026 | **Total Lines of Code/Rules**: ~1,120
+**Updated**: Feb 10, 2026  
+**Metrics**: ~1,838 lines of rules/config | 6 campaign phases | 2 sections active | 1 in progress
