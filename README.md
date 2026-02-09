@@ -15,48 +15,36 @@ An agentic AI system that uses Ollama LLM and Python to conduct Pathfinder 1st E
 
 ```
 rotrl/
-├── src/                        # All Python source code
-│   ├── agents/                 # AI agent definitions and orchestration
-│   │   ├── __init__.py
-│   │   ├── agent.py           # Base agent class
-│   │   ├── dm.py              # Dungeon Master agent
-│   │   ├── player.py          # Player character agents
-│   │   └── npc.py             # Non-player character agents
-│   ├── skills/                # Pathfinder 1st Ed skills and mechanics
-│   │   ├── __init__.py
-│   │   ├── combat.py          # Combat resolution
-│   │   ├── skills.py          # Skill checks (Perception, Stealth, etc.)
-│   │   ├── spells.py          # Spell mechanics
-│   │   └── creatures.py       # Monster/NPC stat blocks
-│   ├── tools/                 # Utility functions
-│   │   ├── __init__.py
-│   │   ├── dice.py            # Dice rolling (d20, d100, etc.)
-│   │   ├── character_gen.py   # Character sheet generation
-│   │   ├── ollama_client.py   # LLM interface
-│   │   ├── game_state.py      # Game state management
-│   │   ├── parser.py          # Response parsing/validation
-│   │   └── logger.py          # Session logging
-│   ├── config/                # Configuration files
-│   │   ├── __init__.py
-│   │   └── settings.py        # LLM, game, and system settings
-│   ├── adventures/            # Adventure modules
-│   │   ├── __init__.py
-│   │   └── example/           # Example adventure template
-│   │       ├── encounters.py
-│   │       ├── npcs.py
-│   │       └── maps.json
-│   └── main.py                # Entry point
+├── src/                           # All Python source code
+│   ├── agents/                    # AI agent definitions
+│   ├── skills/                    # Pathfinder 1st Ed mechanics
+│   ├── tools/                     # Utilities (dice, LLM client, game state)
+│   ├── config/                    # Configuration
+│   ├── adventures/                # Adventure modules
+│   └── main.py                    # Entry point
 │
-├── .agents/                   # Agent instruction prompts & personas
-├── .skills/                   # Rules & mechanics reference prompts
-├── .tools/                    # Tool integration prompts (Ollama, dice, etc.)
-├── .config/                   # System configuration prompt templates
+├── adventure_path/                # Campaign rules & lore (AUTHORITY HIERARCHY)
+│   ├── 00_system_authority/       # Non-negotiable GM rules (ACTIVE)
+│   │   ├── GM_OPERATING_RULES.md
+│   │   ├── ADJUDICATION_PRINCIPLES.md
+│   │   ├── COMBAT_AND_POSITIONING.md
+│   │   └── PF1E_RULES_SCOPE.md
+│   ├── 01_world_setting/          # World lore & cosmology (placeholder)
+│   ├── 02_campaign_setting/       # Campaign-specific rules (placeholder)
+│   ├── 03_books/                  # Adventure modules
+│   └── 90_shared_references/      # Shared lookup tables
 │
-├── outputs/                   # Game session logs and results
-├── .gitignore
-├── requirements.txt           # Python dependencies
-├── CONTEXT.md                 # AI assistant context for development
-└── README.md                  # This file
+├── .agents/                       # Agent instruction prompts & personas
+├── .skills/                       # Rules reference prompts
+├── .tools/                        # Tool integration prompts
+├── .config/                       # System configuration prompts
+│
+├── outputs/                       # Game session logs and results
+├── bootstrap.py                   # Quick Ollama test & response printer
+├── requirements.txt               # Python dependencies
+├── ADVENTURE.md                   # Adventure path structure & status
+├── CONTEXT.md                     # Development context for AI
+└── README.md                      # This file
 ```
 
 ## Key Components
@@ -85,54 +73,110 @@ Modular adventure files defining:
 - Difficulty modifiers
 - Game rules variants
 
+### Adventure Path (`adventure_path/`)
+**Hierarchical authority system** for campaign rules - **Rise of the Runelords** in **Varisia, Golarion**:
+- **00_system_authority/** (✅ ACTIVE) - Non-negotiable GM behavioral rules (~720 lines)
+  - How the GM thinks, adjudicates, and maintains impartiality
+  - Combat positioning model
+  - Pathfinder 1e rules scope (what's allowed/banned)
+- **01_world_setting/** (🟡 IN PROGRESS) - World lore, geography, canon (~400 lines)
+  - Rise of the Runelords Adventure Path canon authority
+  - World Operating Rules (prevents hallucination, controls improvisation)
+  - Golarion/Varisia setting specifics
+  - Thassilon ancient empire context
+- **02_campaign_setting/** - Campaign tone, factions, main threats (placeholder)
+- **03_books/** - Adventure modules and encounters
+- **90_shared_references/** - Shared lookup tables and utilities
+
+See [ADVENTURE.md](ADVENTURE.md) for detailed structure and current status.
+
 ### Instruction Prompts (`.agents/`, `.skills/`, `.tools/`, `.config/`)
-These dot-prefixed folders contain instruction prompts and persona definitions for each subsystem:
-- `.agents/` - DM persona, Player agent behaviors, NPC templates
-- `.skills/` - Pathfinder 1st Ed rules reference, mechanics checklists
-- `.tools/` - Tool usage instructions, prompt templates
+These dot-prefixed folders contain instruction prompts and persona definitions:
+- `.agents/` - DM persona, Player behaviors, NPC templates
+- `.skills/` - Pathfinder 1st Ed rules reference for LLM use
+- `.tools/` - Tool integration instructions (Ollama, dice, etc.)
 - `.config/` - System configuration templates
 
 ### Outputs (`outputs/`)
-- Session logs (JSON/CSV)
-- Character sheets (final state)
+- Session transcripts and logs
+- Character progression records
 - Battle reports
-- Transcript archives
+- Game state snapshots
 
-## Technologies
+## Technologies & Design
 
-- **Language**: Python 3.9+
-- **LLM**: Ollama (local inference - ~5GB models like Qwen, Llama 2, or Mistral)
-- **Rules System**: Pathfinder 1st Edition
+- **Language**: Python 3.9+ (virtual environment)
+- **LLM**: Ollama (local inference - tested with qwen3:4b, ~2.5GB)
+- **Rules System**: Pathfinder 1st Edition RAW (as written)
+- **Architecture**: Hierarchical authority system for rules consistency
+  - System Authority → World Lore → Campaign Settings → Adventures
+  - Higher authority always overrides lower (no conflicts)
+  - GM behavior is rule-governed, not intuitive
 
-## Installation & Setup
+## Quick Start
 
-*Coming soon*
-
-1. Install Ollama and pull a model (e.g., `ollama pull qwen`)
-2. Install Python dependencies: `pip install -r requirements.txt`
-3. Configure Ollama in `config/settings.py`
-4. Run example adventure: `python main.py --adventure example`
-
-## Quick Start: Hello World Test
-
-To verify your Ollama setup is working:
+### 1. Install Dependencies
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Make sure Ollama is running
-ollama serve
-
-# In another terminal, run the hello world test
-python src/tools/hello_world.py
 ```
 
-This test validates:
-- ✅ Ollama connectivity
-- ✅ Prompt loading
-- ✅ Response parsing
-- ✅ Strict output validation
+This sets up a Python 3.13 virtual environment with:
+- `requests` - Ollama API communication
+- `pydantic` - Data validation
+- `pytest` - Testing framework
+
+### 2. Start Ollama
+
+```bash
+ollama serve
+```
+
+Then pull a model (if not already installed):
+```bash
+ollama pull qwen
+```
+
+### 3. Run Bootstrap Test
+
+In another terminal:
+
+```bash
+python bootstrap.py
+```
+
+This will:
+- ✅ Check if Ollama is running
+- ✅ Detect available models
+- ✅ Send a test query
+- ✅ Print the LLM response
+
+**Example output:**
+```
+[BOOTSTRAP] RotRL Ollama Bootstrap
+============================================================
+[CHECK] Is Ollama running?
+[OK] Ollama is running!
+[CHECK] Available models:
+  - qwen3:4b
+[SELECT] Using model: qwen3:4b
+[QUERY] Sending test query...
+[WAITING] Calling Ollama (this may take a moment)...
+[OK] Response received!
+============================================================
+RESPONSE:
+hello world
+============================================================
+[SUCCESS] Got expected response!
+```
+
+### 4. Verify Strict Hello World Test
+
+For a more rigorous test:
+
+```bash
+python src/tools/hello_world.py
+```
 
 See [.agents/hello/README.md](.agents/hello/README.md) for details.
 
@@ -158,25 +202,42 @@ adventure = ExampleAdventure()
 dm.conduct_session(party, adventure)
 ```
 
-## Development Roadmap
+## Development Status
 
-- [ ] Core agent architecture and LLM integration
-- [ ] Pathfinder 1st Ed skill/combat system
+### ✅ Complete
+- [x] Project structure (src/, adventure_path/, prompts)
+- [x] System Authority rules (~720 lines of GM behavior)
+- [x] Ollama integration (bootstrap.py, hello_world.py)
+- [x] Python environment setup (Python 3.13, virtual env)
+- [x] Adventure path hierarchy system
+
+### 🟡 In Progress
+- [ ] World Setting (~400 lines - RotRL canon, Varisia lore, world rules)
+- [ ] Populate Campaign Setting (02_campaign_setting/)
+- [ ] Base agent framework (src/agents/agent.py)
+- [ ] Pathfinder 1e mechanics engine (src/skills/)
+
+### 🔴 Not Started
 - [ ] DM orchestration logic
-- [ ] Adventure module system
-- [ ] Session logging and analysis
-- [ ] Example adventure (Beginner's adventure)
-- [ ] Character persistence
-- [ ] Advanced NPC interactions
-- [ ] Custom adventure creation tools
+- [ ] Player agent autonomy
+- [ ] Adventure modules (03_books/)
+- [ ] Session logging and replay
+- [ ] Shared reference tables (90_shared_references/)
 
-## Contribution Notes
+## Design Principles
 
-This system aims to be:
-- **Rule-accurate**: Follows Pathfinder 1st Ed rules
-- **Modular**: Easy to extend with new adventures/mechanics
-- **Transparent**: Logs all decisions and rolls for auditing
-- **Efficient**: Works well on modest hardware
+- **Rule-First**: Pathfinder 1st Ed RAW always; narrative never overrides mechanics
+- **Authority-Governed**: Rules follow explicit hierarchy; no negotiation
+- **Transparent**: All decisions, rolls, and reasoning are logged
+- **Modular**: Campaign rules stack without conflicts (authority hierarchy)
+- **Efficient**: Works on modest hardware (~2.5GB LLM model)
+- **Deterministic**: Same seed → same outcome (reproducible games)
+
+## Project Layout
+
+See [ADVENTURE.md](ADVENTURE.md) for a comprehensive guide to the campaign structure and authority hierarchy.
+
+See [CONTEXT.md](CONTEXT.md) for AI development context.
 
 ## License
 
@@ -184,4 +245,10 @@ This system aims to be:
 
 ---
 
-**Status**: Early development - Structure phase complete, core systems in progress.
+**Current Status**: 
+- ✅ Infrastructure: Project structure, Ollama integration, System Authority rules complete
+- 🟡 Campaign Lore: World Setting (Rise of the Runelords/Varisia) emerging in progress
+- 🟡 Core Systems: Agent framework and Pathfinder mechanics in progress
+- 🔴 Gameplay: Adventure modules and agent autonomy pending
+
+**Updated**: Feb 9, 2026 | **Total Lines of Code/Rules**: ~1,120
