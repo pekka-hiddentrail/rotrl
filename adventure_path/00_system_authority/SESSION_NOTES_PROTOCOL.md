@@ -1,0 +1,210 @@
+# SESSION_NOTES_PROTOCOL.md
+
+This document defines the mandatory rules and format for creating session notes. Session notes are **authoritative canon**. They exist to preserve game state, prevent hallucination, and ensure long-term consistency.
+
+Session notes are not narrative summaries. They are a **verifiable log of facts**.
+
+
+## 1. Authority and Purpose
+
+Session notes:
+
+* Are the single source of truth for past events.
+* Override memory, summaries, and narrative recollection.
+* Must be consulted before preparing or running the next session.
+
+If something is not recorded in session notes, it is considered **not to have happened**.
+
+
+## 2. Fact-Only Rule
+
+Session notes must contain **only facts established in play**.
+
+Allowed:
+
+* Explicit player actions and decisions.
+* Mechanical outcomes (damage, death, conditions, success/failure).
+* Information spoken aloud or otherwise revealed in-fiction.
+* Time passage and resource usage.
+
+Forbidden:
+
+* Interpretation, speculation, or inference.
+* NPC motivations unless explicitly stated in dialogue.
+* Emotional tone, atmosphere, or thematic commentary.
+* Foreshadowing or predictions.
+
+If a fact cannot be verified from play, it must not be recorded.
+
+
+## 3. Knowledge Separation
+
+All information must be tagged as one of the following:
+
+* **[PC-KNOWN]** – Player characters are aware of this information.
+* **[GM-ONLY]** – Information known only to the GM.
+
+Rules:
+
+* GM-only information must never be treated as PC-known unless explicitly revealed later.
+* Knowledge tags must not be changed retroactively.
+
+
+## 4. NPC State Tracking
+
+Every named NPC encountered must have an updated state entry.
+
+Each NPC entry may include only:
+
+* Status (alive, dead, missing, hostile, allied).
+* Last confirmed location.
+* Explicit relationship change caused by player action.
+* Knowledge gained during the session.
+
+NPCs do not evolve, scheme, or change internally unless it occurs on-screen.
+
+
+## 5. Location and Environment State
+
+Session notes must record:
+
+* Locations entered.
+* Rooms or areas explored.
+* Objects interacted with.
+* Changes to the environment (destroyed, sealed, looted).
+
+Rules:
+
+* Unvisited areas remain unknown.
+* Untaken loot remains present.
+* Untriggered traps remain armed.
+* Cleared locations remain cleared unless repopulation is explicitly triggered later.
+
+
+## 6. Timeline and Causality
+
+Session notes must include:
+
+* In-world date or relative time marker.
+* Travel durations, rests, and downtime.
+* Any triggered countdowns, rituals, or timed events.
+
+Rules:
+
+* Time advances only when recorded.
+* Off-screen events occur only if authorized by campaign rules.
+
+
+## 7. Mechanical State Snapshot
+
+At session end, record:
+
+* Current HP totals.
+* Ongoing conditions, diseases, curses, or effects.
+* Expended and remaining daily resources if relevant.
+
+Rules:
+
+* No assumed healing or recovery.
+* If uncertain, mark the value as **UNKNOWN** rather than guessing.
+
+
+## 8. Prohibited Content (Anti-Hallucination)
+
+Session notes must not include:
+
+* Predictions or plans.
+* Narrative embellishment.
+* Thematic analysis.
+* Hidden symbolism.
+* “What this means” commentary.
+
+Session notes record **what happened**, not what might happen.
+
+
+## 9. Formatting Rules
+
+* Bullet points only.
+* No prose paragraphs.
+* No metaphors or evocative language.
+* Adjectives allowed only if mechanically relevant.
+* Every entry must be falsifiable.
+
+
+## 10. Handoff and Revision Rules
+
+* Session notes must be completed before the next session begins.
+* No retroactive additions are allowed.
+* Clerical corrections must be explicitly marked as such.
+
+
+## 11. File Location
+
+The session note is written to - **.sessions(.sessions/)**
+The filename is "[Date-time]-[running number]"
+
+# SESSION NOTES TEMPLATE
+
+```
+SESSION: <number>
+BOOK / ACT:
+IN-WORLD DATE / TIME:
+SESSION DURATION:
+
+---
+
+PC STATUS (END OF SESSION)
+- <PC Name>: HP <value>, Conditions <list or none>, Resources <notes>
+
+---
+
+TIMELINE
+- <Relative or absolute time marker>: <event>
+
+---
+
+LOCATIONS VISITED
+- <Location name>
+  - Areas explored:
+  - Changes:
+
+---
+
+NPCS ENCOUNTERED
+- <NPC Name> [PC-KNOWN / GM-ONLY]
+  - Status:
+  - Location:
+  - Knowledge gained:
+  - Relationship change (if any):
+
+---
+
+EVENTS (FACTUAL)
+- <Action or outcome>
+
+---
+
+COMBAT SUMMARY (IF ANY)
+- Encounter location:
+- Participants:
+- Outcome:
+- Deaths:
+
+---
+
+ITEMS AND LOOT
+- Gained:
+- Lost:
+- Left behind:
+
+---
+
+ONGOING EFFECTS / OPEN THREADS
+- <Effect, threat, or timer>
+
+---
+
+GM-ONLY NOTES
+- <Information not known to PCs>
+
+```
