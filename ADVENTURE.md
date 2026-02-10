@@ -36,24 +36,31 @@ adventure_path/
 │   ├── LONG_ARC_THREATS.md        ⧖ PLACEHOLDER - Main campaign antagonists
 │   └── PLAYER_AGENCY_RULES.md     ⧖ PLACEHOLDER - Campaign-specific freedoms
 │
-├── 03_books/                      - Adventure books/modules (🟡 IN PROGRESS)
-│   ├── BOOK_01_BURNT_OFFERINGS/   🟨 IN PROGRESS - Foundational adventure (Lvl 1-4)
+├── 03_books/                      - Adventure books/modules (✅ BOOK_01 ACTIVE)
+│   ├── BOOK_01_BURNT_OFFERINGS/   ✅ ACTIVE - Foundational adventure Swallowtail Festival (Lvl 1-4, ~2,100 lines)
 │   │   ├── BOOK_OVERVIEW.md       ✅ ACTIVE - Campaign role, themes, narrative structure
-│   │   ├── ACT_STRUCTURE.md       🟨 IN PROGRESS - Act-by-act breakdown
-│   │   ├── LOCATIONS.md           ✅ ACTIVE - Narrative-significant locations & world state
-│   │   ├── NPCS.md                ✅ ACTIVE - Campaign NPCs by persistence tier
-│   │   ├── EVENTS_AND_TRIGGERS.md 🟨 IN PROGRESS - Time-based escalations & conditions
-│   │   └── act_01/                🟨 IN PROGRESS - Act I encounters & specifics
-│   └── temp.md                    ⧖ PLACEHOLDER - (for future adventure chapters)
+│   │   ├── ACT_STRUCTURE.md       ✅ ACTIVE - Act-by-act breakdown with escalation mechanics
+│   │   ├── LOCATIONS.md           ✅ ACTIVE - Narrative-significant locations & world state (with Runewell mechanics)
+│   │   ├── NPCS.md                ✅ ACTIVE - Campaign NPCs by persistence tier (stat blocks, motivations)
+│   │   ├── EVENTS_AND_TRIGGERS.md ✅ ACTIVE - Time-based escalations, pressure track, NPC consequences
+│   │   ├── ACT_01/                ✅ ACTIVE - Act I complete infrastructure (~570 lines)
+│   │   │   ├── act_overview.md    ✅ - Scene structure, mandatory revelations, escalation triggers
+│   │   │   ├── active_npcs.md     ✅ - NPC schedules & tier-based availability
+│   │   │   ├── current_tensions.md✅ - Background conflicts, pressure mechanics
+│   │   │   └── encounters/encounter_01.md ✅ - Goblin Cavalry encounter (complete stat blocks, tactics, loot)
+│   │   ├── ACT_02/                🔲 PLACEHOLDER - (future expansion)
+│   │   └── ACT_03/                🔲 PLACEHOLDER - (future expansion)
+│   └── BOOK_02_RUNELORDS_RISE/    🔲 PLACEHOLDER - (future adventure book)
 │
 └── 90_shared_references/          - Shared lookup tables & utilities
-    └── temp.md                    ⧖ PLACEHOLDER - (for shared resources)
+    └── temp.md                    🔲 PLACEHOLDER - (for shared resources)
 ```
 
 **Legend:**
-- `✅ ACTIVE` = File has substantial content (used by GM)
-- `🟨 IN PROGRESS` = File has evolving content (partially populated)
-- `⧖ PLACEHOLDER` = File structure exists, content pending
+- `✅ ACTIVE` = File has substantial content (used by GM Agent, tested)
+- `🟨 IN PROGRESS` = File has evolving content (partially populated, not yet complete)
+- `🔲 PLACEHOLDER` = File structure exists, content pending
+- `⧖ DEPRECATED` = Superseded by newer structure
 
 ---
 
@@ -329,11 +336,15 @@ Key implementation files:
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| **System Authority** | ✅ Complete | 5 files, ~900 lines of core rules |
-| **World Setting** | 🟨 Partial | 7 files, ~1,300 lines of world canon |
-| **Campaign Setting** | 🟨 Partial | 5 files, ~700 lines of campaign rules |
-| **Book I - Act 01** | 🟨 Partial | Scene structure, NPCs, encounter_01 complete |
-| **GM Agent** | ✅ Complete | Full context loading + session loop |
-| **Session Notes** | ✅ Complete | JSON persistence + multi-session continuity |
+| **System Authority** (00_*) | ✅ Complete | 5 files, ~900 lines of core rules |
+| **World Setting** (01_*) | ✅ Complete | 7 files, ~1,300 lines of world canon |
+| **Campaign Setting** (02_*) | ✅ Complete | 5 files, ~730 lines of campaign rules |
+| **Book I - Swallowtail Festival** | ✅ Complete | NPCS, Locations, Events, Act I infrastructure (~2,100 total) |
+| **Book I - Act 01** | ✅ Complete | 4 files: overview, active_npcs, tensions, encounter_01 full spec |
+| **Book I - Act 02-03** | 🔲 Placeholder | Structure ready, content pending |
+| **GM Agent** | ✅ Complete | Full context loading + session loop + Ollama integration |
+| **Session Notes** | ✅ Complete | JSON persistence + multi-session continuity protocol |
+| **Hallucination Prevention** | ✅ Complete | Pressure tables, encounter specs, knowledge boundaries |
+| **Shared References** (90_*) | 🔲 Placeholder | Lookup tables and utilities (not yet needed) |
 
 

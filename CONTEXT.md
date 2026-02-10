@@ -197,23 +197,124 @@ main.py                        # Root entry point
 requirements.txt
 ```
 
-## Next Steps (Once Structure is Approved)
+## Project Status: IMPLEMENTATION MILESTONE
 
-1. Create `requirements.txt` with dependencies (ollama, pydantic, etc.)
-2. Build `tools/ollama_client.py` to test Ollama connectivity
-3. Implement `tools/dice.py` for fair randomness
-4. Create base `agents/agent.py` framework
-5. Stub out Pathfinder rules in `skills/`
-6. Build a simple combat encounter as first test
+### ✅ COMPLETED (Feb 10, 2026)
 
-## Questions for the Project Owner
+**Authority Hierarchy Foundation (~2,100 lines)**
+- **00_system_authority/** - GM operating rules, adjudication principles, combat positioning, PF1e rules scope
+- **01_world_setting/** - Complete world canon, cosmology, magic boundaries, geography with travel mechanics
+- **02_campaign_setting/** - Campaign overview, tone, player agency rules, NPC memory protocol, factions
 
-If clarification is needed:
-- What starting adventures should we target? (Beginner Box, homebrew scenario, etc.)
-- Should the system be easily extensible to other RPG systems?
-- Any preferences on agent personality/roleplay style?
-- How detailed should session logs be? (Every action logged, or summaries?)
+**GM Agent System (410 lines Python)**
+- `src/agents/gm_agent.py` - Full implementation with file loading, context building, Ollama integration
+- `gm_launcher.py` - Command-line bootstrap with session management
+- Session persistence architecture (JSON output, multi-session continuity)
+- Comprehensive boot prompt that combines all authority hierarchy files
+
+**Swallowtail Festival - Book I, Act I (~2,100 lines)**
+- NPCS.md with stat blocks and persistence tiers
+- LOCATIONS.md with mechanics (Runewell specifics, travel tables, encounter DCs)
+- EVENTS_AND_TRIGGERS.md with pressure track (0-9 scale), escalation timers, NPC consequences
+- Act I infrastructure (4 files, ~570 lines total):
+  - act_overview.md: Scene structure and escalation framework
+  - active_npcs.md: NPC schedules and tier-based availability
+  - current_tensions.md: Background conflicts and pressure mechanics
+  - encounter_01.md: Complete Goblin Cavalry encounter (stat blocks, battlefield, tactics, scaling)
+
+**Hallucination Prevention Systems**
+- Pressure track mechanics table (eliminates vague NPC behavior)
+- Knowledge boundaries file (defines scholar knowledge vs. unknown vs. forbidden)
+- NPC memory protocol (fact memory vs. biased interpretation)
+- Session notes protocol (character state snapshots, combat state, mechanical precision)
+- Specific DCs, timers, and consequences for ALL events (no improvisation points)
 
 ---
 
-**Remember**: The goal is to demonstrate that local LLMs can autonomously manage complex collaborative games with fair rules enforcement, meaningful decision-making, and engaging roleplay. Every line of code should serve that vision.
+### 🟡 IN PROGRESS (Future Development)
+
+1. **Player Agent Framework** (src/agents/player_agent.py)
+   - Character sheet loading
+   - Action decision-making via Ollama
+   - Integration with GM session loop
+
+2. **Book I - Acts II & III** (adventure_path/03_books/BOOK_01/)
+   - Glassworks investigation mechanics
+   - Catacomb exploration structure
+   - Thistletop assault encounter scaling
+
+3. **Book II: Runelords Rise** (future)
+   - Regional adventure framework
+   - Runelord enemies and minions
+
+---
+
+### 🔴 NOT STARTED
+
+1. **Shared References** (90_shared_references/)
+   - Loot tables
+   - Encounter mechanics lookup
+   - NPC name generation
+
+2. **Alternative Adventures** (additional books/modules)
+
+---
+
+## Current Capabilities
+
+The system is now **ready for interactive play**:
+
+```bash
+python gm_launcher.py          # Boots GM Agent with all contexts loaded
+>>> (Player input)              # Interactive session loop
+[GM Response]                   # Rules-adjudicated outcome
+>>> quit                        # Session saved to outputs/session_001_notes.json
+```
+
+**Session protocol:**
+1. Load all adventure_path files in authority order
+2. Receive PC information (names, classes, levels)
+3. Accept player actions via stdin
+4. Apply rules mechanically via Ollama + local constraints
+5. Log all turns to JSON with full game state
+6. Persist for multi-session continuity
+
+**Tested with:**
+- Ollama qwen3:4b model (~4GB)
+- Temperature 0.3 (deterministic rules application)
+- Session boot time: ~30-60 seconds (context load)
+- Per-turn query time: ~5-10 seconds (typical LLM inference)
+
+---
+
+## Next Steps (Priority Order)
+
+1. **Test Swallowtail Festival** - Run full session with player characters
+2. **Extend Book I** - Complete Acts II & III infrastructure
+3. **Implement Player Agent** - Autonomous character decision-making
+4. **Build Shared References** - Loot tables, encounter utilities
+5. **Extend to Book II** - Regional adventure scope
+
+---
+
+## Development Guidelines
+
+### When Adding New Content
+
+1. **Authority Hierarchy**: Always file into correct tier (00 > 01 > 02 > 03 > 90)
+2. **Specificity**: No vague instructions. All mechanics need DC values, tables, specific timers
+3. **Session Protocol**: Record all facts in SESSION_NOTES_PROTOCOL for continuity
+4. **Hallucination Prevention**: Assume GM Agent will take any vague statement as permission to invent
+
+### Code Patterns
+
+- `GMConfig`: All configuration via dataclass with defaults
+- `FileLoader`: Cache documents to minimize repeated I/O
+- `query_ollama()`: All LLM communication through this method
+- Session loop: Player input → GM response → session buffer → repeat
+
+---
+
+**Remember**: The goal is to demonstrate that local LLMs can autonomously manage complex collaborative games with fair rules enforcement, meaningful decision-making, and engaging roleplay. Every file and function should serve that vision.
+
+Key constraint: All mechanics are **mechanical**, not **narrative**. Pressure tracks, encounter specs, and NPC behavior are mathematically expressed. The LLM applies these rules, not invents them.

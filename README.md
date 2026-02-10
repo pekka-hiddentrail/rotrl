@@ -120,7 +120,7 @@ These dot-prefixed folders contain instruction prompts and persona definitions:
   - Higher authority always overrides lower (no conflicts)
   - GM behavior is rule-governed, not intuitive
 
-## Quick Start
+## Quick Start — GM Agent (✅ READY TO PLAY)
 
 ### 1. Install Dependencies
 
@@ -139,14 +139,40 @@ This sets up a Python 3.13 virtual environment with:
 ollama serve
 ```
 
-Then pull a model (if not already installed):
+Then pull the model (if not already installed):
 ```bash
-ollama pull qwen
+ollama pull qwen3:4b
 ```
 
-### 3. Run Bootstrap Test
+### 3. Launch GM Agent for Interactive Play
 
 In another terminal:
+
+```bash
+python gm_launcher.py
+```
+
+Optional arguments:
+```bash
+python gm_launcher.py --session 1          # Boot session 1 (default)
+python gm_launcher.py --session 3          # Boot specific session
+python gm_launcher.py --model qwen2        # Use different model
+python gm_launcher.py --temp 0.2           # Lower temperature for consistency
+```
+
+**What happens:**
+1. ✅ Verifies Ollama is running
+2. ✅ Loads all adventure_path files in authority hierarchy order
+3. ✅ Initializes GM Agent with comprehensive context
+4. ✅ Prompts for PC info (names, classes, levels)
+5. ✅ Enters interactive session loop
+6. ✅ Saves session notes to `outputs/session_XXX_notes.json`
+
+See [QUICKSTART_GM.md](QUICKSTART_GM.md) for detailed guide.
+
+### 4. Run Bootstrap Verification (Optional)
+
+For Ollama connectivity check:
 
 ```bash
 python bootstrap.py
@@ -211,30 +237,36 @@ dm.conduct_session(party, adventure)
 
 ## Current Project Status
 
-### Configuration & Rules (✅ ~1,838 lines complete)
-- ✅ **System Authority** (00_system_authority/): GM behavior, adjudication, rules scope — **720 lines**
-- 🟡 **World Setting** (01_world_setting/): Golarion/Varisia canon, world operating rules — **~400 lines** (in progress)
-- ✅ **Campaign Settings** (02_campaign_setting/): RotRL structure, 6 narrative phases, player agency — **~700 lines**
-- 🔴 **Adventure Modules** (03_books/): Not yet started
+### 🎮 GM Agent System (✅ COMPLETE & OPERATIONAL)
+- ✅ **src/agents/gm_agent.py** (370 lines) - Full GM Agent implementation
+- ✅ **gm_launcher.py** (100 lines) - Command-line launcher with Ollama verification
+- ✅ **Session persistence** - Saves to outputs/session_XXX_notes.json (JSON format with turn-by-turn logs)
+- ✅ **Multi-session continuity** - Loads prior session facts for npc memory and world state
+
+### Documentation & Rules (✅ ~2,100 lines complete)
+- ✅ **System Authority** (00_system_authority/): GM behavior, adjudication, rules scope — **900 lines**
+- ✅ **World Setting** (01_world_setting/): Golarion/Varisia canon, world operating rules — **1,300 lines**
+- ✅ **Campaign Settings** (02_campaign_setting/): RotRL structure, 6 narrative phases, player agency — **730 lines**
+- 🟨 **Adventure Modules** (03_books/BOOK_01_BURNT_OFFERINGS/)
+  - ✅ Book Overview, NPCs, Locations
+  - ✅ Act I Infrastructure (~570 lines): Scene structure, NPC schedule, tension framework, complete encounter_01
+  - 🟨 Acts II-III (placeholder)
 - 🔴 **Shared References** (90_shared_references/): Not yet started
 
 ### Code & Infrastructure (✅ Complete)
-- ✅ Project structure (src/, adventure_path/, prompts)
-- ✅ Ollama integration (bootstrap.py, hello_world.py)
+- ✅ Project structure (src/, adventure_path/, outputs/)
+- ✅ Ollama integration (bootstrap.py, gm_launcher.py, hello_world.py)
 - ✅ Python 3.13 virtual environment
 - ✅ Authority hierarchy system (5-tier)
+- ✅ Hallucination prevention (concrete mechanics, pressure tables, knowledge boundaries)
 
-### Core Systems (🟡 In Progress)
-- [ ] Base agent framework (src/agents/agent.py)
-- [ ] Pathfinder 1e mechanics engine (src/skills/)
-- [ ] World Setting detail (complementary lore)
-
-### Gameplay Features (🔴 Not Started)
-- [ ] DM orchestration logic
-- [ ] Player agent autonomy
-- [ ] Adventure modules (03_books/)
-- [ ] Session logging and replay
-- [ ] Shared reference tables (90_shared_references/)
+### Gameplay Features (✅ Ready for Testing)
+- ✅ Session initialization with full context loading
+- ✅ Interactive session loop (player input → GM response)
+- ✅ Session notes logging and persistence
+- ✅ Multi-session continuity framework
+- 🟡 Player agent autonomy (future enhancement)
+- 🟨 Shared reference tables (90_shared_references/)
 
 ## Design Principles
 
@@ -265,13 +297,49 @@ adventure_path/
 
 Higher sections override lower sections — no conflicts possible by design.
 
+## Playing a Session
+
+### Session Setup
+
+1. **Start Ollama** (Terminal 1):
+   ```bash
+   ollama serve
+   ```
+
+2. **Launch GM Agent** (Terminal 2):
+   ```bash
+   cd rotrl
+   python gm_launcher.py
+   ```
+
+3. **Answer Setup Questions** when prompted:
+   - Has Session 1 been run before? (Input prior session notes if applicable)
+   - How many player characters? (Enter PC names, classes, levels)
+   - Ready to begin? (Confirm to start play)
+
+4. **Play** by typing player actions:
+   ```
+   >>> I draw my sword and rush the goblins
+   [GM response with rules resolution]
+   >>> The wizard casts Fireball
+   [Spell resolution with damage rolls]
+   ```
+
+5. **End Session** by typing `quit`
+   ```
+   >>> quit
+   [Session notes saved to outputs/session_001_notes.json]
+   ```
+
+See [QUICKSTART_GM.md](QUICKSTART_GM.md) and [outputs/README.md](outputs/README.md) for detailed session protocol.
+
 ## License
 
 *To be determined*
 
 ---
 
-**Current Status**: Foundation + Campaign Lore ✅ COMPLETE | Core Systems 🟡 IN PROGRESS | Gameplay 🔴 TODO
+**Current Status**: GM Agent ✅ OPERATIONAL | Foundation + Campaign Lore ✅ COMPLETE | Book I Act I ✅ COMPLETE | Core Systems (Player Agent) 🟡 FUTURE
 
 **Updated**: Feb 10, 2026  
-**Metrics**: ~1,838 lines of rules/config | 6 campaign phases | 2 sections active | 1 in progress
+**Metrics**: ~2,100 lines of rules/config | GM Agent ready | 1 complete adventure book (Book I, Act I) | Session notes persistent

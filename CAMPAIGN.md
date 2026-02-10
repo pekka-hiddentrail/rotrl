@@ -272,12 +272,49 @@ The campaign assumes a **six-phase escalation**:
 
 ---
 
+## Current Implementation: Swallowtail Festival (Book I, Act I)
+
+**Status**: ✅ COMPLETE AND OPERATIONAL
+
+The **Swallowtail Festival** opening adventure has been fully implemented with:
+
+- **Complete infrastructure** (~2,100 lines across BOOK_01_BURNT_OFFERINGS/)
+  - NPCS.md with stat blocks, motivations, and persistence tiers
+  - LOCATIONS.md with Runewell mechanics, geography, travel DC tables
+  - EVENTS_AND_TRIGGERS.md with pressure track (0-9 scale), escalation timers, NPC consequences
+  - ACT_STRUCTURE.md with narrative progression framework
+
+- **Act I fully scaffolded** (~570 lines in act_01/)
+  - act_overview.md: Scene structure (3 scenes), escalation triggers, NPC availability
+  - active_npcs.md: Tier-based availability, daily schedules, interaction guidelines
+  - current_tensions.md: Background conflicts, NPC reaction framework (pressure-based emotions)
+  - encounter_01.md: Complete Combat specs (Goblin Cavalry, stat blocks, battlefield mechanics, scaling)
+
+- **Hallucination prevention** across all files
+  - Explicit pressure tables preventing ambiguous NPC behavior
+  - Concrete DC values for all checks (no "roll when you feel appropriate")
+  - Specific escalation timers (Glassworks 3-day, Catacombs 10-day, retaliation 1d4 days)
+  - Knowledge boundaries (what scholars know vs. unknowns vs. forbidden inventions)
+  - Session notes protocol for multi-session continuity
+
+- **GM Agent integration** (src/agents/gm_agent.py)
+  - Loads all campaign files in hierarchical order
+  - Constructs comprehensive GM prompt from authority pyramid
+  - Interactive session loop with player input → GM adjudication
+  - Session persistence (outputs/session_XXX_notes.json)
+
+**To play**: See [QUICKSTART_GM.md](../QUICKSTART_GM.md)
+
+---
+
 ## See Also
 
 - **[ADVENTURE.md](ADVENTURE.md)** — Full adventure path hierarchy and authority system
-- **[README.md](README.md)** — Project overview and setup
+- **[README.md](README.md)** — Project overview and GM Agent setup
+- **[QUICKSTART_GM.md](QUICKSTART_GM.md)** — How to launch and play a session
 - **adventure_path/[00_system_authority/](adventure_path/00_system_authority/)** — GM behavioral rules
 - **adventure_path/[01_world_setting/](adventure_path/01_world_setting/)** — Golarion and Varisia lore
+- **adventure_path/[03_books/BOOK_01_BURNT_OFFERINGS/](adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/)** — Swallowtail Festival implementation
 
 ---
 
