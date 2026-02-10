@@ -95,18 +95,52 @@ Rules:
 * Off-screen events occur only if authorized by campaign rules.
 
 
+#TODO Hallucination danger - SESSION_NOTES_PROTOCOL.md is incomplete. Section 7 is cut off and doesn't specify:
+- What mechanical state to snapshot (HP, spell slots, resources?)
+- Format for snapshots
+- How to handle mid-combat saves
+- Where snapshots are stored
+
+Must complete this section with explicit snapshot template.
+
 ## 7. Mechanical State Snapshot
 
-At session end, record:
+At session end, record **ALL** character mechanical state:
 
-* Current HP totals.
-* Ongoing conditions, diseases, curses, or effects.
-* Expended and remaining daily resources if relevant.
+### Character Status Block (REQUIRED)
 
-Rules:
+For each PC at session end, record:
 
-* No assumed healing or recovery.
-* If uncertain, mark the value as **UNKNOWN** rather than guessing.
+```
+<PC NAME>
+  HP: <current> / <max>
+  AC: <total>
+  Conditions: [list any active OR "None"]
+  
+  Daily Resources:
+    - Spells per day: <used> / <max>
+    - Special abilities: <status>
+    - Consumable items: <list>
+  
+  Active Effects:
+    - <Name>: <duration remaining>
+    [OR "None"]
+  
+  Special Status:
+    - Disease: [Yes/No]
+    - Poison: [Yes/No]
+    - Curse: [Yes/No]
+    - Level drain: [Yes/No]
+  
+  Location: <specific location>
+```
+
+### Rules for Recording
+
+* Record EXACT values, no approximation
+* If uncertain, mark **[UNKNOWN]**
+* No assumed healing between sessions
+* Spell slots do not reset without explicit rest (8 hours uninterrupted)
 
 
 ## 8. Prohibited Content (Anti-Hallucination)

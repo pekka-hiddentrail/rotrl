@@ -36,7 +36,14 @@ adventure_path/
 │   ├── LONG_ARC_THREATS.md        ⧖ PLACEHOLDER - Main campaign antagonists
 │   └── PLAYER_AGENCY_RULES.md     ⧖ PLACEHOLDER - Campaign-specific freedoms
 │
-├── 03_books/                      - Adventure books/modules
+├── 03_books/                      - Adventure books/modules (🟡 IN PROGRESS)
+│   ├── BOOK_01_BURNT_OFFERINGS/   🟨 IN PROGRESS - Foundational adventure (Lvl 1-4)
+│   │   ├── BOOK_OVERVIEW.md       ✅ ACTIVE - Campaign role, themes, narrative structure
+│   │   ├── ACT_STRUCTURE.md       🟨 IN PROGRESS - Act-by-act breakdown
+│   │   ├── LOCATIONS.md           ✅ ACTIVE - Narrative-significant locations & world state
+│   │   ├── NPCS.md                ✅ ACTIVE - Campaign NPCs by persistence tier
+│   │   ├── EVENTS_AND_TRIGGERS.md 🟨 IN PROGRESS - Time-based escalations & conditions
+│   │   └── act_01/                🟨 IN PROGRESS - Act I encounters & specifics
 │   └── temp.md                    ⧖ PLACEHOLDER - (for future adventure chapters)
 │
 └── 90_shared_references/          - Shared lookup tables & utilities
@@ -163,15 +170,42 @@ adventure_path/
 
 ---
 
-### 🟡 Section 03: Adventure Books (PLACEHOLDER)
+### 🟡 Section 03: Adventure Books (IN PROGRESS)
 
-**Status:** ⧖ **Ready for content** - For individual adventure chapters/modules
+**Status:** 🟨 **Content emerging** - First book structured and being populated
 
 **Purpose:** Organize published or custom adventures into acts and encounters.
 
-**Planned Structure:**
-- Individual adventure files or subdirectories
-- Each with encounters, NPC stats, treasure tables, etc.
+#### Currently Defined:
+
+1. **BOOK_01_BURNT_OFFERINGS** (🟨 IN PROGRESS)
+   - ✅ **[BOOK_OVERVIEW.md](adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/BOOK_OVERVIEW.md)** (72 lines)
+     - Campaign role: Establishing Sandpoint as emotional anchor
+     - Character levels: 1–4
+     - Core themes: Community, celebration interrupted, ancient evil seeping through
+     - Narrative responsibilities and long-arc connections
+   
+   - ✅ **[LOCATIONS.md](adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/LOCATIONS.md)** (171 lines)
+     - Narrative-significant locations (not room-by-room layouts)
+     - Sandpoint as dynamic emotional center
+     - Persistent location state changes
+     - Swallowtail Festival and other key areas
+   
+   - ✅ **[NPCS.md](adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/NPCS.md)** (247 lines)
+     - Campaign-significant NPCs organized by persistence tier
+     - Tier I: Structural NPCs (load-bearing characters)
+     - Tier II: Emotional anchors (why Sandpoint matters)
+     - State-based outcomes (if cooperative, if distrustful, if killed)
+   
+   - 🟨 **[ACT_STRUCTURE.md](adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/ACT_STRUCTURE.md)** (IN PROGRESS)
+     - Act-by-act breakdown
+   
+   - 🟨 **[EVENTS_AND_TRIGGERS.md](adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/EVENTS_AND_TRIGGERS.md)** (IN PROGRESS)
+     - Time-based escalations and conditional events
+     - Player-triggered accelerations and world reactions
+   
+   - 🟨 **act_01/** (IN PROGRESS)
+     - Detailed Act I encounters and specifications
 
 ---
 

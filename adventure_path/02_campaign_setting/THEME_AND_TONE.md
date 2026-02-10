@@ -159,21 +159,45 @@ Horror should *punctuate*, not smother.
 
 ## 5. Use of Humor
 
-Humor exists, but it is contextual.
+Humor exists, but is strictly contextual and phase-dependent.
 
-Allowed:
+### When Humor is ALLOWED:
 
-* Early campaign levity
-* Character-driven banter
-* Situational absurdity
+* **Early campaign (Phase I & II):** Tavern scenes, downtime, character banter
+* **Silly PC actions:** If a player attempts something absurd (e.g., befriending a goblin with bad flute music), lean into it mildly
+* **Character-driven humor:** NPCs with distinct personalities may quip or joke naturally
+* **Post-victory moments:** Brief levity after resolving a threat (not during combat or in the middle of a crisis)
+* **Travel and camp scenes:** Low-pressure downtime allows character interaction humor
 
-Discouraged:
+### When Humor is PROHIBITED:
 
-* Meta humor
-* Tone-breaking jokes during high-stakes scenes
-* Comedy that trivializes danger
+* **During combat:** No jokes, puns, or comedic descriptions of violence
+* **During horror encounters:** Suppress jokes when describing undead, corruption, or violations
+* **When describing death:** Never use humor to soften a character's death
+* **During NPC trauma:** If an NPC is experiencing grief, fear, or violation, do not deflect with comedy
+* **In Phase IV+ campaigns:** Humor becomes rare; only allow it if player-initiated and very brief
 
-As the campaign progresses, humor naturally diminishes.
+### Tone-Breaking Rule:
+
+A joke is tone-breaking if it:
+- Makes tragedy feel trivial (e.g., joking about a murdered child)
+- Contradicts the established phase tone (no wisecracking during "Ancient Weight" phase)
+- Comes from the GM as narrator, not from NPCs or players
+
+**When in doubt, suppress the joke.**
+
+### Phase-Based Humor Diminishing:
+
+| Phase | Humor Level |
+|-------|------------|
+| I - Local Defenders | Moderate (allowed in safe spaces) |
+| II - Hidden Patterns | Reduced (brief moments only) |
+| III - Regional Crisis | Rare (player-driven only) |
+| IV - Ancient Truths | Minimal (NPCs only, grim jokes) |
+| V - Mythic Opposition | Minimal (rare character moments) |
+| VI - Final Reckoning | None (unless extremely light) |
+
+**As the campaign progresses, humor naturally diminishes.**
 
 
 ## 6. Description Guidelines
@@ -195,12 +219,63 @@ Avoid:
 
 ## 7. Player Emotional Safety
 
-The campaign includes dark themes.
+The campaign includes dark themes. Balance realism with player comfort.
 
-Guidelines:
+### Fade-to-Black Protocol
+
+"Fade to black" means: Stop describing details, skip to aftermath or next scene, do not go into graphic specifics.
+
+### MANDATORY Fade-to-Black Triggers:
+
+**Sexual Content:**
+* If any sexual act or seduction is beginning, fade to black BEFORE explicit descriptions
+* Resume after the act is complete (e.g., "The morning light finds you in the merchant's bed...")
+* Never describe sexual violence in detail—fade before and resume after
+
+**Graphic Torture or Mutilation:**
+* If an NPC or creature is being tortured, mutilated, or experimented on:
+  - Fade before detailed descriptions of pain
+  - Fade after establishing "this happened"
+  - Example: "The interrogator begins. [FADE TO BLACK] When you return an hour later, the prisoner is barely conscious..."
+
+**Detailed Suicide or Self-Harm:**
+* If an NPC commits suicide or self-harm, fade before graphic method descriptions
+* Describe impact and aftermath instead
+* Example: "Sabyl looks into your eyes one last time, then walks to the cliff's edge. [FADE TO BLACK] You find her body the next morning..."
+
+**Gratuitous Gore:**
+* Blood is acceptable in combat (e.g., "The goblin bleeds from its wounds")
+* Graphic organ descriptions are not (e.g., do not describe what's inside an eviscerated body)
+* Fade if you're about to describe body parts or fluids in detail
+
+### Optional Fade-to-Black Scenarios:
+
+* PC failure/humiliation in front of NPCs (some players prefer to skip this)
+* Detailed slave trade or trafficking descriptions
+* Child endangerment in graphic detail
+
+### How to Implement Fade-to-Black:
+
+**Example patterns:**
+- "They drag you into the torture chamber. [FADE TO BLACK] You emerge several hours later, battered and broken..."
+- "The vampire fangs descend... [FADE TO BLACK] You wake at dawn, your neck aching, with no memory of what happened."
+
+**Do NOT:**
+- Describe the act in any detail before fading
+- Apologize for fading ("I know you wanted to see but...") — just do it
+- Pretend fade-to-black removes mechanical consequences (you still took damage, still lost information, etc.)
+
+### Respecting Player Discomfort:
+
+If a player signals discomfort (explicit request, visible reaction, stated boundary):
+* Immediately stop
+* Offer to fade to black or skip the scene
+* Never force graphic content
+
+**Guidelines:**
 
 * Do not force graphic content
-* Fade to black when appropriate
+* Fade to black when appropriate (see triggers above)
 * Respect player discomfort signals
 
 Tension should challenge characters, not players.

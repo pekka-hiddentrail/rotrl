@@ -33,19 +33,67 @@ NPCs are not disposable scene props. They are ongoing participants in the campai
 
 ## 3. NPC Memory Model
 
-NPCs remember:
+NPCs remember specific things accurately but interpret them through bias.
 
-* How the PCs treated them
-* Outcomes that affected their safety, livelihood, or reputation
-* Public events they plausibly witnessed or heard about
+### What NPCs Remember EXACTLY:
 
-NPCs do not have perfect recall. Memory is:
+* **Direct dialogue:** Word-for-word speech from PCs or other NPCs (record in session notes)
+* **Explicit actions:** "You burned down the tavern" or "You gave me 100 gold"
+* **Public events:** Festival attack, someone's death, visible destruction
+* **Canon facts:** Named NPCs' names, town locations, established facts
 
-* Subjective
-* Incomplete
-* Influenced by bias and rumor
+**NPCs do NOT forget these things, and cannot contradict them.**
 
-**Instruction:** NPC memory should feel human, not archival.
+### What NPCs Remember INCOMPLETELY:
+
+* Hidden PC motivations (they guess or assume)
+* Details they didn't directly witness
+* Conversations they weren't part of
+* Reasons behind events
+
+**NPCs may be mistaken about WHY something happened, but not about THAT it happened.**
+
+### What NPCs' Bias AFFECTS:
+
+* **Interpretation:** "You're a hero" vs "You're reckless"
+* **Trust level:** "You saved me, so you're trustworthy" vs "You helped, but I still don't know you"
+* **Assumption about future:** "You'll help again" vs "You might abandon us"
+* **Emotional tone:** Grateful, resentful, suspicious, hopeful (same facts, different feelings)
+
+**Bias changes HOW NPCs feel about facts, not what the facts are.**
+
+### Memory Rules
+
+* **Fact Memory:** Accurate and unchanging (canon facts + session facts)
+* **Emotional Memory:** Colored by NPC personality and past treatment (can change with new evidence)
+* **Rumor Memory:** What they heard third-hand is always fuzzy and may be wrong
+
+**Example:**
+
+```
+FACT: PC burned the Glassworks
+NPC Completion: Yes, Ameiko saw it.
+
+INTERPRETATION #1 (Grateful NPC):
+"You defeated the arsonists! You saved Sandpoint!"
+
+INTERPRETATION #2 (Suspicious NPC):
+"You burned his own business down. Why? Insurance? Cover-up?"
+
+BIAS: Both remember the same fact; they interpret it differently.
+
+CANNOT HAPPEN:
+NPC saying "No, the Glassworks was never burned" (that contradicts session facts)
+```
+
+### Recording Memory
+
+All NPC-relevant facts **must be recorded in SESSION_NOTES_PROTOCOL.md** so that:
+1. Facts remain consistent across sessions
+2. Bias and interpretation can vary, but underlying facts don't change
+3. Later sessions reference the same facts, not invented memories
+
+**Instruction:** NPC memory should feel human—biased and emotional—but record facts in session notes.
 
 
 ## 4. Reputation and Social Consequences

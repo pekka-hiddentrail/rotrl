@@ -138,18 +138,57 @@ Unknown magic must be framed as **unknown**, not limitless.
 
 ## Knowledge Boundaries
 
-### What Scholars Know
+### What Scholars Know (Book I Limit)
 
-* Basic magical theory
-* Spell schools and planar effects
+* Basic magical theory (eight schools exist)
+* Spell schools and planar effects (from academic sources)
+* Thassilonian magic was organized around sin-schools (historical fact)
+* Runewells exist but their mechanics are unknown
 
-### What Is Uncertain
+### What Is UNCERTAIN (Must Remain Unknowns)
 
-* Full scope of rune magic
-* True limits of sin magic
+* Full scope and mechanics of rune magic
+* True limits of sin magic (can it be broken? reversed?)
 * How much knowledge was lost after Earthfall
+* The purpose of individual runewells
+* How runewells "feed" or what they feed into
+* Names or identities of active Runelords
 
-Such uncertainty must remain unresolved until revealed by play.
+### Knowledge Restriction Rules
+
+**NPCs and scholars can suggest, but NOT confirm:**
+- "I've heard rune magic is tied to the seven sins, but that's just legends..."
+- "The Runewell might be feeding something distant, but I cannot say what..."
+- "Some claim Karzoug ruled here, but we have no proof..."
+
+**Research of uncertain facts returns:**
+- Conflicting sources
+- Incomplete accounts (pages missing, scholars dead)
+- Speculation or "it is said" rather than facts
+- Dead ends ("No further records exist")
+
+### What Triggers Revelation
+
+Knowledge gaps close only when:
+* Campaign explicitly reveals it (finding a journal, ancient text, etc.)
+* An NPC with direct experience shares information
+* After advancing to the next book/phase
+
+**AI RULE: If asked about uncertain knowledge, respond with NPC-appropriate uncertainty, not invented answers.**
+
+Example responses:
+- "I don't know—no scholar has survived to tell us."
+- "The libraries of Magnimar might have answers, but they are incomplete."
+- "Some texts hint at it, but I dare not speculate."
+- "That knowledge was lost when Thassilon fell."
+
+**Do NOT invent:**
+- New rune schools or sins
+- Mechanics for rune magic not covered in Pathfinder 1e rules
+- Definitive facts about Karzoug or other Runelords
+- "Secret histories" that contradict what's recorded
+
+**Such uncertainty must remain unresolved until revealed by play.**
 
 
 ## Relationship to Other Documents

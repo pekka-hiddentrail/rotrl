@@ -86,7 +86,12 @@ Modular adventure files defining:
   - Theme and emotional tone guidance
   - Player agency guarantees and constraints
   - Faction persistence and NPC continuity rules
-- **03_books/** - Adventure modules and encounters
+- **03_books/** (🟡 IN PROGRESS) - Adventure modules and encounters
+  - **BOOK_01_BURNT_OFFERINGS/** (🟨 IN PROGRESS) - Foundational adventure (Lvl 1-4)
+    - BOOK_OVERVIEW.md (✅ role, themes, narrative structure)
+    - LOCATIONS.md (✅ narrative-significant locations)
+    - NPCS.md (✅ campaign NPCs by persistence tier)
+    - ACT_STRUCTURE.md, EVENTS_AND_TRIGGERS.md (🟨 in progress)
 - **90_shared_references/** - Shared lookup tables and utilities
 
 See [ADVENTURE.md](ADVENTURE.md) for detailed structure and current status.  

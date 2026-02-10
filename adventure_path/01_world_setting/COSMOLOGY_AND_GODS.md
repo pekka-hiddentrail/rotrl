@@ -131,15 +131,6 @@ Erastil values tradition, self-reliance, and collective survival.
 Irori teaches improvement through effort, not divine intervention.
 
 
-### Lamashtu
-
-* Goddess of monsters, madness, and corruption
-* Associated with ancient horrors and pre-Earthfall legends
-* Revered by monsters, cultists, and twisted beings
-
-Lamashtu is **never** a benign force.
-
-
 ### Pharasma
 
 * Goddess of fate, death, and prophecy
@@ -157,15 +148,14 @@ Pharasma does not interfere in destiny beyond judgment.
 
 Norgorber’s faith is secretive and dangerous.
 
-
 ### Lamashtu
 
-* Goddess of monsters, madness, and corruption
-* Associated with ancient horrors and pre-Earthfall legends
-* Revered by monsters, cultists, and twisted beings
+* Goddess of monsters, madness, nightmares, and corruption
+* Associated with ancient horrors and pre-Earthfall evil
+* Revered by monsters, corrupted humanoids, cultists, and twisted beings
+* Represents temptation toward violence, madness, and monstrosity
 
-Lamashtu is **never** a benign force.
-
+Lamashtu is **never** a benign force. Her worshipers are dangerous.
 
 ## Thassilonian Faith (Historical)
 
