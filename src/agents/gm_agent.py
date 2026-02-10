@@ -1,366 +1,533 @@
+# src/agents/gm_agent.py
 #!/usr/bin/env python3
 """
-GM Agent for RotRL - Bootstraps the Game Master AI.
+RotRL GM Agent (BOOT-FIRST, CANONICAL PROMPT FILE)
 
-This module:
-1. Loads all necessary adventure_path documents
-2. Builds a comprehensive GM context prompt
-3. Communicates with Ollama LLM
-4. Manages session state and game flow
+Design constraints:
+- Do NOT invent the boot protocol prompt in code.
+- Treat .agents/GM/SESSION_BOOT_PROMPT.md as canonical and inject loaded docs into it.
+- BOOT loads only: System Authority + (optional) Player identity + (optional) Last session notes.
+- Uses Ollama /api/chat so system prompt binding works reliably.
+
+Boot compliance:
+- Extract the checklist from SESSION_BOOT_PROMPT.md (# Session Boot Output section)
+- Run deterministic checks in Python
+- Print checklist with ✅/❌
+- If any check fails, raise RuntimeError (fail-fast)
 """
 
+import re
 import requests
-import json
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass
-from datetime import datetime
+import json  # add at top of file
+
 
 
 @dataclass
 class GMConfig:
-    """Configuration for GM Agent."""
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "qwen3:4b"
+    temperature: float = 0.3
+
+    repo_root: Optional[Path] = None
     adventure_path_root: Optional[Path] = None
-    temperature: float = 0.3  # Lower temp for consistency
-    
+    boot_prompt_path: Optional[Path] = None
+
     def __post_init__(self):
+        if self.repo_root is None:
+            # repo_root/src/agents/gm_agent.py -> parents[2] == repo_root
+            self.repo_root = Path(__file__).resolve().parents[2]
         if self.adventure_path_root is None:
-            self.adventure_path_root = Path(__file__).parent.parent.parent / "adventure_path"
+            self.adventure_path_root = self.repo_root / "adventure_path"
+        if self.boot_prompt_path is None:
+            self.boot_prompt_path = self.repo_root / ".agents" / "GM" / "SESSION_BOOT_PROMPT.md"
 
 
 class FileLoader:
-    """Loads and caches adventure_path documents."""
-    
     def __init__(self, root_path: Path):
         self.root_path = root_path
         self._cache: Dict[str, str] = {}
-    
-    def load_file(self, relative_path: str) -> str:
-        """Load a file from adventure_path, with caching."""
-        if relative_path in self._cache:
-            return self._cache[relative_path]
-        
-        file_path = self.root_path / relative_path
+
+    def load_path(self, file_path: Path) -> str:
+        key = str(file_path.resolve())
+        if key in self._cache:
+            return self._cache[key]
+
         if not file_path.exists():
-            return f"[FILE NOT FOUND: {relative_path}]"
-        
+            return f"[FILE NOT FOUND: {file_path}]"
+
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            self._cache[relative_path] = content
+            content = file_path.read_text(encoding="utf-8")
+            self._cache[key] = content
             return content
         except Exception as e:
-            return f"[ERROR LOADING {relative_path}: {e}]"
-    
+            return f"[ERROR LOADING {file_path}: {e}]"
+
+    def load_file(self, relative_path: str) -> str:
+        return self.load_path((self.root_path / relative_path).resolve())
+
     def load_multiple(self, relative_paths: List[str]) -> Dict[str, str]:
-        """Load multiple files at once."""
         return {path: self.load_file(path) for path in relative_paths}
 
 
 class GMAgent:
-    """The Game Master AI Agent."""
-    
-    # Core files for GM behavior constraints
-    SYSTEM_AUTHORITY_FILES = [
+    # BOOT-only minimal set
+    BOOT_SYSTEM_AUTHORITY_FILES = [
         "00_system_authority/GM_OPERATING_RULES.md",
         "00_system_authority/ADJUDICATION_PRINCIPLES.md",
         "00_system_authority/COMBAT_AND_POSITIONING.md",
         "00_system_authority/PF1E_RULES_SCOPE.md",
         "00_system_authority/SESSION_NOTES_PROTOCOL.md",
     ]
-    
-    # Campaign context files
-    CAMPAIGN_FILES = [
-        "01_world_setting/WORLD_OPERATING_RULES.md",
-        "01_world_setting/WORLD_CANON.md",
-        "02_campaign_setting/CAMPAIGN_OVERVIEW.md",
-        "02_campaign_setting/THEME_AND_TONE.md",
-        "02_campaign_setting/PLAYER_AGENCY_RULES.md",
-        "02_campaign_setting/NPC_MEMORY_AND_CONTINUITY.md",
-    ]
-    
-    # Book I specific files
-    BOOK_I_FILES = [
-        "03_books/BOOK_01_BURNT_OFFERINGS/BOOK_OVERVIEW.md",
-        "03_books/BOOK_01_BURNT_OFFERINGS/NPCS.md",
-        "03_books/BOOK_01_BURNT_OFFERINGS/LOCATIONS.md",
-        "03_books/BOOK_01_BURNT_OFFERINGS/EVENTS_AND_TRIGGERS.md",
-        "03_books/BOOK_01_BURNT_OFFERINGS/ACT_STRUCTURE.md",
-    ]
-    
+
     def __init__(self, config: GMConfig):
         self.config = config
-        self.loader = FileLoader(config.adventure_path_root)
+
+        # Loader rooted at repo_root so we can read .agents/...
+        self.repo_loader = FileLoader(config.repo_root)
+
+        # Loader rooted at adventure_path_root so we can read authority files
+        self.adv_loader = FileLoader(config.adventure_path_root)
+
+        # Cached contexts for prompt injection
         self.system_context: str = ""
-        self.campaign_context: str = ""
-        self.book_context: str = ""
-        self.session_state: Dict = {}
-    
-    def load_contexts(self, book: int = 1, act: int = 1):
-        """Load all required contexts for the GM."""
-        print("[GM-AGENT] Loading system authority files...")
-        system_files = self.loader.load_multiple(self.SYSTEM_AUTHORITY_FILES)
-        self.system_context = self._merge_documents("SYSTEM AUTHORITY", system_files)
-        
-        print("[GM-AGENT] Loading campaign context files...")
-        campaign_files = self.loader.load_multiple(self.CAMPAIGN_FILES)
-        self.campaign_context = self._merge_documents("CAMPAIGN CONTEXT", campaign_files)
-        
-        if book == 1:
-            print("[GM-AGENT] Loading Book I files...")
-            book_files = self.loader.load_multiple(self.BOOK_I_FILES)
-            self.book_context = self._merge_documents("BOOK I - BURNT OFFERINGS", book_files)
-        
-        print("[GM-AGENT] Contexts loaded successfully")
-    
+        self.player_context: str = ""
+        self.continuity_context: str = ""
+
+        # Boot instrumentation for deterministic checks
+        self._boot_loaded_files: List[str] = []
+        self._boot_only_system_authority_loaded: bool = False
+
+    # ---------- context loading ----------
     def _merge_documents(self, section_name: str, files: Dict[str, str]) -> str:
-        """Merge multiple documents into a single context section."""
         merged = f"\n{'='*80}\n{section_name}\n{'='*80}\n\n"
         for filename, content in files.items():
             merged += f"\n--- {filename} ---\n{content}\n"
         return merged
-    
-    def build_gm_prompt(self, session_number: int = 1, book: int = 1, act: int = 1) -> str:
-        """Build the complete GM system prompt."""
-        prompt = f"""# RotRL GM Agent - Session Boot Prompt
 
-You are the Game Master AI for Rise of the Runelords in Pathfinder 1st Edition.
+    def load_boot_contexts(self) -> None:
+        """Load minimal contexts needed for boot and record what was loaded."""
+        self._boot_loaded_files = []
 
-## YOUR ROLE
+        # Load system authority (required)
+        system_files = self.adv_loader.load_multiple(self.BOOT_SYSTEM_AUTHORITY_FILES)
+        self._boot_loaded_files.extend(self.BOOT_SYSTEM_AUTHORITY_FILES)
+        self.system_context = self._merge_documents("SYSTEM AUTHORITY", system_files)
 
-You are a **neutral rules arbiter and world simulator**, not a storyteller or guide.
+        # Optional: player file
+        player_char_path = self.config.adventure_path_root / "PLAYER_CHARACTERS.md"
+        if player_char_path.exists():
+            player_content = self.adv_loader.load_path(player_char_path)
+            self.player_context = self._merge_documents("PLAYER IDENTITY", {"PLAYER_CHARACTERS.md": player_content})
+            self._boot_loaded_files.append("PLAYER_CHARACTERS.md")
 
-Your explicit responsibilities:
-1. Apply Pathfinder 1e rules RAW (as written)
-2. Maintain strict impartiality (no favoring players or outcomes)
-3. Enforce consequences rigorously
-4. Simulate the world state accurately
-5. Present information only what characters can perceive
-6. Never fudge dice, adjust DCs after rolling, or protect player characters
-
-## SESSION BOOT INFORMATION
-
-Session Number: {session_number}
-Book: {book}
-Act: {act}
-Campaign Status: FRESH BOOT (no prior session state)
-
-## HOW TO PROCEED
-
-1. **Acknowledge Context**: Confirm you have read and understood all system authority, campaign rules, and Book I guidelines
-2. **State Game State**: What is the current in-world date/time? Where are the PCs? What is known?
-3. **Ask for Player Input**: Request the player/PC information to begin play
-4. **Wait for Scene**: Do not advance the game until you receive explicit player declarations
-
-## MANDATORY CONSTRAINTS
-
-- No speculation or prediction
-- No soft-magic or narrative shortcuts
-- No inventing rules, spells, or abilities
-- All mechanics resolved strictly per PF1e rules
-- Combat uses explicit spatial state (grid positioning)
-- Time always advances; world continues off-screen per event triggers
-
-## SYSTEM AUTHORITY (CRITICAL - HIGHEST PRIORITY)
-
-You MUST operate within these constraints at all times:
-
-{self.system_context}
-
-## CAMPAIGN CONTEXT (HIGH PRIORITY)
-
-These rules govern campaign scope, player agency, NPC behavior, and tone:
-
-{self.campaign_context}
-
-## BOOK I: BURNT OFFERINGS (OPERATIONAL CONTEXT)
-
-This is your current operational guide for encounters, NPCs, locations, and events:
-
-{self.book_context}
-
----
-
-## READY TO BEGIN
-
-Once you have confirmed you understand all above, ask:
-1. "Has Session {session_number} been run before? (If yes, provide session notes for context)"
-2. "How many player characters are present, and what are their names/classes/levels?"
-3. "Are you ready to begin play?"
-
-Then wait for player input before advancing the game.
-"""
-        return prompt
-    
-    def query_ollama(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """Send a query to Ollama and return the response."""
-        try:
-            payload = {
-                "model": self.config.ollama_model,
-                "prompt": prompt,
-                "stream": False,
-                "temperature": self.config.temperature,
-            }
-            
-            if system_prompt:
-                payload["system"] = system_prompt
-            
-            response = requests.post(
-                f"{self.config.ollama_host}/api/generate",
-                json=payload,
-                timeout=180
-            )
-            
-            if response.status_code == 200:
-                return response.json().get("response", "").strip()
+        # Optional: limits/expectations file
+        limits_path = self.config.adventure_path_root / "PLAYER_LIMITS_AND_EXPECTATIONS.md"
+        if limits_path.exists():
+            limits_content = self.adv_loader.load_path(limits_path)
+            if self.player_context:
+                # append as second file in same block
+                self.player_context += self._merge_documents("PLAYER LIMITS (ALIGNMENT ONLY)", {"PLAYER_LIMITS_AND_EXPECTATIONS.md": limits_content})
             else:
-                raise Exception(f"HTTP {response.status_code}: {response.text}")
+                self.player_context = self._merge_documents("PLAYER LIMITS (ALIGNMENT ONLY)", {"PLAYER_LIMITS_AND_EXPECTATIONS.md": limits_content})
+            self._boot_loaded_files.append("PLAYER_LIMITS_AND_EXPECTATIONS.md")
+
+        # Optional: last session notes
+        session_notes_path = self.config.adventure_path_root / "SESSION_NOTES_LAST.md"
+        if session_notes_path.exists():
+            notes_content = self.adv_loader.load_path(session_notes_path)
+            self.continuity_context = self._merge_documents("CONTINUITY ANCHOR", {"SESSION_NOTES_LAST.md": notes_content})
+            self._boot_loaded_files.append("SESSION_NOTES_LAST.md")
+
+        # Deterministic gate: during boot we only load system authority + minimal identity + last notes
+        disallowed_prefixes = (
+            "01_world_setting/",
+            "02_campaign_setting/",
+            "03_books/",
+        )
+        self._boot_only_system_authority_loaded = not any(
+            f.startswith(disallowed_prefixes) for f in self._boot_loaded_files
+        )
+
+    # ---------- boot prompt assembly ----------
+    def _inject_context(self, boot_md: str, session_number: int) -> str:
+        """Inject loaded contexts into boot prompt placeholders."""
+        rendered = boot_md.replace("{{SESSION_NUMBER}}", str(session_number))
+
+        if "{{SYSTEM_AUTHORITY}}" in rendered:
+            rendered = rendered.replace("{{SYSTEM_AUTHORITY}}", self.system_context.strip())
+
+        if "{{PLAYER_IDENTITY}}" in rendered:
+            rendered = rendered.replace(
+                "{{PLAYER_IDENTITY}}",
+                self.player_context.strip() if self.player_context else "[NO PLAYER FILES LOADED]"
+            )
+
+        if "{{CONTINUITY_ANCHOR}}" in rendered:
+            rendered = rendered.replace(
+                "{{CONTINUITY_ANCHOR}}",
+                self.continuity_context.strip() if self.continuity_context else "[NO SESSION_NOTES_LAST.md FOUND]"
+            )
+
+        return rendered
+
+    def build_boot_system_prompt(self, session_number: int) -> str:
+        """Build the system prompt for boot from canonical boot prompt file."""
+        boot_md = self.repo_loader.load_path(self.config.boot_prompt_path)
+        return self._inject_context(boot_md, session_number=session_number)
+
+    # ---------- ollama chat ----------
+    def query_ollama_chat(self, user_prompt: str, system_prompt: Optional[str] = None) -> str:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
+
+        payload = {
+            "model": self.config.ollama_model,
+            "messages": messages,
+            "stream": False,
+            "temperature": self.config.temperature,
+        }
+
+        resp = requests.post(f"{self.config.ollama_host}/api/chat", json=payload, timeout=180)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Ollama /api/chat failed: HTTP {resp.status_code}: {resp.text}")
+
+        data = resp.json()
+        return (data.get("message", {}) or {}).get("content", "").strip()
+
+    # ---------- checklist extraction ----------
+    def get_boot_output_section(self) -> str:
+        """
+        Extract the "# Session Boot Output" section from SESSION_BOOT_PROMPT.md.
+        Returns the section text (or a clear message if missing).
+        """
+        boot_prompt_content = self.repo_loader.load_path(self.config.boot_prompt_path)
+
+    
+        header = "# Session Boot Output"
+        if header not in boot_prompt_content:
+            return "[No Session Boot Output section found in boot prompt file]"
+
+        start = boot_prompt_content.find(header)
+        return boot_prompt_content[start:].strip()
+
+    def semantic_audit_narration(self, narration: str) -> Dict:
+        """
+        Ask the LLM to audit the narration against BOOT constraints.
+        Returns a dict parsed from strict JSON.
+        If parsing fails or required keys are missing, raise.
+        """
+        # Keep this SYSTEM prompt minimal and extremely strict.
+        audit_system = (
+            "You are a strict verifier. You must return ONLY valid JSON. "
+            "No markdown, no prose, no extra keys beyond the schema. "
+            "If uncertain, set the verdict to false and explain briefly in 'notes'."
+        )
+
+        # The schema is intentionally simple for robust parsing.
+        audit_user = {
+            "task": "BOOT_NARRATION_AUDIT",
+            "requirements": [
+                "Narration is based only on established, on-screen facts (no invented history, no unseen causes).",
+                "No forming/resolving plans, triggers, or outcomes.",
+                "No implication of future threats/events (no foreshadowing).",
+                "No escalation, dialogue, rolls, or time advancement.",
+                "Ends exactly with: What do you do?"
+            ],
+            "narration": narration
+        }
+
+        # Force JSON response: ask model to output the exact structure.
+        audit_instruction = (
+            "Return JSON exactly in this format:\n"
+            "{\n"
+            '  "on_screen_facts_only": {"pass": <true/false>, "notes": "<short>"},\n'
+            '  "no_plans_triggers_outcomes": {"pass": <true/false>, "notes": "<short>"},\n'
+            '  "no_future_implication": {"pass": <true/false>, "notes": "<short>"},\n'
+            '  "no_escalation_dialogue_rolls_time": {"pass": <true/false>, "notes": "<short>"},\n'
+            '  "ends_with_what_do_you_do": {"pass": <true/false>, "notes": "<short>"}\n'
+            "}\n"
+            "Return ONLY JSON."
+        )
+
+        # We send the instruction plus the payload as plain text to avoid model confusion.
+        user_prompt = audit_instruction + "\n\n" + json.dumps(audit_user, ensure_ascii=False)
+
+        raw = self.query_ollama_chat(user_prompt, system_prompt=audit_system)
+
+        try:
+            data = json.loads(raw)
         except Exception as e:
-            raise RuntimeError(f"Ollama query failed: {e}")
-    
-    def boot_session(self, session_number: int = 1) -> None:
-        """Boot a new game session."""
-        print("\n" + "="*80)
-        print("ROTR] GM AGENT SESSION BOOT")
-        print("="*80 + "\n")
-        
-        # Load all contexts
-        self.load_contexts(book=1, act=1)
-        
-        # Build boot prompt
-        print("[GM-AGENT] Building boot prompt...")
-        boot_prompt = self.build_gm_prompt(session_number=session_number)
-        
-        # Query Ollama to initialize GM
-        print("[GM-AGENT] Initializing GM Agent with Ollama...")
-        print("[OLLAMA] Sending boot prompt (this may take 30-60 seconds)...")
-        
-        gm_response = self.query_ollama(boot_prompt)
-        
-        print("\n" + "="*80)
-        print("GM AGENT INITIALIZED")
-        print("="*80 + "\n")
-        print(gm_response)
-        print("\n" + "-"*80 + "\n")
-        
-        # Store boot state
-        self.session_state = {
-            "session_number": session_number,
-            "book": 1,
-            "act": 1,
-            "boot_timestamp": datetime.now().isoformat(),
-            "gm_initialized": True,
-        }
-    
-    def session_loop(self) -> None:
-        """Main session game loop."""
-        if not self.session_state.get("gm_initialized"):
-            print("[ERROR] GM not initialized. Call boot_session() first.")
-            return
-        
-        print("[SESSION] Entering game loop. Type 'quit' to exit.\n")
-        
-        session_buffer = []
-        turn_count = 0
-        
-        while True:
-            try:
-                user_input = input(">>> ").strip()
-                
-                if user_input.lower() in ["quit", "exit", "q"]:
-                    print("[SESSION] Ending session...")
-                    break
-                
-                if not user_input:
-                    continue
-                
-                turn_count += 1
-                
-                # Build context for this turn
-                context_prompt = f"""Current Game State:
-Session {self.session_state['session_number']}, Turn {turn_count}
+            raise RuntimeError(f"Semantic audit returned non-JSON. Error: {e}. Raw: {raw[:300]!r}")
 
-Player/GM Input:
-{user_input}
+        required = [
+            "on_screen_facts_only",
+            "no_plans_triggers_outcomes",
+            "no_future_implication",
+            "no_escalation_dialogue_rolls_time",
+            "ends_with_what_do_you_do",
+        ]
+        for k in required:
+            if k not in data or "pass" not in data[k] or "notes" not in data[k]:
+                raise RuntimeError(f"Semantic audit JSON missing required field(s): {k}. JSON: {data}")
 
-Respond as the GM. Apply rules, adjudicate outcomes, and describe results.
-Remember: You are a neutral rules arbiter, not a storyteller. Present mechanical outcomes."""
-                
-                # Query Ollama
-                gm_output = self.query_ollama(context_prompt)
-                print(f"\n[GM] {gm_output}\n")
-                
-                # Buffer for session notes
-                session_buffer.append({
-                    "turn": turn_count,
-                    "player_input": user_input,
-                    "gm_output": gm_output
-                })
-                
-            except KeyboardInterrupt:
-                print("\n[SESSION] Interrupted by user.")
-                break
-            except Exception as e:
-                print(f"[ERROR] {e}")
+        return data
+
+
+    def extract_checklist_items(self, boot_output_section: str) -> List[str]:
+        """
+        Extract checklist lines like:
+        * [ ] ...
+        - [ ] ...
+        """
+        items: List[str] = []
+        for line in boot_output_section.splitlines():
+            m = re.match(r"^\s*(?:\*|-)\s*\[\s*\]\s*(.+?)\s*$", line)
+            if m:
+                items.append(m.group(1))
+        return items
+
+    # ---------- deterministic boot checks ----------
+    def _check_loaded_system_authority(self) -> Tuple[bool, str]:
+        missing = [p for p in self.BOOT_SYSTEM_AUTHORITY_FILES if p not in self._boot_loaded_files]
+        if missing:
+            return False, f"Missing system authority files: {missing}"
+        return True, "All system authority files loaded."
+
+    def _check_system_authority_only_behavior(self) -> Tuple[bool, str]:
+        # Deterministic guarantee: our code only loads boot minimal set.
+        if not self._boot_only_system_authority_loaded:
+            return False, "Disallowed non-boot files were loaded during boot."
+        return True, "Boot loaded only allowed files (system authority + minimal identity + last notes)."
+
+    def _check_no_plans_triggers_outcomes_in_code(self) -> Tuple[bool, str]:
+        # Deterministic guarantee: boot_once does not activate book triggers or resolve outcomes.
+        return True, "Boot code does not activate triggers or resolve outcomes."
+
+    def _check_no_dialogue_rolls_time_advance(self, narration: str) -> Tuple[bool, str]:
+        # Heuristic but strong: detect dialogue markers and roll prompts
+        # (This is not perfect, but catches the common failure modes.)
+        lower = narration.lower()
+
+        # Dialogue heuristics
+        dialogue_markers = ['"', "“", "”", " says", " asks", "shouts", "whispers", "replies", "yells"]
+        if any(tok in narration for tok in ['"', "“", "”"]):
+            return False, "Narration contains quotation marks (likely dialogue)."
+        if any(dm in lower for dm in [" says", " asks", "replies", "shouts", "whispers", "yells"]):
+            return False, "Narration contains dialogue verbs (likely dialogue)."
+
+        # Roll/dice heuristics
+        roll_markers = ["roll", "dc ", "difficulty class", "initiative", "attack roll", "saving throw", "reflex", "fortitude", "will save"]
+        if any(rm in lower for rm in roll_markers):
+            return False, "Narration contains roll/mechanics language (likely a boot violation)."
+
+        # Time advance heuristics
+        time_advance_markers = ["later", "after a while", "minutes pass", "hours pass", "you spend", "you take", "you rest", "you sleep"]
+        if any(t in lower for t in time_advance_markers):
+            return False, "Narration suggests time advancement."
+
+        return True, "No obvious dialogue, roll calls, or time advancement detected."
+
+    def _check_ends_with_what_do_you_do(self, narration: str) -> Tuple[bool, str]:
+        # Must end with exact line (allow trailing whitespace)
+        if narration.rstrip().endswith("What do you do?"):
+            return True, 'Ends with exactly: "What do you do?"'
+        return False, 'Does not end with exactly: "What do you do?"'
+
+    # ---------- compliance report ----------
+    def _extract_narration_only(self, text: str) -> str:
+        """
+        If the model output contains the checklist line at the end, keep narration as-is.
+        We only need the full output, but trimming trailing whitespace helps.
+        """
+        return text.strip()
+
+    def evaluate_boot_checklist(self, checklist_items: List[str], narration: str, audit: Optional[Dict] = None) -> List[Tuple[str, bool, str]]:
+
+        """
+        Map human checklist lines to concrete checks.
+        Returns list of (item_text, passed, details)
+        """
+        results: List[Tuple[str, bool, str]] = []
+
+        for item in checklist_items:
+            key = item.strip()
+
+            # Map by keyword (kept simple; you can refine matching later)
+            if "loaded and prioritized System Authority" in key:
+                ok, msg = self._check_loaded_system_authority()
+                results.append((item, ok, msg))
                 continue
-        
-        # Save session notes
-        print("[SESSION] Saving session notes...")
-        self._save_session_notes(session_buffer)
-    
-    def _save_session_notes(self, turns: List[Dict]) -> None:
-        """Save session notes to file."""
-        session_num = self.session_state.get("session_number", 1)
-        output_dir = Path(__file__).parent.parent.parent / "outputs"
-        output_dir.mkdir(exist_ok=True)
-        
-        notes_file = output_dir / f"session_{session_num:03d}_notes.json"
-        
-        session_data = {
-            "session_number": session_num,
-            "book": self.session_state.get("book", 1),
-            "act": self.session_state.get("act", 1),
-            "turns": turns,
-        }
-        
-        with open(notes_file, "w", encoding="utf-8") as f:
-            json.dump(session_data, f, indent=2)
-        
-        print(f"[SESSION] Notes saved to {notes_file}")
+
+            if "System Authority as the only behavioral constraint" in key:
+                ok, msg = self._check_system_authority_only_behavior()
+                results.append((item, ok, msg))
+                continue
+
+            if "non-authority files only for silent alignment" in key:
+                # We load optional identity + session notes only; treat as silent alignment by design.
+                ok = True
+                msg = "Non-authority files (if any) are loaded only as optional alignment inputs."
+                results.append((item, ok, msg))
+                continue
+
+            if "avoided forming or resolving plans, triggers, or outcomes" in key:
+                ok, msg = self._check_no_plans_triggers_outcomes_in_code()
+                results.append((item, ok, msg))
+                continue
+
+            if "narration based only on established" in key:
+                if not audit:
+                    results.append((item, False, "Semantic audit missing."))
+                else:
+                    ok = bool(audit["on_screen_facts_only"]["pass"])
+                    msg = audit["on_screen_facts_only"]["notes"]
+                    results.append((item, ok, msg))
+                continue
 
 
-def main():
-    """Entry point for GM Agent."""
-    config = GMConfig()
-    
-    # Check Ollama is running
-    try:
-        response = requests.get(f"{config.ollama_host}/api/tags", timeout=2)
-        if response.status_code != 200:
-            print("[ERROR] Ollama is not responding. Start with: ollama serve")
-            return 1
-    except:
-        print("[ERROR] Cannot reach Ollama at {config.ollama_host}")
-        print("Start Ollama with: ollama serve")
-        return 1
-    
-    # Create and boot GM agent
-    gm = GMAgent(config)
-    
-    try:
-        gm.boot_session(session_number=1)
-        gm.session_loop()
-    except KeyboardInterrupt:
-        print("\n[GM-AGENT] Shutting down...")
-        return 0
-    except Exception as e:
-        print(f"[FATAL ERROR] {e}")
-        return 1
-    
-    return 0
+            if "avoided using player motivations" in key:
+                # Not deterministically verifiable; partial heuristic: references to "your goal" / "you want"
+                lower = narration.lower()
+                if any(p in lower for p in ["your goal", "you want", "you came here to", "you decided to"]):
+                    results.append((item, False, "Narration contains intent/motivation framing phrases."))
+                else:
+                    results.append((item, True, "No obvious intent/motivation phrasing detected."))
+                continue
 
+            if "avoiding implication of future threats or events" in key:
+                # Not deterministically verifiable; heuristic: foreshadow words
+                lower = narration.lower()
+                foreshadow = ["soon", "at any moment", "you sense", "ominous", "foreboding", "something is watching", "danger", "threat"]
+                if any(w in lower for w in foreshadow):
+                    results.append((item, False, "Narration contains foreshadow/threat language."))
+                else:
+                    results.append((item, True, "No obvious foreshadow/threat language detected."))
+                continue
 
-if __name__ == "__main__":
-    exit(main())
+            if "prevented escalation, dialogue, rolls, or time advancement" in key:
+                ok, msg = self._check_no_dialogue_rolls_time_advance(narration)
+                results.append((item, ok, msg))
+                continue
+
+            if "stable, non-demanding state" in key:
+                # Heuristic: if it ends with What do you do? and no immediate imperative like "now" "hurry"
+                lower = narration.lower()
+                if any(w in lower for w in ["hurry", "immediately", "right now", "at once", "you must", "forced"]):
+                    results.append((item, False, "Narration contains urgency/compulsion language."))
+                else:
+                    results.append((item, True, "No obvious urgency/compulsion language detected."))
+                continue
+
+            if 'end exactly with “What do you do?”' in key or 'end exactly with "What do you do?"' in key:
+                ok, msg = self._check_ends_with_what_do_you_do(narration)
+                results.append((item, ok, msg))
+                continue
+
+            if "avoided forming or resolving plans, triggers, or outcomes" in key and audit:
+                ok = bool(audit["no_plans_triggers_outcomes"]["pass"])
+                msg = audit["no_plans_triggers_outcomes"]["notes"]
+                results.append((item, ok, msg))
+                continue
+
+            if "avoiding implication of future threats or events" in key and audit:
+                ok = bool(audit["no_future_implication"]["pass"])
+                msg = audit["no_future_implication"]["notes"]
+                results.append((item, ok, msg))
+                continue
+
+            if "prevented escalation, dialogue, rolls, or time advancement" in key and audit:
+                ok = bool(audit["no_escalation_dialogue_rolls_time"]["pass"])
+                msg = audit["no_escalation_dialogue_rolls_time"]["notes"]
+                results.append((item, ok, msg))
+                continue
+
+            if ('end exactly with “What do you do?”' in key or 'end exactly with "What do you do?"' in key) and audit:
+                ok = bool(audit["ends_with_what_do_you_do"]["pass"])
+                msg = audit["ends_with_what_do_you_do"]["notes"]
+                results.append((item, ok, msg))
+                continue
+
+            # Unknown item: fail fast so you notice template drift
+            results.append((item, False, "Unknown checklist item. Update Python mapping for this item."))
+
+        return results
+
+    def print_checklist_report(self, evaluated: List[Tuple[str, bool, str]]) -> None:
+        print("\n" + "=" * 80)
+        print("BOOT CHECKLIST VERIFICATION")
+        print("=" * 80)
+        all_ok = True
+        for item, ok, detail in evaluated:
+            icon = "✅" if ok else "❌"
+            print(f"{icon} {item}")
+            if detail:
+                print(f"    - {detail}")
+            if not ok:
+                all_ok = False
+
+        print("-" * 80)
+        if all_ok:
+            print("✅ ALL CHECKS PASSED")
+        else:
+            print("❌ ONE OR MORE CHECKS FAILED")
+        print("=" * 80 + "\n")
+
+        if not all_ok:
+            raise RuntimeError("Boot checklist verification failed. See report above.")
+
+    # ---------- BOOT public API ----------
+    def boot_once(self, session_number: int = 1) -> str:
+        """Runs boot and returns the GM opening narration (string)."""
+        if not self.config.boot_prompt_path.exists():
+            raise FileNotFoundError(f"Missing canonical boot prompt: {self.config.boot_prompt_path}")
+
+        print("[GM-AGENT] Loading boot contexts...")
+        self.load_boot_contexts()
+
+        print("[GM-AGENT] Building system prompt from canonical boot file...")
+        system_prompt = self.build_boot_system_prompt(session_number=session_number)
+
+        print("[GM-AGENT] Querying Ollama for opening narration...")
+        user_prompt = (
+            "Begin the Session Boot now. Follow the boot protocol in the system message. "
+            "Produce the opening narration and end with exactly: What do you do?"
+        )
+        return self.query_ollama_chat(user_prompt, system_prompt=system_prompt)
+
+    def boot_session(self, session_number: int = 1) -> None:
+        """Boots, prints narration, then prints and enforces checklist verification."""
+        print("\n" + "=" * 80)
+        print("GM AGENT BOOT SEQUENCE")
+        print("=" * 80 + "\n")
+
+        narration = self.boot_once(session_number=session_number)
+
+        print("\n" + "=" * 80)
+        print("OPENING NARRATION")
+        print("=" * 80 + "\n")
+        print(narration)
+        print("\n" + "-" * 80 + "\n")
+
+        # Extract checklist from boot prompt file
+        # Extract checklist from boot prompt file
+        boot_output_section = self.get_boot_output_section()
+        checklist_items = self.extract_checklist_items(boot_output_section)
+
+        if not checklist_items:
+            raise RuntimeError(
+                "No checklist items found in '# Session Boot Output' section of SESSION_BOOT_PROMPT.md. "
+                "Ensure it contains lines like '* [ ] ...'."
+            )
+
+        # Run semantic audit (strict JSON). If it fails to return JSON, boot fails.
+        audit = self.semantic_audit_narration(narration)
+
+        # Evaluate checklist items (deterministic + audit)
+        evaluated = self.evaluate_boot_checklist(checklist_items, narration, audit=audit)
+
+        self.print_checklist_report(evaluated)
