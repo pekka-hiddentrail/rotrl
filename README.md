@@ -162,11 +162,12 @@ python gm_launcher.py --temp 0.2           # Lower temperature for consistency
 
 **What happens:**
 1. ✅ Verifies Ollama is running
-2. ✅ Loads all adventure_path files in authority hierarchy order
-3. ✅ Initializes GM Agent with comprehensive context
-4. ✅ Prompts for PC info (names, classes, levels)
-5. ✅ Enters interactive session loop
-6. ✅ Saves session notes to `outputs/session_XXX_notes.json`
+2. ✅ Loads canonical boot prompt from `.agents/GM/SESSION_BOOT_PROMPT.md`
+3. ✅ Loads and injects System Authority files (~900 lines) into placeholders
+4. ✅ Initializes GM Agent with Ollama `/api/chat` endpoint
+5. ✅ Displays opening narration
+6. ✅ Displays Session Boot Output section
+7. ✅ Ready for player input
 
 See [QUICKSTART_GM.md](QUICKSTART_GM.md) for detailed guide.
 
@@ -203,7 +204,7 @@ hello world
 [SUCCESS] Got expected response!
 ```
 
-### 4. Verify Strict Hello World Test
+### 5. Verify Strict Hello World Test
 
 For a more rigorous test:
 
@@ -237,11 +238,20 @@ dm.conduct_session(party, adventure)
 
 ## Current Project Status
 
-### 🎮 GM Agent System (✅ COMPLETE & OPERATIONAL)
-- ✅ **src/agents/gm_agent.py** (370 lines) - Full GM Agent implementation
+### 🎮 GM Agent System (✅ COMPLETE & OPERATIONAL - BOOT-FIRST ARCHITECTURE)
+- ✅ **src/agents/gm_agent.py** (220+ lines) - Boot-first GM Agent implementation
+  - Dual FileLoader pattern (repo_root for .agents/, adventure_path_root for rules)
+  - Dynamic context injection via `{{PLACEHOLDER}}` system
+  - `get_boot_output()` method extracts Session Boot Output from canonical prompt
+  - Ollama `/api/chat` endpoint with system prompt binding
+- ✅ **.agents/GM/SESSION_BOOT_PROMPT.md** (145 lines) - Canonical boot protocol
+  - Mandatory boot rules and constraints
+  - Three injection points: {{SYSTEM_AUTHORITY}}, {{PLAYER_IDENTITY}}, {{CONTINUITY_ANCHOR}}
+  - Opening narration constraints + player agency transition
+  - Enforcement and Session Boot Output sections
 - ✅ **gm_launcher.py** (100 lines) - Command-line launcher with Ollama verification
 - ✅ **Session persistence** - Saves to outputs/session_XXX_notes.json (JSON format with turn-by-turn logs)
-- ✅ **Multi-session continuity** - Loads prior session facts for npc memory and world state
+- ✅ **Multi-session continuity** - Loads prior session notes via SESSION_NOTES_LAST.md if present
 
 ### Documentation & Rules (✅ ~2,100 lines complete)
 - ✅ **System Authority** (00_system_authority/): GM behavior, adjudication, rules scope — **900 lines**
@@ -254,15 +264,22 @@ dm.conduct_session(party, adventure)
 - 🔴 **Shared References** (90_shared_references/): Not yet started
 
 ### Code & Infrastructure (✅ Complete)
-- ✅ Project structure (src/, adventure_path/, outputs/)
+- ✅ Project structure (src/, adventure_path/, .agents/, outputs/)
+- ✅ Boot-prompt-first architecture
+  - Canonical prompt: `.agents/GM/SESSION_BOOT_PROMPT.md` (independent, versioned)
+  - Context injection: Python code loads files and replaces `{{PLACEHOLDER}}`s
+  - System prompt binding: Ollama `/api/chat` ensures constraints respected
 - ✅ Ollama integration (bootstrap.py, gm_launcher.py, hello_world.py)
 - ✅ Python 3.13 virtual environment
 - ✅ Authority hierarchy system (5-tier)
 - ✅ Hallucination prevention (concrete mechanics, pressure tables, knowledge boundaries)
 
 ### Gameplay Features (✅ Ready for Testing)
-- ✅ Session initialization with full context loading
-- ✅ Interactive session loop (player input → GM response)
+- ✅ Session initialization with canonical boot protocol
+- ✅ System prompt binding (Ollama `/api/chat` endpoint)
+- ✅ Context injection into placeholders (System Authority, Player Identity, Continuity)
+- ✅ Opening narration generation (sensory-grounded, factual only)
+- ✅ Session Boot Output display (protocol verification)
 - ✅ Session notes logging and persistence
 - ✅ Multi-session continuity framework
 - 🟡 Player agent autonomy (future enhancement)
@@ -339,7 +356,7 @@ See [QUICKSTART_GM.md](QUICKSTART_GM.md) and [outputs/README.md](outputs/README.
 
 ---
 
-**Current Status**: GM Agent ✅ OPERATIONAL | Foundation + Campaign Lore ✅ COMPLETE | Book I Act I ✅ COMPLETE | Core Systems (Player Agent) 🟡 FUTURE
+**Current Status**: GM Agent ✅ BOOT-FIRST ARCHITECTURE | Foundation + Campaign Lore ✅ COMPLETE | Book I Act I ✅ COMPLETE | Boot-Prompt-First Design ✅ ACTIVE
 
 **Updated**: Feb 10, 2026  
-**Metrics**: ~2,100 lines of rules/config | GM Agent ready | 1 complete adventure book (Book I, Act I) | Session notes persistent
+**Metrics**: ~2,100 lines of rules/config | Boot-first GM Agent ready | Canonical boot prompt in .agents/GM/ | Placeholder injection system | Session notes persistent

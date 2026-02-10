@@ -96,6 +96,24 @@ All NPC-relevant facts **must be recorded in SESSION_NOTES_PROTOCOL.md** so that
 **Instruction:** NPC memory should feel human—biased and emotional—but record facts in session notes.
 
 
+### Authority Note: Memory vs State
+
+This document defines **how NPCs remember and interpret events**.
+
+It does not itself change NPC state.
+
+All persistent changes to:
+- NPC existence
+- Relationships
+- Psychological or narrative state
+
+must be recorded in **NPC_STATE_LOG_TEMPLATE.md** and referenced by
+**SESSION_NOTES_PROTOCOL.md**.
+
+If a change is not logged, it is not canon.
+
+
+
 ## 4. Reputation and Social Consequences
 
 NPC reactions are influenced by:
@@ -129,7 +147,7 @@ NPCs should not solve problems meant for the PCs.
 
 ## 6. NPC Change Over Time
 
-NPCs evolve due to:
+NPCs evolve **only when change is demonstrated on-screen or logged as a state change** due to:
 
 * Trauma
 * Success or failure
@@ -140,7 +158,7 @@ Changes should be:
 * Gradual
 * Visible in behavior rather than exposition
 
-NPCs may grow braver, colder, more cautious, or more desperate.
+NPCs may grow braver, colder, more cautious, or more desperate. Gradual change must still be evidenced by specific events and logged when it becomes persistent.
 
 
 ## 7. Death, Removal, and Absence

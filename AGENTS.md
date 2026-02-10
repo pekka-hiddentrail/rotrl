@@ -16,7 +16,7 @@ All agents follow these principles:
 
 ## GM Agent (Game Master AI)
 
-**Location**: `src/agents/gm_agent.py`
+**Location**: `src/agents/gm_agent.py` | Boot Prompt: `.agents/GM/SESSION_BOOT_PROMPT.md`
 
 **Purpose**: Rules arbiter and world simulator for Pathfinder 1st Edition gameplay.
 
@@ -37,63 +37,84 @@ gm = GMAgent(config)
 gm.boot_session(session_number=1)
 ```
 
+### Boot-First Architecture
+
+**The GM Agent follows a boot-prompt-first design:**
+
+1. **Canonical Boot Prompt** (`.agents/GM/SESSION_BOOT_PROMPT.md`)
+   - Defines the mandatory boot protocol (role, constraints, narration rules)
+   - Contains three placeholder injection points: `{{SYSTEM_AUTHORITY}}`, `{{PLAYER_IDENTITY}}`, `{{CONTINUITY_ANCHOR}}`
+   - Served as system prompt to Ollama /api/chat endpoint
+   - Version-controlled and independently maintainable
+
+2. **Context Injection** (Python code loads and injects)
+   - System Authority files (~900 lines) injected into `{{SYSTEM_AUTHORITY}}`
+   - Player characters file (if present) injected into `{{PLAYER_IDENTITY}}`
+   - Previous session notes (if present) injected into `{{CONTINUITY_ANCHOR}}`
+   - Rendered prompt sent to LLM with full context binding
+
 ### File Loading Sequence
 
-The GM Agent loads files in strict precedence order:
+The GM Agent loads and injects files in strict precedence order:
 
-1. **System Authority** (00_*)
+1. **System Authority** (adventure_path/00_system_authority/*)
    - `GM_OPERATING_RULES.md` - Core GM behavioral rules
    - `ADJUDICATION_PRINCIPLES.md` - Conflict resolution and fairness rules
    - `COMBAT_AND_POSITIONING.md` - Combat mechanics and grid rules
    - `PF1E_RULES_SCOPE.md` - What rules are in/out of scope
    - `SESSION_NOTES_PROTOCOL.md` - Fact recording and state tracking
+   - **Injected into**: `{{SYSTEM_AUTHORITY}}` placeholder in boot prompt
 
-2. **World Context** (01_*)
-   - `WORLD_OPERATING_RULES.md` - Time, magic, divine interaction systems
-   - `WORLD_CANON.md` - Established lore facts (immutable)
-   - Geographic and cosmological constraints
+2. **Player Identity** (adventure_path/PLAYER_CHARACTERS.md, if present)
+   - PC names, classes, levels, backgrounds
+   - **Injected into**: `{{PLAYER_IDENTITY}}` placeholder in boot prompt
 
-3. **Campaign Rules** (02_*)
-   - `CAMPAIGN_OVERVIEW.md` - Scope and bounds of campaign
-   - `THEME_AND_TONE.md` - Emotional safety, humor rules, fade-to-black protocol
-   - `PLAYER_AGENCY_RULES.md` - Player power/limitation boundaries
-   - `NPC_MEMORY_AND_CONTINUITY.md` - NPC knowledge and bias mechanics
+3. **Continuity Anchor** (adventure_path/SESSION_NOTES_LAST.md, if present)
+   - Previous session facts and NPC memory updates
+   - **Injected into**: `{{CONTINUITY_ANCHOR}}` placeholder in boot prompt
 
-4. **Book-Specific Content** (03_books/BOOK_01_BURNT_OFFERINGS/)
-   - `BOOK_OVERVIEW.md` - Structure and narrative arc
-   - `NPCS.md` - Characters, motivations, stat blocks
-   - `LOCATIONS.md` - Locations, mechanics, secrets
-   - `EVENTS_AND_TRIGGERS.md` - Escalation timers, pressure mechanics
-   - `ACT_STRUCTURE.md` - Current act breakdown
-
-5. **Session State** (outputs/session_XXX_notes.json)
-   - Previous session facts (may override tier 1/2 inventions with tier 3 canon)
-   - PC knowledge state
-   - NPC memory updates
-
-### Boot Flow
+### Boot Sequence
 
 ```
 gm.boot_session()
-  ├─ Load all system authority files → self.system_context
-  ├─ Load all campaign context files → self.campaign_context
-  ├─ Load Book I files → self.book_context
-  ├─ Build comprehensive GM prompt (combines all contexts)
-  ├─ Query Ollama LLM → initialize GM state
-  └─ Display GM ready message
+  ├─ Load canonical boot prompt from .agents/GM/SESSION_BOOT_PROMPT.md
+  ├─ Load System Authority files (5 files) → system_context
+  ├─ Check for PLAYER_CHARACTERS.md (optional) → player_context
+  ├─ Check for SESSION_NOTES_LAST.md (optional) → continuity_context
+  ├─ Inject all contexts into boot prompt placeholders
+  ├─ Query Ollama /api/chat with system prompt binding
+  ├─ Extract "# Session Boot Output" section from boot prompt file
+  └─ Display opening narration + boot output
 ```
 
-### Session Loop
+### Ollama Integration
 
+The GM Agent uses Ollama's `/api/chat` endpoint for proper system prompt binding:
+
+```python
+response = requests.post(
+    "http://localhost:11434/api/chat",
+    json={
+        "model": "qwen3:4b",
+        "messages": [
+            {"role": "system", "content": rendered_system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "stream": False,
+        "temperature": 0.3,
+    },
+    timeout=180
+)
 ```
-gm.session_loop()
-  ├─ Await player/GM input
-  ├─ Build context message (current state + input)
-  ├─ Query Ollama LLM
-  ├─ Display GM response
-  ├─ Buffer turn to session notes
-  └─ Repeat until quit or error
-```
+
+The system prompt (rendered boot prompt with injected contexts) ensures the LLM respects all constraints before seeing user input.
+
+### Boot Output
+
+After generating the opening narration, the agent automatically extracts and displays the `# Session Boot Output` section from SESSION_BOOT_PROMPT.md. This section contains:
+- Self-check verification that boot protocol was followed
+- Confirmation of loaded contexts
+- Ready state indicator
 
 ### Session Notes Output
 
@@ -120,10 +141,12 @@ Session notes are saved to `outputs/session_XXX_notes.json` with structure:
 
 ```python
 GMConfig(
-    ollama_host="http://localhost:11434",      # Ollama LLM server
-    ollama_model="qwen3:4b",                    # Model name (default: qwen3:4b)
-    adventure_path_root=None,                   # Defaults to rotrl/adventure_path/
-    temperature=0.3                             # Lower = more deterministic (for rules)
+    ollama_host="http://localhost:11434",           # Ollama LLM server
+    ollama_model="qwen3:4b",                        # Model name (default: qwen3:4b)
+    temperature=0.3,                                # Lower = more deterministic (for rules)
+    repo_root=None,                                 # Auto-detected; access .agents/
+    adventure_path_root=None,                       # Defaults to rotrl/adventure_path/
+    boot_prompt_path=None                           # Defaults to .agents/GM/SESSION_BOOT_PROMPT.md
 )
 ```
 
@@ -222,25 +245,20 @@ These agents are **not yet implemented** but are specified in the design:
 
 ---
 
-## Ollama Integration
+## FileLoader Pattern
 
-All agents communicate with Ollama via HTTP REST API.
-
-### API Endpoint: `/api/generate`
+The GM Agent uses dual FileLoader instances for clean separation of concerns:
 
 ```python
-response = requests.post(
-    "http://localhost:11434/api/generate",
-    json={
-        "model": "qwen3:4b",
-        "prompt": "Your query here",
-        "stream": False,
-        "temperature": 0.3,
-    },
-    timeout=180
-)
-response_text = response.json()["response"]
+# In GMAgent.__init__()
+self.loader = FileLoader(config.repo_root)              # Loads from repo root (.agents/)
+self.adventure_loader = FileLoader(config.adventure_path_root)  # Loads from adventure_path/
 ```
+
+This allows:
+- Canonical boot prompt to be independently versioned in repo root
+- Adventure rules to be dynamically loaded from adventure_path/
+- Clean separation between system infrastructure and campaign content
 
 ### Error Handling
 
@@ -265,31 +283,34 @@ Should return list of available models.
 
 ```bash
 cd rotrl
-python3 -m src.agents.gm_agent
+python gm_launcher.py
 ```
 
 Expected output:
 ```
 ================================================================================
-ROTR] GM AGENT SESSION BOOT
+GM AGENT BOOT SEQUENCE
 ================================================================================
 
-[GM-AGENT] Loading system authority files...
-[GM-AGENT] Loading campaign context files...
-[GM-AGENT] Loading Book I files...
-[GM-AGENT] Contexts loaded successfully
-[GM-AGENT] Building boot prompt...
-[GM-AGENT] Initializing GM Agent with Ollama...
-[OLLAMA] Sending boot prompt (this may take 30-60 seconds)...
+[GM-AGENT] Loading boot contexts...
+[GM-AGENT] Building system prompt from canonical boot file...
+[GM-AGENT] Querying Ollama for opening narration...
 
 ================================================================================
-GM AGENT INITIALIZED
+OPENING NARRATION
 ================================================================================
 
-[GM Response greeting with context confirmation]
+[Sensory-grounded opening scene]
+**What do you do?**
+
+--------------------------------------------------------------------------------
+
+# Session Boot Output
+
+[Boot protocol verification and confirmation]
 ```
 
-Then type player actions or 'quit' to exit.
+The boot output section confirms that the Session Boot Protocol was followed.
 
 ---
 

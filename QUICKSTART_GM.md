@@ -43,27 +43,32 @@ gm.session_loop()
 
 ## What Happens on Boot
 
-1. **Loads All Contexts**:
-   - `adventure_path/00_system_authority/` → GM rules + procedures
-   - `adventure_path/01_world_setting/` → World canon + metaphysics
-   - `adventure_path/02_campaign_setting/` → Campaign rules + NPC memory + safety
-   - `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/` → Current adventure
+1. **Loads Canonical Boot Prompt** (`.agents/GM/SESSION_BOOT_PROMPT.md`)
+   - Defines mandatory boot protocol (role, constraints, narration rules)
+   - Contains three placeholder injection points for context
 
-2. **Builds Comprehensive Prompt**: 
-   - Combines all contexts into single GM persona
-   - Specifies role (rules arbiter, NOT storyteller)
-   - Establishes constraints (no fudging, RAW only, deterministic)
+2. **Loads and Injects System Authority** (`adventure_path/00_system_authority/`)
+   - 5 files (~900 lines total): GM rules, adjudication, combat, scope, session protocol
+   - Injected into `{{SYSTEM_AUTHORITY}}` placeholder
 
-3. **Queries Ollama**: 
-   - Sends boot prompt to LLM
-   - Takes ~30-60 seconds on first query
-   - Returns GM greeting + ready confirmation
+3. **Loads Optional Player Identity** (if `adventure_path/PLAYER_CHARACTERS.md` exists)
+   - PC names, classes, levels, backgrounds
+   - Injected into `{{PLAYER_IDENTITY}}` placeholder
 
-4. **Enters Session Loop**:
-   - Awaits player/GM input (type actions)
-   - Queries LLM for GM response
-   - Buffers turns to `outputs/session_XXX_notes.json`
-   - Type `quit` to exit and save
+4. **Loads Optional Continuity** (if `adventure_path/SESSION_NOTES_LAST.md` exists)
+   - Previous session facts and NPC memory
+   - Injected into `{{CONTINUITY_ANCHOR}}` placeholder
+
+5. **Queries Ollama** with full context
+   - Uses `/api/chat` endpoint with system prompt binding
+   - System prompt = rendered boot prompt with injected contexts
+   - Takes ~30-60 seconds on first query (LLM context loading)
+   - Returns opening narration
+
+6. **Displays Boot Output**
+   - Shows opening narration
+   - Extracts and displays `# Session Boot Output` from boot prompt file
+   - Confirms boot protocol was followed
 
 ## Session Notes Output
 
@@ -114,40 +119,74 @@ These notes can be loaded in future sessions to maintain continuity.
 
 ## File Loading Details
 
-GM Agent loads files in **precedence order** (highest → lowest):
+**GM Agent loads files in strict hierarchy during boot injection:**
 
-1. **System Authority** (00_system_authority/)
-   - `GM_OPERATING_RULES.md` - How GM behaves
-   - `ADJUDICATION_PRINCIPLES.md` - Fair play rules
-   - `COMBAT_AND_POSITIONING.md` - Combat system
-   - `PF1E_RULES_SCOPE.md` - Which PF1e rules apply
-   - `SESSION_NOTES_PROTOCOL.md` - How to record facts
+### Boot-Time Injection Points
 
-2. **World Setting** (01_world_setting/)
-   - `WORLD_OPERATING_RULES.md` - Time, magic, divinity
-   - `WORLD_CANON.md` - Established facts
-   - `GEOGRAPHY_AND_LOCATIONS.md` - Maps, travel, encounters
-   - `MAGIC_AND_METAPHYSICS.md` - What scholars know
-   - `COSMOLOGY_AND_GODS.md` - Pantheon + divine mechanics
+#### 1. Canonical Boot Prompt (`.agents/GM/SESSION_BOOT_PROMPT.md`)
+Defines:
+- Role declaration (mandatory GM constraints)
+- File loading protocol (placeholder injection points)
+- Opening narration constraints (sensory detail, factual only)
+- Player agency transition (ends with "What do you do?")
+- Enforcement rules (protocol violation handling)
 
-3. **Campaign Setting** (02_campaign_setting/)
-   - `CAMPAIGN_OVERVIEW.md` - Scope + boundaries
-   - `THEME_AND_TONE.md` - Humor, safety, fade-to-black
-   - `PLAYER_AGENCY_RULES.md` - PC power boundaries
-   - `NPC_MEMORY_AND_CONTINUITY.md` - NPC knowledge rules
-   - `FACTIONS_AND_POWERS.md` - Political landscape
+#### 2. System Authority Injection (`{{SYSTEM_AUTHORITY}}`)
+Loaded from `adventure_path/00_system_authority/` (5 files):
+- `GM_OPERATING_RULES.md` - How GM thinks and behaves
+- `ADJUDICATION_PRINCIPLES.md` - Fair play and conflict resolution
+- `COMBAT_AND_POSITIONING.md` - Combat system (grid, initiative, etc.)
+- `PF1E_RULES_SCOPE.md` - Which Pathfinder 1e rules apply
+- `SESSION_NOTES_PROTOCOL.md` - How to record facts
 
-4. **Current Book** (03_books/BOOK_01_BURNT_OFFERINGS/)
-   - `BOOK_OVERVIEW.md` - Acts, themes, structure
-   - `NPCS.md` - Characters, stat blocks, motivations
-   - `LOCATIONS.md` - Encounters, loot, secrets
-   - `EVENTS_AND_TRIGGERS.md` - Escalation timers, pressure
-   - `ACT_STRUCTURE.md` - Scene breakdown
+#### 3. Player Identity Injection (`{{PLAYER_IDENTITY}}`)
+Optional: Loaded from `adventure_path/PLAYER_CHARACTERS.md` if present
+- PC names, classes, levels, backstories
+- Used only for boot-time alignment (no motivation interference)
 
-5. **Session State** (outputs/session_XXX_notes.json)
-   - Facts from prior sessions override all above
-   - PC knowledge state
-   - NPC memory updates
+#### 4. Continuity Injection (`{{CONTINUITY_ANCHOR}}`)
+Optional: Loaded from `adventure_path/SESSION_NOTES_LAST.md` if present
+- Previous session facts and NPC memory
+- Prevents contradiction with established canon
+
+### Placeholder Rendering Example
+
+Before injection, boot prompt contains:
+```markdown
+### A. System Authority
+{{SYSTEM_AUTHORITY}}
+```
+
+After injection:
+```markdown
+### A. System Authority
+
+============================================
+SYSTEM AUTHORITY
+============================================
+
+--- GM_OPERATING_RULES.md ---
+[~300 lines of GM behavioral rules]
+
+--- ADJUDICATION_PRINCIPLES.md ---
+[~150 lines of fairness rules]
+```
+
+### Key Concepts: Boot-First Architecture
+- **Canonical Boot Prompt**: Defined independently in `.agents/GM/SESSION_BOOT_PROMPT.md` (version-controlled, human-readable)
+- **Context Injection**: Python code loads System Authority files and injects them into placeholders
+- **System Prompt Binding**: Ollama `/api/chat` ensures LLM respects all constraints before user input
+- **Boot Output**: Session Boot Output section automatically extracted from boot prompt and displayed
+
+### Optional Files Pattern
+Dynamic file checking at load time:
+```python
+player_char_path = adventure_path_root / "PLAYER_CHARACTERS.md"
+if player_char_path.exists():
+    player_context = load_file(player_char_path)
+else:
+    player_context = "[NO PLAYER FILES LOADED]"
+```
 
 ## Next Steps
 

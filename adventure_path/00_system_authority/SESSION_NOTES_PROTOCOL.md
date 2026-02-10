@@ -56,14 +56,34 @@ Rules:
 
 Every named NPC encountered must have an updated state entry.
 
-Each NPC entry may include only:
+NPC state tracking **must comply with** the rules defined in
+**NPC Memory and Continuity**.
 
-* Status (alive, dead, missing, hostile, allied).
-* Last confirmed location.
-* Explicit relationship change caused by player action.
-* Knowledge gained during the session.
+Each NPC entry may include only the following, and nothing else:
 
-NPCs do not evolve, scheme, or change internally unless it occurs on-screen.
+### Required Fields
+- **Core State:** Alive / Dead / Missing / Removed
+- **Last Confirmed Location**
+- **Knowledge Gained During the Session** (facts only)
+
+### Conditional Fields (record only if changed this session)
+- **Relationship State:** Allied / Friendly / Neutral / Distrustful / Hostile
+- **Psychological / Narrative State:** Obsessed, Corrupted, Traumatized, Resolute, etc.
+  *(Only if explicitly demonstrated or stated on-screen)*
+
+### Rules
+- NPC state may change **only** as a result of:
+  - On-screen actions
+  - Explicit dialogue
+  - Sustained off-screen pressure authorized by campaign rules
+- If no state change occurs, the NPC’s prior state is implicitly preserved.
+- Internal intentions, plans, emotional growth, or decay **must not** be inferred or recorded.
+- NPCs do not evolve, scheme, or resolve arcs off-screen.
+
+### Logging Requirement
+- Any NPC state change recorded here **must** have a corresponding entry in
+  **NPC_STATE_LOG_TEMPLATE.md**
+- Session notes record **that a change occurred**, not the justification narrative.
 
 
 ## 5. Location and Environment State
