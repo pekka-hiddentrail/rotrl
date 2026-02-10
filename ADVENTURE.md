@@ -254,21 +254,32 @@ When the GM encounters conflicting rules or facts:
 ## How Agents Use This
 
 ### GM Agent
+**Status:** ✅ **IMPLEMENTED** - See [src/agents/gm_agent.py](src/agents/gm_agent.py)
+
 - Reads 00_system_authority/ at startup → sets behavioral constraints
 - Reads 01_world_setting/ + 02_campaign_setting/ → builds world model
 - References 03_books/ + 90_shared_references/ → finds encounter data
 - Always checks authority hierarchy when rules conflict
+- **Launch:** `python gm_launcher.py` or `python -m src.agents.gm_agent`
+- **Quick Start:** See [QUICKSTART_GM.md](QUICKSTART_GM.md)
+
+Key implementation files:
+- [gm_launcher.py](gm_launcher.py) - Command-line launcher with Ollama verification
+- [AGENTS.md](AGENTS.md) - Complete agent architecture documentation
+- [outputs/README.md](outputs/README.md) - Session notes format and protocol
 
 ### Player Agents
 - Read 02_campaign_setting/ → understand campaign constraints
 - Reference 01_world_setting/ → understand lore and implications
 - Use 90_shared_references/ → look up mechanics and history
 - Don't directly read 00_system_authority/ (GM enforces)
+- **Status:** 🔲 Not yet implemented (future development)
 
 ### System Architect (You)
 - Modify 00_system_authority/ only when changing core GM behavior
 - Populate later sections only when confident in structure
 - Remember: Higher sections override lower sections always
+- **Verify:** Run `python gm_launcher.py` to test GM Agent boot
 
 ---
 
@@ -310,4 +321,19 @@ When the GM encounters conflicting rules or facts:
 
 ---
 
-**Status Updated:** Feb 10, 2026 | **Total Defined Rules:** ~1,838 lines | **Complete Sections:** 2 (00, 02) | **In Progress:** 1 (01) | **Placeholder:** 2 (03, 90)
+**Status Updated:** Feb 10, 2026 | **Infrastructure:** GM Agent Bootstrapped | **Book I:** ~50% documented | **Hallucination Prevention:** Comprehensive | **Ready for Play:** YES
+
+---
+
+## Implementation Status
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| **System Authority** | ✅ Complete | 5 files, ~900 lines of core rules |
+| **World Setting** | 🟨 Partial | 7 files, ~1,300 lines of world canon |
+| **Campaign Setting** | 🟨 Partial | 5 files, ~700 lines of campaign rules |
+| **Book I - Act 01** | 🟨 Partial | Scene structure, NPCs, encounter_01 complete |
+| **GM Agent** | ✅ Complete | Full context loading + session loop |
+| **Session Notes** | ✅ Complete | JSON persistence + multi-session continuity |
+
+
