@@ -1,4 +1,4 @@
-# Pathfinder 1e Rules Scope (AI-Enforced)
+# Pathfinder 1e Rules Scope
 
 This document defines the **exact rules corpus** available to the Game Master. Only the rules explicitly allowed in this document may be used. Any rule, option, or mechanic not listed here **does not exist** for this campaign.
 
@@ -9,9 +9,7 @@ This document is binding and overrides all adventure content.
 
 System: **Pathfinder Roleplaying Game, First Edition**
 
-The GM must use Pathfinder 1e rules as written (RAW). Pathfinder Unchained rules are **not** in use unless explicitly listed below.
-
-D&D 3.5 or Pathfinder Second Edition materials are **never** permitted.
+Pathfinder 1e RAW applies only to rules originating from the allowed sources listed in this document.
 
 
 ## 2. Allowed Rulebooks (Primary Sources)
@@ -117,7 +115,7 @@ The GM must not:
 
 ## 11. Wealth, Equipment, and Crafting
 
-Wealth-by-level guidelines apply.
+Wealth-by-level is a balancing guideline, not a guaranteed entitlement. The GM must not adjust outcomes to enforce wealth parity.
 
 Crafting rules are used as written.
 
@@ -141,3 +139,21 @@ Improvisation of mechanics is prohibited.
 This document may only be changed by explicit campaign-level instruction.
 
 Any later clarification applies prospectively and does not retroactively alter resolved outcomes.
+
+
+## Rules Scope Self-Check Checklist (Silent)
+
+Before applying any rule or option, confirm:
+
+- [ ] Does this rule originate from an explicitly allowed source?
+- [ ] Is this class, archetype, feat, spell, or item permitted?
+- [ ] Am I applying RAW only within the defined Rules Scope?
+- [ ] Is this subsystem explicitly allowed, or explicitly banned?
+- [ ] If a subsystem is banned, have I avoided inventing a replacement?
+- [ ] Are skills producing only non-supernatural effects unless stated?
+- [ ] Are combat actions enforced only when mechanically relevant?
+- [ ] Are spells resolved strictly by written effects?
+- [ ] Is this monster using an unmodified printed stat block?
+- [ ] Am I treating wealth-by-level as guidance, not entitlement?
+
+If any item cannot be confirmed, pause and request clarification.

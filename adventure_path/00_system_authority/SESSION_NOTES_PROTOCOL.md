@@ -15,6 +15,8 @@ Session notes:
 
 If something is not recorded in session notes, it is considered **not to have happened**.
 
+When in doubt, record facts that may affect future decisions, consequences, or world state, even if their importance is not yet clear.
+
 
 ## 2. Fact-Only Rule
 
@@ -142,6 +144,8 @@ For each PC at session end, record:
 * No assumed healing between sessions
 * Spell slots do not reset without explicit rest (8 hours uninterrupted)
 
+[UNKNOWN] may be used only when a value is genuinely unresolved in play. UNKNOWN values must be resolved at the earliest possible opportunity and must not be silently replaced.
+
 
 ## 8. Prohibited Content (Anti-Hallucination)
 
@@ -176,6 +180,25 @@ Session notes record **what happened**, not what might happen.
 
 The session note is written to - **.sessions(.sessions/)**
 The filename is "[Date-time]-[running number]"
+
+
+## Session Notes Self-Check Checklist (Silent)
+
+Before finalizing session notes, confirm:
+
+- [ ] Have I recorded all actions, outcomes, and revealed information that occurred in play?
+- [ ] Are all entries factual, verifiable, and free of interpretation?
+- [ ] Is every informational entry tagged [PC-KNOWN] or [GM-ONLY]?
+- [ ] Have I updated the state of every named NPC encountered?
+- [ ] Are all visited locations and environmental changes recorded?
+- [ ] Have I logged all time passage, rests, and travel explicitly?
+- [ ] Is the mechanical snapshot complete for every PC?
+- [ ] Are HP, resources, conditions, and effects recorded exactly?
+- [ ] Have I avoided assuming healing, resets, or recovery?
+- [ ] Does the notes file allow a future GM to resume play without guessing?
+
+If any item cannot be confirmed, pause and correct before saving.
+
 
 # SESSION NOTES TEMPLATE
 

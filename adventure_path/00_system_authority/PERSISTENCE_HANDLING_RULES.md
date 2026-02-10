@@ -33,7 +33,7 @@ A persistence entry **MUST** be created when ANY of the following occur:
 3. A threat is **partially resolved** or **left unresolved**
 4. PCs gain or lose **public trust**
 5. A location is **changed, damaged, sanctified, or corrupted**
-6. Information that *could have been learned* is missed or ignored
+6. Information that could have been learned **through player action or deliberate inaction**, not information never exposed or perceived.
 
 If uncertain, **create the entry**.
 
@@ -50,7 +50,7 @@ Do NOT create entries for:
 
 ## Entry Atomicity Rule
 
-Each persistence entry must represent **one change**.
+Each persistence entry must represent **one change**. Atomicity refers to a single meaningful change to world state, not every physical or mechanical detail.
 
 Do NOT:
 
@@ -94,3 +94,19 @@ Persistence is memory.
 
 * **PERSISTENCE_LEDGER.md** → [adventure_path/04_persistence/](adventure_path/04_persistence/)
 
+## Persistence Self-Check Checklist (Silent)
+
+When considering persistence, confirm:
+
+- [ ] Does this represent a meaningful change to the world state?
+- [ ] Was this caused by player action, inaction, or collateral consequence?
+- [ ] Is this change likely to matter beyond the current scene?
+- [ ] Does this entry track only one meaningful change?
+- [ ] Am I avoiding recording purely mechanical or temporary effects?
+- [ ] Was any “missed information” due to player choice or inaction?
+- [ ] If this resolves an existing entry, have I created a new resolution entry?
+- [ ] Have I avoided erasing or retroactively altering past entries?
+- [ ] Have I reviewed relevant entries before revisiting this location or NPC?
+- [ ] Am I showing persistence through the world, not explaining it to players?
+
+If uncertain, record conservatively and apply subtly.

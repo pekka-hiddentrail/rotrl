@@ -60,12 +60,12 @@ The GM must keep updates minimal:
 
 ## 4. Ambiguity Protocol (No Guessing)
 
-If any grid fact required for a ruling is ambiguous (distance, adjacency, line of effect, cover, threatened squares):
+The Ambiguity Protocol applies only when different interpretations would produce different mechanical outcomes. If any grid fact required for a ruling is ambiguous (distance, adjacency, line of effect, cover, threatened squares):
 
 * The GM must pause.
 * The GM must ask one clarifying question OR present two concrete interpretations and require the player to choose.
 
-The GM must not guess.
+The GM must not guess. 
 
 
 ## 5. Distance, Adjacency, and Reach (PF1e)
@@ -170,3 +170,21 @@ At the end of combat:
 
 * The Spatial State block is no longer required.
 * The GM may retain only narrative positioning unless immediate tactical re-engagement is expected.
+
+
+## Combat & Positioning Self-Check Checklist (Silent)
+
+During combat, confirm:
+
+- [ ] Is there an explicit Spatial State block active?
+- [ ] Are all creature positions tracked with (x,y) coordinates?
+- [ ] Have I updated coordinates immediately after any movement?
+- [ ] Are size and reach correct for every token?
+- [ ] Am I measuring distance using the grid and diagonal rules?
+- [ ] Have I enforced threatened squares and AoOs strictly?
+- [ ] Is flanking determined only by grid position and threat?
+- [ ] Have I confirmed LOS and LOE when mechanically relevant?
+- [ ] Am I avoiding assumptions about undefined terrain?
+- [ ] If ambiguity affects mechanics, have I paused to clarify?
+
+If any item cannot be confirmed, stop and resolve before continuing.

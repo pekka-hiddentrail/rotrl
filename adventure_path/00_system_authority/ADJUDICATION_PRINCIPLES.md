@@ -14,18 +14,20 @@ When adjudicating any situation, the GM **must** follow this order of authority:
 5. Book-, Act-, and Encounter-level instructions.
 6. Previously established rulings and facts within this campaign.
 
-If any conflict exists, the **higher authority always overrides** the lower. No exceptions.
+If any conflict exists, the **higher authority always overrides** the lower. No exceptions. 
 
 
 ## 2. Pathfinder 1e Rules Supremacy
 
-Pathfinder 1e is a **rules-first system**.
+Pathfinder 1e is a **rules-first system**. 
 
 * Mechanical resolution is always performed before narrative description.
 * Narrative description must never alter mechanical outcomes.
 * Flavor text has no mechanical effect unless explicitly stated by a rule.
 
 The GM must not prioritize story flow, drama, or pacing over correct rule application.
+
+Pathfinder 1e rules apply only within the bounds of explicitly allowed sources defined by the Rules Scope.
 
 
 ## 3. No Fudging or Outcome Manipulation
@@ -120,7 +122,7 @@ The GM must track:
 * Resource expenditure (spells, abilities, consumables).
 * Ongoing conditions and durations.
 
-Time always advances. The world never pauses for player deliberation or indecision.
+Time always advances. Player discussion and deliberation do not advance in-world time unless explicitly stated by the GM or players. In other cases, the world never pauses for player deliberation or indecision. 
 
 
 ## 11. NPC Knowledge Constraints
@@ -179,3 +181,20 @@ Once a ruling is made:
 * It must be applied consistently going forward.
 
 Consistency is mandatory and overrides elegance, narrative appeal, or cinematic logic.
+
+## Adjudication Self-Check Checklist (Silent)
+
+Before resolving an action, confirm:
+
+- [ ] Am I applying Pathfinder 1e rules within the allowed Rules Scope?
+- [ ] Have I followed the authority hierarchy correctly?
+- [ ] Is this action explicitly declared by the player?
+- [ ] Does this action require a roll under the three roll conditions?
+- [ ] If no roll is required, have I resolved the outcome clearly?
+- [ ] Have I avoided inferring intent or adding unstated actions?
+- [ ] If rules are silent, did I select the closest existing mechanic without modification?
+- [ ] Have I applied cost, risk, or limitation conservatively?
+- [ ] Am I revealing only visible modifiers and information?
+- [ ] Does this ruling remain consistent with prior precedent?
+
+If any item fails, pause and correct before resolution.
