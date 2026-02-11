@@ -16,12 +16,17 @@ Boot compliance:
 - If any check fails, raise RuntimeError (fail-fast)
 """
 
-import re
 import requests
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List
 from dataclasses import dataclass
 import json  # add at top of file
+from src.tools.prompt_verification import (
+    VerificationResult,
+    extract_checklist_items as extract_prompt_checklist_items,
+    summarize_results,
+    verify_prompt,
+)
 
 
 
@@ -279,202 +284,42 @@ class GMAgent:
 
 
     def extract_checklist_items(self, boot_output_section: str) -> List[str]:
-        """
-        Extract checklist lines like:
-        * [ ] ...
-        - [ ] ...
-        """
-        items: List[str] = []
-        for line in boot_output_section.splitlines():
-            m = re.match(r"^\s*(?:\*|-)\s*\[\s*\]\s*(.+?)\s*$", line)
-            if m:
-                items.append(m.group(1))
-        return items
+        return extract_prompt_checklist_items(boot_output_section)
 
-    # ---------- deterministic boot checks ----------
-    def _check_loaded_system_authority(self) -> Tuple[bool, str]:
-        missing = [p for p in self.BOOT_SYSTEM_AUTHORITY_FILES if p not in self._boot_loaded_files]
-        if missing:
-            return False, f"Missing system authority files: {missing}"
-        return True, "All system authority files loaded."
+    def evaluate_boot_checklist(
+        self,
+        checklist_items: List[str],
+        narration: str,
+        audit: Optional[Dict] = None,
+    ) -> List[VerificationResult]:
+        return verify_prompt(
+            checklist_items,
+            narration,
+            prompt_source="SESSION_BOOT_PROMPT",
+            audit=audit,
+            loaded_files=self._boot_loaded_files,
+            required_system_authority_files=self.BOOT_SYSTEM_AUTHORITY_FILES,
+        )
 
-    def _check_system_authority_only_behavior(self) -> Tuple[bool, str]:
-        # Deterministic guarantee: our code only loads boot minimal set.
-        if not self._boot_only_system_authority_loaded:
-            return False, "Disallowed non-boot files were loaded during boot."
-        return True, "Boot loaded only allowed files (system authority + minimal identity + last notes)."
-
-    def _check_no_plans_triggers_outcomes_in_code(self) -> Tuple[bool, str]:
-        # Deterministic guarantee: boot_once does not activate book triggers or resolve outcomes.
-        return True, "Boot code does not activate triggers or resolve outcomes."
-
-    def _check_no_dialogue_rolls_time_advance(self, narration: str) -> Tuple[bool, str]:
-        # Heuristic but strong: detect dialogue markers and roll prompts
-        # (This is not perfect, but catches the common failure modes.)
-        lower = narration.lower()
-
-        # Dialogue heuristics
-        dialogue_markers = ['"', "“", "”", " says", " asks", "shouts", "whispers", "replies", "yells"]
-        if any(tok in narration for tok in ['"', "“", "”"]):
-            return False, "Narration contains quotation marks (likely dialogue)."
-        if any(dm in lower for dm in [" says", " asks", "replies", "shouts", "whispers", "yells"]):
-            return False, "Narration contains dialogue verbs (likely dialogue)."
-
-        # Roll/dice heuristics
-        roll_markers = ["roll", "dc ", "difficulty class", "initiative", "attack roll", "saving throw", "reflex", "fortitude", "will save"]
-        if any(rm in lower for rm in roll_markers):
-            return False, "Narration contains roll/mechanics language (likely a boot violation)."
-
-        # Time advance heuristics
-        time_advance_markers = ["later", "after a while", "minutes pass", "hours pass", "you spend", "you take", "you rest", "you sleep"]
-        if any(t in lower for t in time_advance_markers):
-            return False, "Narration suggests time advancement."
-
-        return True, "No obvious dialogue, roll calls, or time advancement detected."
-
-    def _check_ends_with_what_do_you_do(self, narration: str) -> Tuple[bool, str]:
-        # Must end with exact line (allow trailing whitespace)
-        if narration.rstrip().endswith("What do you do?"):
-            return True, 'Ends with exactly: "What do you do?"'
-        return False, 'Does not end with exactly: "What do you do?"'
-
-    # ---------- compliance report ----------
-    def _extract_narration_only(self, text: str) -> str:
-        """
-        If the model output contains the checklist line at the end, keep narration as-is.
-        We only need the full output, but trimming trailing whitespace helps.
-        """
-        return text.strip()
-
-    def evaluate_boot_checklist(self, checklist_items: List[str], narration: str, audit: Optional[Dict] = None) -> List[Tuple[str, bool, str]]:
-
-        """
-        Map human checklist lines to concrete checks.
-        Returns list of (item_text, passed, details)
-        """
-        results: List[Tuple[str, bool, str]] = []
-
-        for item in checklist_items:
-            key = item.strip()
-
-            # Map by keyword (kept simple; you can refine matching later)
-            if "loaded and prioritized System Authority" in key:
-                ok, msg = self._check_loaded_system_authority()
-                results.append((item, ok, msg))
-                continue
-
-            if "System Authority as the only behavioral constraint" in key:
-                ok, msg = self._check_system_authority_only_behavior()
-                results.append((item, ok, msg))
-                continue
-
-            if "non-authority files only for silent alignment" in key:
-                # We load optional identity + session notes only; treat as silent alignment by design.
-                ok = True
-                msg = "Non-authority files (if any) are loaded only as optional alignment inputs."
-                results.append((item, ok, msg))
-                continue
-
-            if "avoided forming or resolving plans, triggers, or outcomes" in key:
-                ok, msg = self._check_no_plans_triggers_outcomes_in_code()
-                results.append((item, ok, msg))
-                continue
-
-            if "narration based only on established" in key:
-                if not audit:
-                    results.append((item, False, "Semantic audit missing."))
-                else:
-                    ok = bool(audit["on_screen_facts_only"]["pass"])
-                    msg = audit["on_screen_facts_only"]["notes"]
-                    results.append((item, ok, msg))
-                continue
-
-
-            if "avoided using player motivations" in key:
-                # Not deterministically verifiable; partial heuristic: references to "your goal" / "you want"
-                lower = narration.lower()
-                if any(p in lower for p in ["your goal", "you want", "you came here to", "you decided to"]):
-                    results.append((item, False, "Narration contains intent/motivation framing phrases."))
-                else:
-                    results.append((item, True, "No obvious intent/motivation phrasing detected."))
-                continue
-
-            if "avoiding implication of future threats or events" in key:
-                # Not deterministically verifiable; heuristic: foreshadow words
-                lower = narration.lower()
-                foreshadow = ["soon", "at any moment", "you sense", "ominous", "foreboding", "something is watching", "danger", "threat"]
-                if any(w in lower for w in foreshadow):
-                    results.append((item, False, "Narration contains foreshadow/threat language."))
-                else:
-                    results.append((item, True, "No obvious foreshadow/threat language detected."))
-                continue
-
-            if "prevented escalation, dialogue, rolls, or time advancement" in key:
-                ok, msg = self._check_no_dialogue_rolls_time_advance(narration)
-                results.append((item, ok, msg))
-                continue
-
-            if "stable, non-demanding state" in key:
-                # Heuristic: if it ends with What do you do? and no immediate imperative like "now" "hurry"
-                lower = narration.lower()
-                if any(w in lower for w in ["hurry", "immediately", "right now", "at once", "you must", "forced"]):
-                    results.append((item, False, "Narration contains urgency/compulsion language."))
-                else:
-                    results.append((item, True, "No obvious urgency/compulsion language detected."))
-                continue
-
-            if 'end exactly with “What do you do?”' in key or 'end exactly with "What do you do?"' in key:
-                ok, msg = self._check_ends_with_what_do_you_do(narration)
-                results.append((item, ok, msg))
-                continue
-
-            if "avoided forming or resolving plans, triggers, or outcomes" in key and audit:
-                ok = bool(audit["no_plans_triggers_outcomes"]["pass"])
-                msg = audit["no_plans_triggers_outcomes"]["notes"]
-                results.append((item, ok, msg))
-                continue
-
-            if "avoiding implication of future threats or events" in key and audit:
-                ok = bool(audit["no_future_implication"]["pass"])
-                msg = audit["no_future_implication"]["notes"]
-                results.append((item, ok, msg))
-                continue
-
-            if "prevented escalation, dialogue, rolls, or time advancement" in key and audit:
-                ok = bool(audit["no_escalation_dialogue_rolls_time"]["pass"])
-                msg = audit["no_escalation_dialogue_rolls_time"]["notes"]
-                results.append((item, ok, msg))
-                continue
-
-            if ('end exactly with “What do you do?”' in key or 'end exactly with "What do you do?"' in key) and audit:
-                ok = bool(audit["ends_with_what_do_you_do"]["pass"])
-                msg = audit["ends_with_what_do_you_do"]["notes"]
-                results.append((item, ok, msg))
-                continue
-
-            # Unknown item: fail fast so you notice template drift
-            results.append((item, False, "Unknown checklist item. Update Python mapping for this item."))
-
-        return results
-
-    def print_checklist_report(self, evaluated: List[Tuple[str, bool, str]]) -> None:
+    def print_checklist_report(self, evaluated: List[VerificationResult]) -> None:
         print("\n" + "=" * 80)
         print("BOOT CHECKLIST VERIFICATION")
         print("=" * 80)
-        all_ok = True
-        for item, ok, detail in evaluated:
-            icon = "✅" if ok else "❌"
-            print(f"{icon} {item}")
-            if detail:
-                print(f"    - {detail}")
-            if not ok:
-                all_ok = False
+        summary = summarize_results(evaluated)
+        all_ok = bool(summary["ok"])
+
+        for result in evaluated:
+            icon = "[PASS]" if result.passed else "[FAIL]"
+            print(f"{icon} {result.item}")
+            if result.message:
+                print(f"    - {result.message}")
+            print(f"    - source: {result.prompt_source}")
 
         print("-" * 80)
         if all_ok:
-            print("✅ ALL CHECKS PASSED")
+            print("[PASS] ALL CHECKS PASSED")
         else:
-            print("❌ ONE OR MORE CHECKS FAILED")
+            print("[FAIL] ONE OR MORE CHECKS FAILED")
         print("=" * 80 + "\n")
 
         if not all_ok:

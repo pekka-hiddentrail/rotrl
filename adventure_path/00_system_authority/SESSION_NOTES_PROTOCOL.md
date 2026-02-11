@@ -224,7 +224,7 @@ If any item cannot be confirmed, pause and correct before saving.
 
 ```
 SESSION: <number>
-BOOK / ACT:
+BOOK / ACT / SCENE: <Book name> / <Act name> / <Scene name/ID>
 IN-WORLD DATE / TIME:
 SESSION DURATION:
 
