@@ -207,7 +207,7 @@ requirements.txt
 - **02_campaign_setting/** - Campaign overview, tone, player agency rules, NPC memory protocol, factions
 
 **GM Agent System (410 lines Python)**
-- `src/agents/gm_agent.py` - Full implementation with file loading, context building, Ollama integration
+- `src/agents/gm_boot_agent.py` - Full implementation with file loading, context building, Ollama integration
 - `gm_launcher.py` - Command-line bootstrap with session management
 - Session persistence architecture (JSON output, multi-session continuity)
 - Comprehensive boot prompt that combines all authority hierarchy files

@@ -33,7 +33,7 @@ python gm_launcher.py --model mistral --temp 0.2
 
 ### Option 4: Direct Python Import
 ```python
-from src.agents.gm_agent import GMAgent, GMConfig
+from src.agents.gm_boot_agent import GMAgent, GMConfig
 
 config = GMConfig()
 gm = GMAgent(config)

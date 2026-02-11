@@ -239,7 +239,7 @@ dm.conduct_session(party, adventure)
 ## Current Project Status
 
 ### 🎮 GM Agent System (✅ COMPLETE & OPERATIONAL - BOOT-FIRST ARCHITECTURE)
-- ✅ **src/agents/gm_agent.py** (220+ lines) - Boot-first GM Agent implementation
+- ✅ **src/agents/gm_boot_agent.py** (220+ lines) - Boot-first GM Agent implementation
   - Dual FileLoader pattern (repo_root for .agents/, adventure_path_root for rules)
   - Dynamic context injection via `{{PLACEHOLDER}}` system
   - `get_boot_output()` method extracts Session Boot Output from canonical prompt

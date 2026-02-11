@@ -1,4 +1,4 @@
-# src/agents/gm_agent.py
+# src/agents/gm_boot_agent.py
 #!/usr/bin/env python3
 """
 RotRL GM Agent (BOOT-FIRST, CANONICAL PROMPT FILE)
@@ -42,7 +42,7 @@ class GMConfig:
 
     def __post_init__(self):
         if self.repo_root is None:
-            # repo_root/src/agents/gm_agent.py -> parents[2] == repo_root
+            # repo_root/src/agents/gm_boot_agent.py -> parents[2] == repo_root
             self.repo_root = Path(__file__).resolve().parents[2]
         if self.adventure_path_root is None:
             self.adventure_path_root = self.repo_root / "adventure_path"
@@ -307,13 +307,6 @@ class GMAgent:
         print("=" * 80)
         summary = summarize_results(evaluated)
         all_ok = bool(summary["ok"])
-
-        for result in evaluated:
-            icon = "[PASS]" if result.passed else "[FAIL]"
-            print(f"{icon} {result.item}")
-            if result.message:
-                print(f"    - {result.message}")
-            print(f"    - source: {result.prompt_source}")
 
         print("-" * 80)
         if all_ok:

@@ -15,7 +15,7 @@
 **Age:** 18
 **Gender:** Male
 **Height / Weight:** 5 ft. 1 in. / 108 lbs.
-**Appearance Summary (2–3 sentences):** In vulpine form, she is a compact fox with dark orange and white fur, her amber eyes sharp with curiosity and mischief. In human guise, she stands at just over five feet, with dark skin, striking amber eyes, and a bold orange mohawk that gives her an unmistakable presence. Her Tian Xia features and confident posture carry the easy swagger of a devoted follower of Cayden Cailean—equal parts charm, daring, and irreverent joy.
+**Appearance Summary (2–3 sentences):** In her vulpine form, she is a compact, sharp-eyed kitsune with dark orange and white fur and two proud fox tails that sway with restless energy. In human guise, she wears her amber eyes beneath a bold orange mohawk, her dark skin and Tian Xia–shaped features giving her a striking, defiant presence. Whether cloaked in fur or flesh, there is a spark of mischief and freedom about her that seems perfectly in tune with Cayden Cailean’s irreverent spirit.
 
 
 # Core Statistics
@@ -427,13 +427,11 @@ Each entry should include:
 
 ## Reputation (Sandpoint / Magnimar / etc.)
 
----
 
 # Backstory (Concise)
 
 1–3 paragraphs maximum.
 
----
 
 # Campaign Log (Living Section)
 
@@ -445,7 +443,6 @@ Example:
 * Killed Aldern Foxglove.
 * Survived Hook Mountain.
 
----
 
 # Character Arc Tracker
 
@@ -453,13 +450,12 @@ Example:
 * Emerging Themes:
 * Personal Stakes vs Karzoug:
 
----
 
 # Level-Up Log
 
 Track changes clearly.
 
-### Level X → Y
+## Level X → Y
 
 * +BAB
 * +HP

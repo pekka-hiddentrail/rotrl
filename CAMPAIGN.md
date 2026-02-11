@@ -297,7 +297,7 @@ The **Swallowtail Festival** opening adventure has been fully implemented with:
   - Knowledge boundaries (what scholars know vs. unknowns vs. forbidden inventions)
   - Session notes protocol for multi-session continuity
 
-- **GM Agent integration** (src/agents/gm_agent.py)
+- **GM Agent integration** (src/agents/gm_boot_agent.py)
   - Loads all campaign files in hierarchical order
   - Constructs comprehensive GM prompt from authority pyramid
   - Interactive session loop with player input → GM adjudication

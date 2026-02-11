@@ -17,7 +17,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from src.agents.gm_agent import GMAgent, GMConfig
+from src.agents.gm_boot_agent import GMAgent, GMConfig
 
 
 def check_ollama_running(host: str) -> bool:

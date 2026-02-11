@@ -261,13 +261,13 @@ When the GM encounters conflicting rules or facts:
 ## How Agents Use This
 
 ### GM Agent
-**Status:** ✅ **IMPLEMENTED** - See [src/agents/gm_agent.py](src/agents/gm_agent.py)
+**Status:** ✅ **IMPLEMENTED** - See [src/agents/gm_boot_agent.py](src/agents/gm_boot_agent.py)
 
 - Reads 00_system_authority/ at startup → sets behavioral constraints
 - Reads 01_world_setting/ + 02_campaign_setting/ → builds world model
 - References 03_books/ + 90_shared_references/ → finds encounter data
 - Always checks authority hierarchy when rules conflict
-- **Launch:** `python gm_launcher.py` or `python -m src.agents.gm_agent`
+- **Launch:** `python gm_launcher.py` or `python -m src.agents.gm_boot_agent`
 - **Quick Start:** See [QUICKSTART_GM.md](QUICKSTART_GM.md)
 
 Key implementation files:

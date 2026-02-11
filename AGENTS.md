@@ -16,7 +16,7 @@ All agents follow these principles:
 
 ## GM Agent (Game Master AI)
 
-**Location**: `src/agents/gm_agent.py` | Boot Prompt: `.agents/GM/SESSION_BOOT_PROMPT.md`
+**Location**: `src/agents/gm_boot_agent.py` | Boot Prompt: `.agents/GM/SESSION_BOOT_PROMPT.md`
 
 **Purpose**: Rules arbiter and world simulator for Pathfinder 1st Edition gameplay.
 
@@ -30,7 +30,7 @@ All agents follow these principles:
 ### Initialization
 
 ```python
-from src.agents.gm_agent import GMAgent, GMConfig
+from src.agents.gm_boot_agent import GMAgent, GMConfig
 
 config = GMConfig()
 gm = GMAgent(config)
@@ -175,7 +175,7 @@ ollama pull qwen3:4b
 
 ```python
 #!/usr/bin/env python3
-from src.agents.gm_agent import GMAgent, GMConfig
+from src.agents.gm_boot_agent import GMAgent, GMConfig
 
 config = GMConfig(ollama_model="qwen3:4b")
 gm = GMAgent(config)
