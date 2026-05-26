@@ -2,6 +2,10 @@
 requests>=2.31.0
 pydantic>=2.0.0
 
+# API server
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+
 # Development & Testing
 pytest>=7.4.0
 black>=23.0.0

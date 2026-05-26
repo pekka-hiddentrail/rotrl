@@ -1,362 +1,300 @@
-# RotRL: Agentic Roleplaying Game DM System
+# RotRL: Agentic Roleplaying Game GM System
 
-An agentic AI system that uses Ollama LLM and Python to conduct Pathfinder 1st Edition roleplay adventures. Instead of requiring human players, AI agents take on character roles and play through campaigns together, with a DM agent managing the world, encounters, and narrative.
+An agentic AI system that uses a local Ollama LLM to run Pathfinder 1st Edition adventures. A Game Master agent manages the world, encounters, NPCs, and narrative. A browser-based chat UI provides the player interface; a FastAPI backend handles all LLM communication.
 
-## Project Vision
+---
 
-**RotRL** (Roleplaying Through Remote LLMs) aims to create a fully autonomous Pathfinder 1st Edition roleplay experience where:
-- Multiple AI agents control player characters
-- A DM agent orchestrates the adventure, managing encounters, NPCs, and world state
-- The system utilizes local Ollama LLMs for cost-effective and private inference
-- Adventures are modular, reusable, and can be mixed/matched
-- All interactions are logged for analysis and replay
+## Prerequisites
 
-## Project Structure
+| Tool | Version | Notes |
+|------|---------|-------|
+| [Python](https://python.org/) | 3.9+ | Add to PATH during install |
+| [Node.js](https://nodejs.org/) | 18+ | Includes npm |
+| [Ollama](https://ollama.com/) | latest | Runs LLM locally |
+| Git | any | To clone the repo |
 
-```
-rotrl/
-├── src/                           # All Python source code
-│   ├── agents/                    # AI agent definitions
-│   ├── skills/                    # Pathfinder 1st Ed mechanics
-│   ├── tools/                     # Utilities (dice, LLM client, game state)
-│   ├── config/                    # Configuration
-│   ├── adventures/                # Adventure modules
-│   └── main.py                    # Entry point
-│
-├── adventure_path/                # Campaign rules & lore (AUTHORITY HIERARCHY)
-│   ├── 00_system_authority/       # Non-negotiable GM rules (✅ ACTIVE, ~720 lines)
-│   ├── 01_world_setting/          # World lore & cosmology (🟡 IN PROGRESS, ~400 lines)
-│   ├── 02_campaign_setting/       # Campaign-specific rules (✅ ACTIVE, ~700 lines)
-│   ├── 03_books/                  # Adventure modules (placeholder)
-│   └── 90_shared_references/      # Shared lookup tables (placeholder)
-│
-├── .agents/                       # Agent instruction prompts & personas
-├── .skills/                       # Rules reference prompts
-├── .tools/                        # Tool integration prompts
-├── .config/                       # System configuration prompts
-│
-├── outputs/                       # Game session logs and results
-├── bootstrap.py                   # Quick Ollama test & response printer
-├── requirements.txt               # Python dependencies
-├── ADVENTURE.md                   # Adventure path structure & hierarchy
-├── CAMPAIGN.md                    # Campaign settings overview & phases
-├── CONTEXT.md                     # Development context for AI
-└── README.md                      # This file
+---
+
+## Setup (new machine)
+
+### 1. Clone the repo
+
+```bash
+git clone <repo-url>
+cd rotrl
 ```
 
-## Key Components
-
-### Agents (`src/agents/`)
-- **DM Agent**: Manages world state, generates encounters, describes scenes, adjudicates rules
-- **Player Agents**: Control party members, make decisions, cast spells, roleplay interactions
-- **NPC Agents**: Secondary characters with limited autonomy (shop keepers, quest-givers, allies)
-
-### Adventures (`src/adventures/`)
-Modular adventure files defining:
-- Encounters (monsters, traps, environmental hazards)
-- NPCs with personality and goals
-- Maps and descriptions
-- Quest lines and objectives
-
-### Tools (`src/tools/`)
-- Dice rolling engine (for fair, reproducible results)
-- Character generation templates
-- Ollama LLM interface (prompt engineering, token limits)
-- Game state tracking
-- Response parsing and validation
-
-### Config (`src/config/`)
-- LLM model selection and parameters
-- Difficulty modifiers
-- Game rules variants
-
-### Adventure Path (`adventure_path/`)
-**Hierarchical authority system** for campaign rules - **Rise of the Runelords** in **Varisia, Golarion**:
-- **00_system_authority/** (✅ ACTIVE) - Non-negotiable GM behavioral rules (~720 lines)
-  - How the GM thinks, adjudicates, and maintains impartiality
-  - Combat positioning model
-  - Pathfinder 1e rules scope (what's allowed/banned)
-- **01_world_setting/** (🟡 IN PROGRESS) - World lore, geography, canon (~400 lines)
-  - Rise of the Runelords Adventure Path canon authority
-  - World Operating Rules (prevents hallucination, controls improvisation)
-  - Golarion/Varisia setting specifics
-  - Thassilon ancient empire context
-- **02_campaign_setting/** (✅ ACTIVE) - Campaign structure, tone, player agency, factions (~700 lines)
-  - Six narrative phases (Lvl 1–16+) with escalating scope
-  - Theme and emotional tone guidance
-  - Player agency guarantees and constraints
-  - Faction persistence and NPC continuity rules
-- **03_books/** (🟡 IN PROGRESS) - Adventure modules and encounters
-  - **BOOK_01_BURNT_OFFERINGS/** (🟨 IN PROGRESS) - Foundational adventure (Lvl 1-4)
-    - BOOK_OVERVIEW.md (✅ role, themes, narrative structure)
-    - LOCATIONS.md (✅ narrative-significant locations)
-    - NPCS.md (✅ campaign NPCs by persistence tier)
-    - ACT_STRUCTURE.md, EVENTS_AND_TRIGGERS.md (🟨 in progress)
-- **90_shared_references/** - Shared lookup tables and utilities
-
-See [ADVENTURE.md](ADVENTURE.md) for detailed structure and current status.  
-See [CAMPAIGN.md](CAMPAIGN.md) for campaign settings overview.
-
-### Instruction Prompts (`.agents/`, `.skills/`, `.tools/`, `.config/`)
-These dot-prefixed folders contain instruction prompts and persona definitions:
-- `.agents/` - DM persona, Player behaviors, NPC templates
-- `.skills/` - Pathfinder 1st Ed rules reference for LLM use
-- `.tools/` - Tool integration instructions (Ollama, dice, etc.)
-- `.config/` - System configuration templates
-
-### Outputs (`outputs/`)
-- Session transcripts and logs
-- Character progression records
-- Battle reports
-- Game state snapshots
-
-## Technologies & Design
-
-- **Language**: Python 3.9+ (virtual environment)
-- **LLM**: Ollama (local inference - tested with qwen3:4b, ~2.5GB)
-- **Rules System**: Pathfinder 1st Edition RAW (as written)
-- **Architecture**: Hierarchical authority system for rules consistency
-  - System Authority → World Lore → Campaign Settings → Adventures
-  - Higher authority always overrides lower (no conflicts)
-  - GM behavior is rule-governed, not intuitive
-
-## Quick Start — GM Agent (✅ READY TO PLAY)
-
-### 1. Install Dependencies
+### 2. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-This sets up a Python 3.13 virtual environment with:
-- `requests` - Ollama API communication
-- `pydantic` - Data validation
-- `pytest` - Testing framework
+> **Windows note:** if `pip` isn't found, try `python -m pip install -r requirements.txt`
 
-### 2. Start Ollama
+### 3. Install frontend dependencies
+
+```bash
+cd ui
+npm install
+cd ..
+```
+
+### 4. Pull an Ollama model
+
+```bash
+# Recommended for testing — fast, small (986 MB)
+ollama pull qwen2.5:1.5b
+
+# Full-featured model (~2.5 GB) — better quality, slower
+ollama pull qwen3:4b
+```
+
+---
+
+## Running the system
+
+Three services must run simultaneously. Open **three terminals** in the project root.
+
+### Terminal 1 — Ollama
 
 ```bash
 ollama serve
 ```
 
-Then pull the model (if not already installed):
+### Terminal 2 — FastAPI backend
+
+**Windows (PowerShell):**
+```powershell
+.\start_backend.ps1
+```
+
+**Mac / Linux:**
 ```bash
-ollama pull qwen3:4b
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 ```
 
-### 3. Launch GM Agent for Interactive Play
+> **Important (Windows):** Always use `python -m uvicorn`, not bare `uvicorn`. And always pass `--host 127.0.0.1` — Vite's proxy requires explicit IPv4.  
+> **Do NOT use `--reload`** — uvicorn's file-watcher (`watchfiles`) crashes silently in new PowerShell windows on Windows.
 
-In another terminal:
+### Terminal 3 — Vite dev server
 
+**Windows (PowerShell):**
+```powershell
+.\start_ui.ps1
+```
+
+**Mac / Linux:**
 ```bash
-python gm_launcher.py
+cd ui && npm run dev
 ```
 
-Optional arguments:
-```bash
-python gm_launcher.py --session 1          # Boot session 1 (default)
-python gm_launcher.py --session 3          # Boot specific session
-python gm_launcher.py --model qwen2        # Use different model
-python gm_launcher.py --temp 0.2           # Lower temperature for consistency
-```
+### Open the UI
 
-**What happens:**
-1. ✅ Verifies Ollama is running
-2. ✅ Loads canonical boot prompt from `.agents/GM/SESSION_BOOT_PROMPT.md`
-3. ✅ Loads and injects System Authority files (~900 lines) into placeholders
-4. ✅ Initializes GM Agent with Ollama `/api/chat` endpoint
-5. ✅ Displays opening narration
-6. ✅ Displays Session Boot Output section
-7. ✅ Ready for player input
-
-See [QUICKSTART_GM.md](QUICKSTART_GM.md) for detailed guide.
-
-### 4. Run Bootstrap Verification (Optional)
-
-For Ollama connectivity check:
-
-```bash
-python bootstrap.py
-```
-
-This will:
-- ✅ Check if Ollama is running
-- ✅ Detect available models
-- ✅ Send a test query
-- ✅ Print the LLM response
-
-**Example output:**
-```
-[BOOTSTRAP] RotRL Ollama Bootstrap
-============================================================
-[CHECK] Is Ollama running?
-[OK] Ollama is running!
-[CHECK] Available models:
-  - qwen3:4b
-[SELECT] Using model: qwen3:4b
-[QUERY] Sending test query...
-[WAITING] Calling Ollama (this may take a moment)...
-[OK] Response received!
-============================================================
-RESPONSE:
-hello world
-============================================================
-[SUCCESS] Got expected response!
-```
-
-### 5. Verify Strict Hello World Test
-
-For a more rigorous test:
-
-```bash
-python src/tools/hello_world.py
-```
-
-See [.agents/hello/README.md](.agents/hello/README.md) for details.
-
-## Example Usage
-
-*Coming soon*
-
-```python
-from agents.dm import DungeonMaster
-from agents.player import PlayerCharacter
-from adventures.example import ExampleAdventure
-
-# Initialize
-dm = DungeonMaster(model="qwen")
-party = [
-    PlayerCharacter("Theron", race="Human", class="Fighter"),
-    PlayerCharacter("Elara", race="Elf", class="Wizard"),
-    PlayerCharacter("Borin", race="Dwarf", class="Cleric"),
-]
-
-# Run adventure
-adventure = ExampleAdventure()
-dm.conduct_session(party, adventure)
-```
-
-## Current Project Status
-
-### 🎮 GM Agent System (✅ COMPLETE & OPERATIONAL - BOOT-FIRST ARCHITECTURE)
-- ✅ **src/agents/gm_boot_agent.py** (220+ lines) - Boot-first GM Agent implementation
-  - Dual FileLoader pattern (repo_root for .agents/, adventure_path_root for rules)
-  - Dynamic context injection via `{{PLACEHOLDER}}` system
-  - `get_boot_output()` method extracts Session Boot Output from canonical prompt
-  - Ollama `/api/chat` endpoint with system prompt binding
-- ✅ **.agents/GM/SESSION_BOOT_PROMPT.md** (145 lines) - Canonical boot protocol
-  - Mandatory boot rules and constraints
-  - Three injection points: {{SYSTEM_AUTHORITY}}, {{PLAYER_IDENTITY}}, {{CONTINUITY_ANCHOR}}
-  - Opening narration constraints + player agency transition
-  - Enforcement and Session Boot Output sections
-- ✅ **gm_launcher.py** (100 lines) - Command-line launcher with Ollama verification
-- ✅ **Session persistence** - Saves to outputs/session_XXX_notes.json (JSON format with turn-by-turn logs)
-- ✅ **Multi-session continuity** - Loads prior session notes via SESSION_NOTES_LAST.md if present
-
-### Documentation & Rules (✅ ~2,100 lines complete)
-- ✅ **System Authority** (00_system_authority/): GM behavior, adjudication, rules scope — **900 lines**
-- ✅ **World Setting** (01_world_setting/): Golarion/Varisia canon, world operating rules — **1,300 lines**
-- ✅ **Campaign Settings** (02_campaign_setting/): RotRL structure, 6 narrative phases, player agency — **730 lines**
-- 🟨 **Adventure Modules** (03_books/BOOK_01_BURNT_OFFERINGS/)
-  - ✅ Book Overview, NPCs, Locations
-  - ✅ Act I Infrastructure (~570 lines): Scene structure, NPC schedule, tension framework, complete encounter_01
-  - 🟨 Acts II-III (placeholder)
-- 🔴 **Shared References** (90_shared_references/): Not yet started
-
-### Code & Infrastructure (✅ Complete)
-- ✅ Project structure (src/, adventure_path/, .agents/, outputs/)
-- ✅ Boot-prompt-first architecture
-  - Canonical prompt: `.agents/GM/SESSION_BOOT_PROMPT.md` (independent, versioned)
-  - Context injection: Python code loads files and replaces `{{PLACEHOLDER}}`s
-  - System prompt binding: Ollama `/api/chat` ensures constraints respected
-- ✅ Ollama integration (bootstrap.py, gm_launcher.py, hello_world.py)
-- ✅ Python 3.13 virtual environment
-- ✅ Authority hierarchy system (5-tier)
-- ✅ Hallucination prevention (concrete mechanics, pressure tables, knowledge boundaries)
-
-### Gameplay Features (✅ Ready for Testing)
-- ✅ Session initialization with canonical boot protocol
-- ✅ System prompt binding (Ollama `/api/chat` endpoint)
-- ✅ Context injection into placeholders (System Authority, Player Identity, Continuity)
-- ✅ Opening narration generation (sensory-grounded, factual only)
-- ✅ Session Boot Output display (protocol verification)
-- ✅ Session notes logging and persistence
-- ✅ Multi-session continuity framework
-- 🟡 Player agent autonomy (future enhancement)
-- 🟨 Shared reference tables (90_shared_references/)
-
-## Design Principles
-
-- **Rule-First**: Pathfinder 1st Ed RAW always; narrative never overrides mechanics
-- **Authority-Governed**: Rules follow explicit hierarchy; no negotiation
-- **Transparent**: All decisions, rolls, and reasoning are logged
-- **Modular**: Campaign rules stack without conflicts (authority hierarchy)
-- **Efficient**: Works on modest hardware (~2.5GB LLM model)
-- **Deterministic**: Same seed → same outcome (reproducible games)
-
-## Documentation
-
-This project has extensive rules and configuration documentation organized by authority:
-
-- **[ADVENTURE.md](ADVENTURE.md)** — Overview of the 5-tier authority hierarchy, links to all config files, status tracking
-- **[CAMPAIGN.md](CAMPAIGN.md)** — Rise of the Runelords campaign specifics: 6 narrative phases (Lvl 1–16+), player agency rules, faction definitions
-- **[CONTEXT.md](CONTEXT.md)** — Development guidance for AI assistants working on this project
-
-**Config Folder Hierarchy:**
-```
-adventure_path/
-├── 00_system_authority/        ← How GM thinks, decides, and adjudicates
-├── 01_world_setting/           ← Golarion/Varisia lore and world rules 
-├── 02_campaign_setting/        ← Rise of the Runelords structure, tone, themes
-├── 03_books/                   ← Individual adventures (not yet populated)
-└── 90_shared_references/       ← Shared tables and utilities (not yet populated)
-```
-
-Higher sections override lower sections — no conflicts possible by design.
-
-## Playing a Session
-
-### Session Setup
-
-1. **Start Ollama** (Terminal 1):
-   ```bash
-   ollama serve
-   ```
-
-2. **Launch GM Agent** (Terminal 2):
-   ```bash
-   cd rotrl
-   python gm_launcher.py
-   ```
-
-3. **Answer Setup Questions** when prompted:
-   - Has Session 1 been run before? (Input prior session notes if applicable)
-   - How many player characters? (Enter PC names, classes, levels)
-   - Ready to begin? (Confirm to start play)
-
-4. **Play** by typing player actions:
-   ```
-   >>> I draw my sword and rush the goblins
-   [GM response with rules resolution]
-   >>> The wizard casts Fireball
-   [Spell resolution with damage rolls]
-   ```
-
-5. **End Session** by typing `quit`
-   ```
-   >>> quit
-   [Session notes saved to outputs/session_001_notes.json]
-   ```
-
-See [QUICKSTART_GM.md](QUICKSTART_GM.md) and [outputs/README.md](outputs/README.md) for detailed session protocol.
-
-## License
-
-*To be determined*
+Navigate to **http://localhost:5173** in your browser.
 
 ---
 
-**Current Status**: GM Agent ✅ BOOT-FIRST ARCHITECTURE | Foundation + Campaign Lore ✅ COMPLETE | Book I Act I ✅ COMPLETE | Boot-Prompt-First Design ✅ ACTIVE
+## Playing a session
 
-**Updated**: Feb 10, 2026  
-**Metrics**: ~2,100 lines of rules/config | Boot-first GM Agent ready | Canonical boot prompt in .agents/GM/ | Placeholder injection system | Session notes persistent
+1. **Configure** — set session number, model name (e.g. `qwen2.5:1.5b`), and check **Dev** for fast mode
+2. **Boot Session** — the GM streams the opening narration (expect 10–60 sec depending on model)
+3. **Type player actions** in the input bar; press **Enter** to send
+4. **End Session** — saves the full transcript to `outputs/session_NNN_notes.json`
+
+### Dev mode vs full mode
+
+| | Dev mode ✅ | Full mode |
+|-|------------|----------|
+| System prompt | ~60 tokens (3 sentences) | ~9,500 tokens (38K chars of rules) |
+| Boot time | 3–10 sec | 30–120 sec |
+| Context sent per turn | last 6 messages | last 30 messages |
+| Max tokens generated | 180 | unlimited |
+| Rules enforcement | none | full PF1e authority hierarchy |
+
+Use **Dev** while testing. Uncheck it for real sessions.
+
+---
+
+## Project Structure
+
+```
+rotrl/
+├── api/                           # FastAPI backend
+│   ├── main.py                    # Routes: boot, turn, end session
+│   └── session_manager.py        # GMAgent wrapper, SSE streaming, sessions
+│
+├── ui/                            # Vite + React + TypeScript frontend
+│   ├── src/
+│   │   ├── App.tsx                # Root component, session state
+│   │   ├── api.ts                 # SSE fetch helpers
+│   │   ├── types.ts               # Message, SessionInfo types
+│   │   └── components/
+│   │       ├── Header.tsx         # Session controls, model/dev toggles
+│   │       ├── ChatWindow.tsx     # Message list + thinking indicator
+│   │       ├── InputBar.tsx       # Player input
+│   │       ├── CharacterSidebar.tsx
+│   │       ├── CharacterSheet.tsx
+│   │       └── DicePanel.tsx
+│   ├── vite.config.ts             # Proxies /api → 127.0.0.1:8000
+│   └── package.json
+│
+├── src/agents/
+│   ├── gm_boot_agent.py           # GMAgent, GMConfig, boot verification
+│   └── gm_session_start.py        # SessionStartLoader (world/campaign context)
+│
+├── adventure_path/                # Campaign rules & lore (authority hierarchy)
+│   ├── 00_system_authority/       # Non-negotiable GM rules (~900 lines)
+│   ├── 01_world_setting/          # Golarion/Varisia world lore (~1,300 lines)
+│   ├── 02_campaign_setting/       # RotRL structure, factions, tone (~730 lines)
+│   ├── 03_books/                  # Adventure modules
+│   │   └── BOOK_01_BURNT_OFFERINGS/
+│   │       └── act_01/encounters/ # Goblin raid, social, event encounters
+│   └── 04_persistence/            # Session ledger
+│
+├── .agents/GM/                    # Canonical GM prompt templates
+│   ├── SESSION_BOOT_PROMPT.md     # Boot protocol with {{PLACEHOLDER}} injection
+│   ├── SESSION_PLAY_LOOP_PROMPT.md
+│   └── SESSION_START_PROMPT.md
+│
+├── players/                       # Player character files
+│   └── player_01/character_sheet.md  # Yanyeeku, Kitsune Sorcerer L1
+│
+├── facets/                        # GM behavior facet modules (13 facets)
+├── outputs/                       # Session transcripts (auto-created)
+│
+├── start_backend.ps1              # Windows: start FastAPI backend
+├── start_ui.ps1                   # Windows: start Vite dev server
+├── requirements.txt               # Python dependencies
+└── README.md
+```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/sessions` | Boot session; streams opening narration via SSE |
+| `POST` | `/api/sessions/{id}/turn` | Send player input; streams GM response via SSE |
+| `DELETE` | `/api/sessions/{id}` | End session, save transcript to `outputs/` |
+
+The frontend talks to the backend over Server-Sent Events (SSE). Tokens stream token-by-token from Ollama → FastAPI → browser.
+
+---
+
+## Architecture
+
+### Boot-First Design
+
+Every session starts with a mandatory boot protocol:
+
+1. `GMAgent` loads `.agents/GM/SESSION_BOOT_PROMPT.md`
+2. Three `{{PLACEHOLDER}}`s are injected: System Authority (~900 lines), Player Identity, Continuity Anchor (last session notes)
+3. The rendered prompt becomes the Ollama system message (held for the entire session)
+4. The GM streams the opening narration
+5. Boot fails fast (`RuntimeError`) if narration violates boot constraints
+
+In **Dev mode** steps 1–2 are skipped; a 3-sentence system prompt is used instead.
+
+### Authority Hierarchy
+
+Rules files are organized in strict precedence — higher always overrides lower:
+
+```
+00_system_authority/   ← GM behavior, adjudication  (loaded at every boot)
+01_world_setting/      ← Golarion/Varisia lore
+02_campaign_setting/   ← RotRL structure, factions, tone
+03_books/              ← Individual adventure modules
+session state          ← Live session notes
+```
+
+### Context Management
+
+To keep turn latency predictable:
+- Dev mode: last **6 messages** sent to Ollama, generation capped at **180 tokens**
+- Full mode: last **30 messages** sent (never the full history)
+- The system prompt is prepended to every Ollama call but built only once at boot
+
+---
+
+## Troubleshooting
+
+### "Boot failed (500): " immediately on click
+The backend is not reachable. Check:
+- Is `start_backend.ps1` running in a separate terminal?
+- Did it error on start? (watchfiles crash looks like instant exit)
+- Backend must bind to `127.0.0.1:8000` — the Vite proxy requires this exact address
+
+### Boot shows "Booting…" but nothing streams for 2+ minutes
+Normal for full mode with a large model. Switch to **Dev mode** and a smaller model (`qwen2.5:1.5b`) for testing.
+
+### Subsequent turns get progressively slower
+The model is accumulating context. Dev mode caps history automatically. For full-mode sessions, reduce the model size or increase your machine's RAM.
+
+### `uvicorn: command not found` / `uvicorn` not recognized
+Use `python -m uvicorn ...` — uvicorn installs as a user package on Windows and may not be on PATH.
+
+### Ollama not responding
+```bash
+ollama serve          # start if not running
+curl http://localhost:11434/api/tags   # verify it's up
+ollama list           # confirm model is pulled
+```
+
+---
+
+## Terminal-Only Mode (no UI)
+
+The original CLI launcher still works for boot + verification:
+
+```bash
+python gm_launcher.py
+python gm_launcher.py --session 2 --model qwen3:4b --temp 0.3
+```
+
+There is no interactive play loop in CLI mode.
+
+---
+
+## Current Status
+
+| Area | Status |
+|------|--------|
+| Browser UI (Vite + React + TypeScript) | ✅ Complete |
+| FastAPI backend + SSE streaming | ✅ Complete |
+| Dev mode (minimal prompt, fast testing) | ✅ Complete |
+| Context window limiting per turn | ✅ Complete |
+| GM Agent boot protocol + verification | ✅ Complete |
+| System Authority docs (~900 lines) | ✅ Complete |
+| World Setting docs (~1,300 lines) | ✅ Complete |
+| Campaign Setting docs (~730 lines) | ✅ Complete |
+| Book I Act I encounters | ✅ Complete |
+| Player character — Yanyeeku (Kitsune Sorcerer L1) | ✅ Complete |
+| Player identity wired into boot prompt | 🟨 Path mismatch (`adventure_path/PLAYER_CHARACTERS.md` is a stub) |
+| Player agent (autonomous PC AI) | 🔴 Not started |
+| Acts II–III of Burnt Offerings | 🔴 Placeholder |
+| Shared reference tables | 🔴 Not started |
+
+---
+
+## Technologies
+
+| Layer | Technology |
+|-------|------------|
+| LLM runtime | Ollama (local) |
+| Recommended models | `qwen2.5:1.5b` (fast) · `qwen3:4b` (quality) |
+| Backend | Python 3.9+, FastAPI, uvicorn |
+| Frontend | Vite 5, React 18, TypeScript |
+| Streaming | Server-Sent Events (SSE) |
+| Rules system | Pathfinder 1st Edition RAW |
+
+---
+
+## Design Principles
+
+- **Rule-First**: Pathfinder 1e RAW always; narrative never overrides mechanics
+- **Authority-Governed**: Rules follow an explicit hierarchy; no negotiation
+- **Fail-Fast**: Boot verification raises immediately if the GM narration violates constraints
+- **Transparent**: All decisions, rolls, and reasoning are logged
+- **Local**: Runs entirely on your machine — no external API calls

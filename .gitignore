@@ -58,6 +58,11 @@ venv.bak/
 *~
 .DS_Store
 
+# Node / frontend
+ui/node_modules/
+ui/dist/
+ui/.vite/
+
 # Project-specific
 outputs/
 *.log
