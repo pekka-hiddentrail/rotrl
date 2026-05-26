@@ -18,7 +18,7 @@
   --header-bg: #130808;
   --header-red: #7a1515;
   --header-gold: #c9a84c;
-  --sidebar-w: 76px;
+  --sidebar-w: 100px;
 }
 
 body {
@@ -286,8 +286,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 0;
-  gap: 8px;
+  padding: 10px 0 16px;
+  gap: 10px;
   overflow-y: auto;
 }
 
@@ -311,7 +311,7 @@ body {
   padding: 6px 4px;
   border-radius: 8px;
   transition: background 0.15s;
-  width: 64px;
+  width: 90px;
 }
 
 .char-icon-btn:hover {
@@ -323,8 +323,6 @@ body {
 }
 
 .char-avatar {
-  width: 48px;
-  height: 48px;
   border-radius: 50%;
   border: 2px solid #5a3030;
   background: #1a0f0f;
@@ -334,14 +332,26 @@ body {
   transition: border-color 0.2s, box-shadow 0.2s;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
-.char-avatar::before {
-  content: '';
+.char-avatar-fallback {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.3s;
+}
+
+.char-portrait-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 15%;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #2a1818, transparent 70%);
+  transition: opacity 0.3s;
 }
 
 .char-rune {
@@ -359,14 +369,14 @@ body {
   text-align: center;
   letter-spacing: 0.05em;
   line-height: 1.2;
-  max-width: 60px;
+  max-width: 86px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .char-hp-bar-wrap {
-  width: 44px;
+  width: 72px;
   height: 3px;
   background: #2a1818;
   border-radius: 2px;
@@ -844,44 +854,59 @@ body {
 
 .sheet-header {
   display: flex;
-  gap: 16px;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid #2a1818;
 }
 
 .sheet-avatar {
-  width: 56px;
-  height: 56px;
+  width: 152px;
+  height: 152px;
   border-radius: 50%;
-  border: 2px solid #c47a35;
+  border: 3px solid #c47a35;
   background: #1a0f0f;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 0 12px #c47a3544;
+  box-shadow: 0 0 24px #c47a3566;
+  position: relative;
+  overflow: hidden;
 }
 
-.sheet-avatar-rune {
-  font-size: 28px;
-  color: #c47a35;
-  font-family: serif;
-  text-shadow: 0 0 8px #c47a35;
+.sheet-avatar-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity 0.3s;
+}
+
+.sheet-portrait-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 15%;
+  border-radius: 50%;
+  transition: opacity 0.3s;
 }
 
 .sheet-name {
   font-family: 'Cinzel Decorative', serif;
-  font-size: 18px;
+  font-size: 22px;
   color: var(--gm);
   letter-spacing: 0.08em;
+  margin-top: 6px;
 }
 
 .sheet-class {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
-  margin-top: 3px;
+  margin-top: 6px;
 }
 
 .sheet-meta {
@@ -905,7 +930,7 @@ body {
 
 .sheet-vitals {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   margin-bottom: 16px;
 }
@@ -1009,18 +1034,13 @@ body {
 }
 
 .weapon-row {
-  padding: 4px 0;
+  padding: 3px 0;
   border-bottom: 1px solid #1e1212;
 }
 
-.weapon-name {
+.weapon-display {
   font-size: 12px;
   color: var(--text);
-}
-
-.weapon-stats {
-  font-size: 11px;
-  color: var(--text-muted);
   font-family: monospace;
 }
 
@@ -1049,4 +1069,132 @@ body {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.6;
+}
+
+/* ── Tooltips ────────────────────────────── */
+
+.has-tip {
+  cursor: help;
+  display: block;        /* so the whole stat-row / vital-box is the trigger */
+}
+
+.has-tip:hover {
+  outline: 1px solid #3a2020;
+  border-radius: 3px;
+}
+
+.tooltip-box {
+  position: fixed;
+  z-index: 9999;
+  min-width: 190px;
+  max-width: 260px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  background: #160d0d;
+  border: 1px solid #4a2828;
+  border-radius: 7px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 24px #000000cc;
+  pointer-events: none;
+}
+
+.tip-title {
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  color: var(--gm);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2a1818;
+}
+
+.tip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 0;
+  font-size: 11px;
+  border-bottom: 1px solid #1e1212;
+}
+
+.tip-row:last-of-type { border-bottom: none; }
+
+.tip-label { color: var(--text-muted); }
+
+.tip-val {
+  color: var(--text);
+  font-family: monospace;
+  font-size: 12px;
+  text-align: right;
+}
+
+.tip-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  font-style: italic;
+}
+
+/* ── Inventory section ───────────────────── */
+
+.inventory-section {
+  background: #1a1010;
+  border: 1px solid #2a1818;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.wealth-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.coin-box {
+  flex: 1;
+  background: #140c0c;
+  border: 1px solid #2a1818;
+  border-radius: 5px;
+  padding: 5px 4px;
+  text-align: center;
+}
+
+.coin-label {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  color: #9a8080;
+  letter-spacing: 0.1em;
+  margin-bottom: 2px;
+}
+
+.coin-value {
+  font-size: 14px;
+  color: var(--gm);
+  font-weight: bold;
+}
+
+.inv-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.inv-group-label {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  color: #c06060;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #2a1818;
+}
+
+.inv-item {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 1px 0;
+  line-height: 1.5;
 }

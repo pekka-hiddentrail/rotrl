@@ -6,6 +6,7 @@ import InputBar from './components/InputBar'
 import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
 import DicePanel from './components/DicePanel'
+import { useCharacters } from './data/characters'
 import { bootSession, sendTurn, endSession, logRoll } from './api'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
   const [devMode, setDevMode] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
+  const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
   const appendToken = useCallback((token: string) => {
     setMessages(prev => {
@@ -100,9 +102,12 @@ export default function App() {
       />
 
       {error && <div className="error-bar">{error}</div>}
+      {charsError && <div className="error-bar">Character data: {charsError}</div>}
 
       <div className="main-content">
         <CharacterSidebar
+          characters={characters}
+          loading={charsLoading}
           activeCharacter={activeCharacter}
           onSelect={handleCharacterSelect}
         />
@@ -132,8 +137,8 @@ export default function App() {
         />
       </div>
 
-      {activeCharacter && (
-        <CharacterSheet onClose={() => setActiveCharacter(null)} />
+      {activeCharacter && characterMap[activeCharacter] && (
+        <CharacterSheet character={characterMap[activeCharacter]} onClose={() => setActiveCharacter(null)} />
       )}
     </div>
   )
