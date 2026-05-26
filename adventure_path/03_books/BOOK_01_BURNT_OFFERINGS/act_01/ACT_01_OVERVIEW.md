@@ -90,8 +90,8 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 **ALLOWED ENCOUNTERS:**
 
-* EC-SOC-01 Welcoming Speeches
-* EC-EVT-01 Release of Swallowtails
+* EC-SOCIAL-01 Welcoming Speeches
+* EC-SOCIAL-05 Release of Swallowtails
 
 **ESCALATION RULES:**
 
@@ -141,9 +141,9 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 **ALLOWED ENCOUNTERS:**
 
-* EC-SOC-02 Festival Games & Food
-* EC-SOC-03 Casual NPC Interaction
-* EC-SOC-04 Aldern Foxglove Brief Social
+* EC-SOCIAL-02 Festival Games & Food
+* EC-SOCIAL-03 Casual NPC Interaction
+* EC-SOCIAL-04 Aldern Foxglove Brief Social
 
 **ESCALATION RULES:**
 
@@ -237,8 +237,8 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 **ALLOWED ENCOUNTERS:**
 
-* EC-COM-01 Goblins in the Square
-* EC-CIV-01 Civilian Rescue
+* EC-COMBAT-01 Goblins in the Square
+* EC-SUPPORT-01 Civilian Rescue
 
 **ESCALATION RULES:**
 
@@ -258,35 +258,31 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 ### SOCIAL ENCOUNTERS
 
-| Encounter ID | Name                         | Scope      | Resolution Outputs                                       |
-| ------------ | ---------------------------- | ---------- | -------------------------------------------------------- |
-| EC-SOC-01    | Welcoming Speeches           | Public     | PCs publicly visible; civic authority established        |
-| EC-SOC-02    | Festival Games & Food        | Public     | NPC goodwill flags; minor rewards possible               |
-| EC-SOC-03    | Casual NPC Interaction       | Individual | Relationship flags set                                   |
-| EC-SOC-04    | Aldern Foxglove Brief Social | Individual | Aldern familiarity flag; obsession seed (no explanation) |
+| Encounter ID | Name                           | Scope      | Resolution Outputs                                       |
+| ------------ | ------------------------------ | ---------- | -------------------------------------------------------- |
+| EC-SOCIAL-01 | Welcoming Speeches             | Public     | PCs publicly visible; civic authority established        |
+| EC-SOCIAL-02 | Festival Games & Food          | Public     | NPC goodwill flags; minor rewards possible               |
+| EC-SOCIAL-03 | Casual NPC Interaction         | Individual | Relationship flags set                                   |
+| EC-SOCIAL-04 | Aldern Foxglove Brief Social   | Individual | Aldern familiarity flag; obsession seed (no explanation) |
+| EC-SOCIAL-05 | Release of Swallowtails        | Public     | Festival climax completed                                |
+| EC-SOCIAL-06 | Cathedral Consecration & Alarm | Town       | Town state NORMAL → CRISIS                               |
 
-### EVENT / TRANSITION ENCOUNTERS
-
-| Encounter ID | Name                           | Scope  | Resolution Outputs         |
-| ------------ | ------------------------------ | ------ | -------------------------- |
-| EC-EVT-01    | Release of Swallowtails        | Public | Festival climax completed  |
-| EC-EVT-02    | Cathedral Consecration & Alarm | Town   | Town state NORMAL → CRISIS |
 
 ### COMBAT ENCOUNTERS
 
 | Encounter ID | Name                  | Scope | Resolution Outputs                                    |
 | ------------ | --------------------- | ----- | ----------------------------------------------------- |
-| EC-COM-01    | Goblins in the Square | Local | Initial goblin threat reduced; civilian danger active |
-| EC-COM-02    | Goblin Pyros          | Local | Fire hazards created; escalating property damage      |
-| EC-COM-03    | Goblin Cavalry        | Local | Final hostile wave resolved                           |
+| EC-COMBAT-01 | Goblins in the Square | Local | Initial goblin threat reduced; civilian danger active |
+| EC-COMBAT-02 | Goblin Pyros          | Local | Fire hazards created; escalating property damage      |
+| EC-COMBAT-03 | Goblin Cavalry        | Local | Final hostile wave resolved                           |
 
-### MIXED / SUPPORT ENCOUNTERS
+### SUPPORT ENCOUNTERS
 
-| Encounter ID | Name                           | Scope       | Resolution Outputs               |
-| ------------ | ------------------------------ | ----------- | -------------------------------- |
-| EC-CIV-01    | Civilian Rescue                | Local       | Casualties prevented or incurred |
-| EC-INF-01    | Goblin Capture & Interrogation | Conditional | Limited factual information only |
-| EC-SUP-01    | Aid the Wounded                | Town        | Injury and death ledger updated  |
+| Encounter ID  | Name                           | Scope       | Resolution Outputs               |
+| ------------- | ------------------------------ | ----------- | -------------------------------- |
+| EC-SUPPORT-01 | Civilian Rescue                | Local       | Casualties prevented or incurred |
+| EC-SUPPORT-02 | Goblin Capture & Interrogation | Conditional | Limited factual information only |
+| EC-SUPPORT-03 | Aid the Wounded                | Town        | Injury and death ledger updated  |
 
 
 ## INFORMATION DISCLOSURE RULES
