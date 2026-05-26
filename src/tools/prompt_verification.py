@@ -15,7 +15,9 @@ from typing import Dict, Iterable, List, Optional
 
 
 DEFAULT_BOOT_SYSTEM_AUTHORITY_FILES = [
-    "00_system_authority/GM_OPERATING_RULES.md",
+    "00_system_authority/GM_OPERATING_RULES_01_CRITICAL.md",
+    "00_system_authority/GM_OPERATING_RULES_02_GUIDELINES.md",
+    "00_system_authority/GM_OPERATING_RULES_03_TRIVIAL.md",
     "00_system_authority/ADJUDICATION_PRINCIPLES.md",
     "00_system_authority/COMBAT_AND_POSITIONING.md",
     "00_system_authority/PF1E_RULES_SCOPE.md",

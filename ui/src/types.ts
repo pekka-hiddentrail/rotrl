@@ -1,4 +1,4 @@
-export type Role = 'gm' | 'player'
+export type Role = 'gm' | 'player' | 'intro'
 
 export interface Message {
   role: Role

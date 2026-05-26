@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from api.session_manager import create_session, get_session, log_roll, save_session, stream_boot, stream_turn
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
 app = FastAPI(title="RotRL GM API")
 
 app.add_middleware(
@@ -40,6 +42,28 @@ class RollRequest(BaseModel):
     expr: str
     rolls: list[int]
     total: int
+
+
+@app.get("/api/intro")
+def get_intro(session: int = 1):
+    """Return the player-facing intro markdown for a given session number.
+    Lookup order:
+      1. sessions/session_NNN/intro.md           (hand-written or generated)
+      2. sessions/session_NNN-1/recap.md          (generated at end of prior session)
+      3. sessions/session_001/intro.md            (fallback to campaign opener)
+    """
+    sessions_dir = _REPO_ROOT / "sessions"
+    candidates = [
+        sessions_dir / f"session_{session:03d}" / "intro.md",
+    ]
+    if session > 1:
+        candidates.append(sessions_dir / f"session_{session - 1:03d}" / "recap.md")
+    candidates.append(sessions_dir / "session_001" / "intro.md")
+
+    for path in candidates:
+        if path.exists():
+            return PlainTextResponse(path.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail="No intro file found")
 
 
 @app.post("/api/sessions")

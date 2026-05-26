@@ -17,8 +17,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _OUTPUTS_DIR = _REPO_ROOT / "outputs"
 
 _BOOT_USER_PROMPT = (
-    "Begin the Session Boot now. Follow the boot protocol in the system message. "
-    "Produce the opening narration and end with exactly: What do you do?"
+    "The session begins. Describe where the party finds themselves right now — "
+    "location, time of day, immediate surroundings. Ground them in the scene. "
+    "End with: What do you do?"
 )
 
 _DEV_SYSTEM_PROMPT = (
@@ -34,6 +35,28 @@ _DEV_MAX_HISTORY = 6   # 3 exchanges
 _FULL_MAX_HISTORY = 30  # 15 exchanges
 _DEV_MAX_TOKENS = 180   # cap generation length in dev mode
 
+# ── Deferred context chunks injected one-per-turn after boot ──────────────────
+# Each entry: (inject_after_turn, label, relative path under adventure_path/)
+#   inject_after_turn=0  → injected before turn 1 (first player message)
+#   inject_after_turn=N  → injected before turn N+1
+#
+# GM Operating Rules are split into three tiers so the LLM receives the most
+# critical behaviour rules immediately, then fills in detail gradually.
+#
+#   Turn 1  — Critical rules + Adjudication Principles (must-know before first response)
+#   Turn 3  — GM Guidelines (style, pacing, NPC handling)
+#   Turn 6  — Trivial / edge-case rules (nice-to-have once play is underway)
+#   Turn 2  — Act overview (scene intelligence)
+#   Turn 4  — Campaign overview (wider world context)
+_DEFERRED_CONTEXT_FILES = [
+    (0, "GM Operating Rules — Critical",    "00_system_authority/GM_OPERATING_RULES_01_CRITICAL.md"),
+    (1, "Act 01 Overview",                  "03_books/BOOK_01_BURNT_OFFERINGS/act_01/act_overview.md"),
+    (2, "Adjudication Principles",          "00_system_authority/ADJUDICATION_PRINCIPLES.md"),
+    (3, "GM Operating Rules — Guidelines",  "00_system_authority/GM_OPERATING_RULES_02_GUIDELINES.md"),
+    (4, "Campaign Overview",                "02_campaign_setting/CAMPAIGN_OVERVIEW.md"),
+    (6, "GM Operating Rules — Trivial",     "00_system_authority/GM_OPERATING_RULES_03_TRIVIAL.md"),
+]
+
 
 @dataclass
 class GameSession:
@@ -46,6 +69,10 @@ class GameSession:
     system_prompt: str = ""
     messages: list = field(default_factory=list)
     log_path: Optional[Path] = None
+    # Deferred context: list of (inject_after_turn, label, content)
+    # Chunks whose inject_after_turn <= turn_number are all injected before the LLM call.
+    context_queue: list = field(default_factory=list)
+    turn_number: int = 0  # incremented at the start of each player turn
 
 
 _sessions: dict[str, GameSession] = {}
@@ -62,6 +89,54 @@ def _log(session: GameSession, text: str) -> None:
         f.write(text + "\n")
 
 
+def _build_slim_system_prompt(session_number: int) -> str:
+    """Minimal system prompt for boot — just enough to open the scene and handle
+    the first few player prompts.  Detailed rules are injected via context_queue."""
+    repo_root = Path(__file__).resolve().parents[1]
+    adv_root  = repo_root / "adventure_path"
+
+    # Party names from player character sheets (best-effort)
+    party_lines: list[str] = []
+    players_dir = repo_root / "players"
+    if players_dir.exists():
+        for sheet in sorted(players_dir.glob("*/character_sheet.md")):
+            for line in sheet.read_text(encoding="utf-8").splitlines():
+                if line.startswith("**Name:**"):
+                    name = line.replace("**Name:**", "").strip()
+                elif line.startswith("**Class / Archetype:**"):
+                    cls = line.replace("**Class / Archetype:**", "").strip()
+                    party_lines.append(f"  - {name} ({cls})")
+                    break
+
+    party_block = "\n".join(party_lines) if party_lines else "  - (no character files found)"
+
+    # Session boot context: prefer sessions/session_NNN/boot.md (GM-facing),
+    # fall back to recap from previous session, then bare notice.
+    sessions_dir = repo_root / "sessions"
+    boot_path = sessions_dir / f"session_{session_number:03d}" / "boot.md"
+    if not boot_path.exists() and session_number > 1:
+        boot_path = sessions_dir / f"session_{session_number - 1:03d}" / "recap.md"
+    situation = boot_path.read_text(encoding="utf-8") if boot_path.exists() else "(No boot context found for this session.)"
+
+    return f"""You are the Game Master for a Pathfinder 1st Edition campaign: Rise of the Runelords.
+Session number: {session_number}
+
+CORE BEHAVIOR (always active)
+- Describe only what the characters can directly perceive. No hinting, no foreshadowing.
+- Never describe what PC is doing or saying before the player declares it.
+- Never suggest actions, hint at correct choices, or guide the players.
+- Never invent lore, NPCs, or mechanics outside what you have been given. If unsure, say so.
+- Resolve what the player declares before narrating its outcome.
+
+PARTY
+{party_block}
+
+CURRENT SITUATION
+{situation}
+
+Additional rules and scene details will be provided as the session progresses."""
+
+
 def create_session(
     session_number: int,
     model: str,
@@ -71,15 +146,16 @@ def create_session(
 ) -> GameSession:
     if dev_mode:
         system_prompt = _DEV_SYSTEM_PROMPT
+        context_queue: list = []
     else:
-        config = GMConfig(
-            ollama_host=host,
-            ollama_model=model,
-            temperature=temperature,
-        )
-        agent = GMAgent(config)
-        agent.load_boot_contexts()
-        system_prompt = agent.build_boot_system_prompt(session_number=session_number)
+        system_prompt = _build_slim_system_prompt(session_number)
+        # Build deferred queue: read files now, inject at the scheduled turn
+        adv_root = Path(__file__).resolve().parents[1] / "adventure_path"
+        context_queue = []
+        for inject_after, label, rel_path in _DEFERRED_CONTEXT_FILES:
+            fpath = adv_root / rel_path
+            if fpath.exists():
+                context_queue.append((inject_after, label, fpath.read_text(encoding="utf-8")))
 
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     started = datetime.now()
@@ -93,6 +169,7 @@ def create_session(
         temperature=temperature,
         dev_mode=dev_mode,
         system_prompt=system_prompt,
+        context_queue=context_queue,
         log_path=_OUTPUTS_DIR / log_name,
     )
     _sessions[session.id] = session
@@ -112,13 +189,10 @@ def get_session(session_id: str) -> Optional[GameSession]:
 
 
 def stream_boot(session: GameSession) -> Generator[str, None, None]:
-    prompt = _DEV_BOOT_USER_PROMPT if session.dev_mode else _BOOT_USER_PROMPT
-    session.messages.append({"role": "user", "content": prompt})
-    try:
-        yield from _stream_chat(session)
-    except Exception as e:
-        yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-        return
+    # Context is primed in the system prompt — no LLM call at boot.
+    # The static intro card handles the visual. The GM responds on the
+    # player's first message.
+    _log(session, f"\n## Boot complete — waiting for first player input\n")
     yield f"data: {json.dumps({'type': 'done', 'session_id': session.id})}\n\n"
 
 
@@ -163,6 +237,14 @@ def save_session(session: GameSession) -> Path:
 
 
 def _stream_chat(session: GameSession) -> Generator[str, None, None]:
+    # Advance turn counter and inject all context chunks due at this turn
+    session.turn_number += 1
+    due = [entry for entry in session.context_queue if entry[0] < session.turn_number]
+    session.context_queue = [entry for entry in session.context_queue if entry[0] >= session.turn_number]
+    for _, label, chunk in due:
+        session.system_prompt += f"\n\n---\n## {label}\n\n{chunk}"
+        _log(session, f"\n> *[Context injected at turn {session.turn_number}: {label}]*\n")
+
     max_hist = _DEV_MAX_HISTORY if session.dev_mode else _FULL_MAX_HISTORY
     history = session.messages[-max_hist:] if len(session.messages) > max_hist else session.messages
     messages = [{"role": "system", "content": session.system_prompt}] + history
@@ -174,6 +256,13 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     last_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
     _log(session, f"\n### [{_ts()}] PLAYER")
     _log(session, f"{last_user}\n")
+
+    # ── Full LLM payload (what actually goes to Ollama) ──────────────────────
+    _log(session, f"\n<details><summary>LLM payload — turn {session.turn_number}</summary>\n")
+    for msg in messages:
+        role = msg["role"].upper()
+        _log(session, f"\n**[{role}]**\n```\n{msg['content']}\n```\n")
+    _log(session, "</details>\n")
 
     with _requests.post(
         f"{session.host}/api/chat",

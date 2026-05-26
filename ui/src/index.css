@@ -453,6 +453,40 @@ body {
   gap: 20px;
 }
 
+/* ── Session intro card ─────────────────────────── */
+
+.intro-card {
+  align-self: stretch;
+  background: linear-gradient(160deg, #1a1008 0%, #130f08 100%);
+  border: 1px solid #5a4020;
+  border-radius: 6px;
+  padding: 22px 28px 16px;
+  margin-bottom: 8px;
+  box-shadow: 0 0 32px #c9a84c18;
+}
+
+.intro-card-body { color: #d8c89a; line-height: 1.7; }
+.intro-h1 { font-family: 'Cinzel Decorative', serif; font-size: 1.15rem; color: #c9a84c; margin-bottom: 4px; }
+.intro-h2 { font-family: 'Cinzel', serif; font-size: 0.9rem; color: #a08840; margin: 10px 0 4px; letter-spacing: .05em; }
+.intro-hr { border: none; border-top: 1px solid #5a4020; margin: 14px 0; }
+.intro-p  { margin-bottom: 10px; font-size: 0.95rem; }
+
+.intro-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #3a2a14;
+}
+.intro-footer-text {
+  font-size: 0.78rem;
+  color: #7a6a50;
+  margin-left: 6px;
+  font-style: italic;
+  letter-spacing: .03em;
+}
+
 .bubble-row {
   display: flex;
   flex-direction: column;

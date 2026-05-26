@@ -36,10 +36,21 @@ export default function App() {
     setSession(null)
     setStreaming(true)
 
+    // 1. Fetch and show the intro card immediately
+    try {
+      const res = await fetch(`/api/intro?session=${sessionNumber}`)
+      if (res.ok) {
+        const text = await res.text()
+        setMessages([{ role: 'intro', content: text }])
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    // 2. Create the session (primes context, returns done instantly — no LLM call at boot)
     try {
       let sessionId: string | undefined
       for await (const event of bootSession(sessionNumber, model, devMode)) {
-        if (event.type === 'token') appendToken(event.content)
         if (event.type === 'error') throw new Error(event.message)
         if (event.type === 'done') sessionId = event.session_id
       }
