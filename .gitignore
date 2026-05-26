@@ -68,3 +68,9 @@ outputs/
 *.log
 .ollama/
 models/
+
+# Generated session files (recap.md, boot.md created at session end)
+# Keep session_001/ — it contains hand-crafted intro.md and boot.md
+sessions/
+!sessions/session_001/
+!sessions/session_001/**

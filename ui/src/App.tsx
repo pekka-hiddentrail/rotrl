@@ -7,7 +7,7 @@ import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
 import DicePanel from './components/DicePanel'
 import { useCharacters } from './data/characters'
-import { bootSession, sendTurn, endSession, logRoll } from './api'
+import { bootSession, sendTurn, endSessionWithRecap, logRoll } from './api'
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -17,6 +17,7 @@ export default function App() {
   const [model, setModel] = useState('qwen2.5:1.5b')
   const [devMode, setDevMode] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
@@ -81,9 +82,43 @@ export default function App() {
   }
 
   const handleEnd = async () => {
-    if (session) await endSession(session.id)
-    setSession(null)
-    setMessages([])
+    if (!session) return
+    setEnding(true)
+    setStreaming(false)
+    // Add the ending status bubble
+    setMessages(prev => [...prev, { role: 'ending', content: 'Wrapping up the session…' }])
+
+    try {
+      for await (const event of endSessionWithRecap(session.id)) {
+        if (event.type === 'status') {
+          setMessages(prev => {
+            const last = prev[prev.length - 1]
+            if (last?.role === 'ending') {
+              return [...prev.slice(0, -1), { ...last, content: event.message }]
+            }
+            return prev
+          })
+        }
+        if (event.type === 'error') throw new Error(event.message)
+        if (event.type === 'done') {
+          setMessages(prev => {
+            const last = prev[prev.length - 1]
+            if (last?.role === 'ending') {
+              return [...prev.slice(0, -1), { ...last, content: 'Session saved. See you next time.' }]
+            }
+            return prev
+          })
+          // Brief pause so players see the final message before clearing
+          await new Promise(r => setTimeout(r, 1800))
+        }
+      }
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setEnding(false)
+      setSession(null)
+      setMessages([])
+    }
   }
 
   const handleViewLog = () => {
@@ -101,6 +136,7 @@ export default function App() {
       <Header
         session={session}
         streaming={streaming}
+        ending={ending}
         sessionNumber={sessionNumber}
         model={model}
         devMode={devMode}
@@ -137,7 +173,7 @@ export default function App() {
             <ChatWindow messages={messages} streaming={streaming} />
           )}
 
-          {isBooted && <InputBar onSend={handleSend} disabled={streaming} />}
+          {isBooted && <InputBar onSend={handleSend} disabled={streaming || ending} />}
         </div>
 
         <DicePanel

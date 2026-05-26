@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, log_roll, save_session, stream_boot, stream_turn
+from api.session_manager import create_session, get_session, log_roll, save_session, stream_boot, stream_end_session, stream_turn
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,6 +32,8 @@ class BootRequest(BaseModel):
     host: str = "http://localhost:11434"
     temperature: float = 0.3
     dev_mode: bool = False
+    num_ctx: int = 2048   # context window — smaller = faster
+    num_gpu: int = 999    # GPU layers — 999 = push everything possible to GPU
 
 
 class TurnRequest(BaseModel):
@@ -69,7 +71,7 @@ def get_intro(session: int = 1):
 @app.post("/api/sessions")
 def post_sessions(req: BootRequest):
     try:
-        session = create_session(req.session_number, req.model, req.host, req.temperature, req.dev_mode)
+        session = create_session(req.session_number, req.model, req.host, req.temperature, req.dev_mode, req.num_ctx, req.num_gpu)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return StreamingResponse(stream_boot(session), media_type="text/event-stream", headers=_SSE_HEADERS)
@@ -116,8 +118,18 @@ def post_roll(session_id: str, req: RollRequest):
     return {"ok": True}
 
 
+@app.post("/api/sessions/{session_id}/end")
+def end_session(session_id: str):
+    """Generate recap + boot files for the next session, then save and close."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return StreamingResponse(stream_end_session(session), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: str):
+    """Discard session without generating recap (emergency close)."""
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

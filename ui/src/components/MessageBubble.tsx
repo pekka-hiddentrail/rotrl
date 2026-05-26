@@ -26,6 +26,17 @@ function renderIntro(text: string) {
 }
 
 export default function MessageBubble({ message, isLast, streaming }: Props) {
+  if (message.role === 'ending') {
+    return (
+      <div className="ending-card">
+        <span className="ending-dot" style={{ animationDelay: '0ms' }} />
+        <span className="ending-dot" style={{ animationDelay: '160ms' }} />
+        <span className="ending-dot" style={{ animationDelay: '320ms' }} />
+        <span className="ending-text">{message.content}</span>
+      </div>
+    )
+  }
+
   if (message.role === 'intro') {
     return (
       <div className="intro-card">

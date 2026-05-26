@@ -577,6 +577,38 @@ body {
   40%           { opacity: 0.9; transform: scale(1.15); }
 }
 
+/* ── Session ending card ─────────────────── */
+.ending-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+  margin: 12px auto;
+  padding: 12px 22px;
+  background: rgba(90, 40, 10, 0.45);
+  border: 1px solid #7a4820;
+  border-radius: 20px;
+  color: #c8a060;
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  backdrop-filter: blur(4px);
+}
+
+.ending-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c8a060;
+  opacity: 0.3;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.ending-text {
+  opacity: 0.9;
+}
+
 /* ── Input bar ───────────────────────────── */
 
 .input-bar {

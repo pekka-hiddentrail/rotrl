@@ -8,6 +8,7 @@ const MODELS = [
 interface Props {
   session: SessionInfo | null
   streaming: boolean
+  ending: boolean
   sessionNumber: number
   model: string
   devMode: boolean
@@ -31,10 +32,11 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 }))
 
 export default function Header({
-  session, streaming, sessionNumber, model, devMode,
+  session, streaming, ending, sessionNumber, model, devMode,
   onSessionNumberChange, onModelChange, onDevModeChange, onBoot, onEnd, onViewLog,
 }: Props) {
   const isBooted = session !== null
+  const locked = streaming || ending
 
   return (
     <header className="header">
@@ -77,6 +79,7 @@ export default function Header({
                 value={sessionNumber}
                 onChange={e => onSessionNumberChange(Number(e.target.value))}
                 className="input-num"
+                disabled={locked}
               />
             </label>
             <label className="control-label">
@@ -85,6 +88,7 @@ export default function Header({
                 value={model}
                 onChange={e => onModelChange(e.target.value)}
                 className="input-model"
+                disabled={locked}
               >
                 {MODELS.map(m => (
                   <option key={m.value} value={m.value}>{m.label}</option>
@@ -96,10 +100,11 @@ export default function Header({
                 type="checkbox"
                 checked={devMode}
                 onChange={e => onDevModeChange(e.target.checked)}
+                disabled={locked}
               />
               Dev
             </label>
-            <button onClick={onBoot} disabled={streaming} className="btn btn-primary">
+            <button onClick={onBoot} disabled={locked} className="btn btn-primary">
               {streaming ? 'Booting…' : 'Boot Session'}
             </button>
           </>
@@ -109,11 +114,11 @@ export default function Header({
             <span className="session-badge">
               Session {session.sessionNumber} · {session.model}
             </span>
-            <button onClick={onViewLog} className="btn btn-secondary">
+            <button onClick={onViewLog} disabled={ending} className="btn btn-secondary">
               View Log
             </button>
-            <button onClick={onEnd} className="btn btn-danger">
-              End Session
+            <button onClick={onEnd} disabled={ending} className="btn btn-danger">
+              {ending ? 'Ending…' : 'End Session'}
             </button>
           </>
         )}

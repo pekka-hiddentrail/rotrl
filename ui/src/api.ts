@@ -2,7 +2,8 @@ const BASE = '/api'
 
 export type SseEvent =
   | { type: 'token'; content: string }
-  | { type: 'done'; session_id?: string }
+  | { type: 'status'; message: string }
+  | { type: 'done'; session_id?: string; recap_path?: string; boot_path?: string; saved_to?: string }
   | { type: 'error'; message: string }
 
 export async function* bootSession(
@@ -34,6 +35,15 @@ export async function* sendTurn(
   if (!res.ok) {
     const detail = await res.text()
     throw new Error(`Turn failed (${res.status}): ${detail}`)
+  }
+  yield* parseSseStream(res)
+}
+
+export async function* endSessionWithRecap(sessionId: string): AsyncGenerator<SseEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/end`, { method: 'POST' })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`End session failed (${res.status}): ${detail}`)
   }
   yield* parseSseStream(res)
 }

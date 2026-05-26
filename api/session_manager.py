@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import uuid
 from dataclasses import dataclass, field
@@ -8,10 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Generator, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 import requests as _requests
-from src.agents.gm_boot_agent import GMAgent, GMConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _OUTPUTS_DIR = _REPO_ROOT / "outputs"
@@ -66,6 +64,8 @@ class GameSession:
     host: str
     temperature: float
     dev_mode: bool = False
+    num_ctx: int = 2048
+    num_gpu: int = 999
     system_prompt: str = ""
     messages: list = field(default_factory=list)
     log_path: Optional[Path] = None
@@ -143,6 +143,8 @@ def create_session(
     host: str = "http://localhost:11434",
     temperature: float = 0.3,
     dev_mode: bool = False,
+    num_ctx: int = 2048,
+    num_gpu: int = 999,
 ) -> GameSession:
     if dev_mode:
         system_prompt = _DEV_SYSTEM_PROMPT
@@ -168,6 +170,8 @@ def create_session(
         host=host,
         temperature=temperature,
         dev_mode=dev_mode,
+        num_ctx=num_ctx,
+        num_gpu=num_gpu,
         system_prompt=system_prompt,
         context_queue=context_queue,
         log_path=_OUTPUTS_DIR / log_name,
@@ -248,7 +252,11 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     max_hist = _DEV_MAX_HISTORY if session.dev_mode else _FULL_MAX_HISTORY
     history = session.messages[-max_hist:] if len(session.messages) > max_hist else session.messages
     messages = [{"role": "system", "content": session.system_prompt}] + history
-    options: dict = {"temperature": session.temperature}
+    options: dict = {
+        "temperature": session.temperature,
+        "num_ctx": session.num_ctx,
+        "num_gpu": session.num_gpu,
+    }
     if session.dev_mode:
         options["num_predict"] = _DEV_MAX_TOKENS
     accumulated: list[str] = []
@@ -292,3 +300,258 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     _log(session, f"\n### [{_ts()}] GM")
     _log(session, f"{response_text}\n")
     _log(session, "---\n")
+
+
+# ── Session-end recap generation ──────────────────────────────────────────────
+
+def _parse_turns_from_log(log_path: Path) -> list[dict]:
+    """Extract only PLAYER and GM turns from the session log.
+    Strips system prompt, context injections, LLM payload blocks, and separators.
+    Returns list of {"role": "PLAYER"|"GM", "content": str}.
+    """
+    entries: list[dict] = []
+    current_role: Optional[str] = None
+    current_lines: list[str] = []
+    in_details = False
+
+    _TURN_HEADER = re.compile(r"^### \[\d{2}:\d{2}:\d{2}\] (PLAYER|GM)\s*$")
+
+    def _flush():
+        nonlocal current_role, current_lines
+        if current_role:
+            content = "\n".join(current_lines).strip()
+            if content:
+                entries.append({"role": current_role, "content": content})
+        current_role = None
+        current_lines = []
+
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        # Skip <details>…</details> LLM payload blocks
+        if "<details" in line:
+            _flush()
+            in_details = True
+            continue
+        if "</details>" in line:
+            in_details = False
+            continue
+        if in_details:
+            continue
+
+        # Detect PLAYER / GM turn headers
+        m = _TURN_HEADER.match(line)
+        if m:
+            _flush()
+            current_role = m.group(1)
+            continue
+
+        if current_role:
+            # Stop collecting on any structural marker
+            if (line.startswith("## ") or line.startswith("# ")
+                    or line.startswith("> *[") or line.strip() == "---"):
+                _flush()
+                continue
+            current_lines.append(line)
+
+    _flush()
+    return entries
+
+
+def _enforce_recap_header(text: str, session_number: int) -> str:
+    """Guarantee recap.md always starts with the canonical header block.
+
+    The LLM is asked to produce just the body, but if it slips in a header
+    anyway we strip it and replace with the canonical form.
+    Expected output structure:
+        # Session N — [Title]
+        *[place] — [date]*
+        ---
+        [body paragraphs]
+        ---
+    """
+    lines = text.splitlines()
+
+    # Pull the title if the LLM produced one (first # heading)
+    title = "Previously…"
+    place_date = ""
+    body_lines: list[str] = []
+    i = 0
+
+    # Skip leading blank lines
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+
+    if i < len(lines) and lines[i].startswith("# "):
+        # LLM produced a heading — extract title after "# Session N — "
+        heading = lines[i].strip()
+        if " — " in heading:
+            title = heading.split(" — ", 1)[1]
+        elif heading.startswith("# Session"):
+            title = heading[len("# Session"):].strip().lstrip("0123456789").strip().lstrip("— ").strip()
+        i += 1
+
+    # Skip blank line after heading
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+
+    # Pull the italicised place/date line if present
+    if i < len(lines) and lines[i].strip().startswith("*") and lines[i].strip().endswith("*"):
+        place_date = lines[i].strip()
+        i += 1
+
+    # Skip the --- separator the LLM may have added
+    while i < len(lines) and lines[i].strip() in ("---", ""):
+        i += 1
+
+    # Everything remaining is body — strip trailing --- if present
+    body_lines = lines[i:]
+    while body_lines and body_lines[-1].strip() in ("---", ""):
+        body_lines.pop()
+
+    body = "\n".join(body_lines).strip()
+
+    if not place_date:
+        place_date = "*Sandpoint, Varisia — 4707 AR*"
+
+    return f"# Session {session_number} — {title}\n\n{place_date}\n\n---\n\n{body}\n\n---\n"
+
+
+def _ollama_blocking(session: GameSession, system: str, user: str) -> str:
+    """Single non-streaming Ollama call. Used for recap generation."""
+    resp = _requests.post(
+        f"{session.host}/api/chat",
+        json={
+            "model": session.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user",   "content": user},
+            ],
+            "stream": False,
+            "options": {
+                "temperature": 0.5,   # slight creativity for prose
+                "num_ctx": 4096,      # recap needs more room
+                "num_gpu": session.num_gpu,
+            },
+        },
+        timeout=300,
+    )
+    resp.raise_for_status()
+    return (resp.json().get("message") or {}).get("content", "").strip()
+
+
+def stream_end_session(session: GameSession) -> Generator[str, None, None]:
+    """Generate recap + boot files, save session, stream status events to caller."""
+
+    def _status(msg: str) -> str:
+        return f"data: {json.dumps({'type': 'status', 'message': msg})}\n\n"
+
+    # ── 1. Parse turns ────────────────────────────────────────────────────────
+    yield _status("Parsing session log…")
+    if session.log_path is None or not session.log_path.exists():
+        yield f"data: {json.dumps({'type': 'error', 'message': 'No log file found'})}\n\n"
+        return
+
+    turns = _parse_turns_from_log(session.log_path)
+    if not turns:
+        yield f"data: {json.dumps({'type': 'error', 'message': 'No PLAYER/GM turns found in log'})}\n\n"
+        return
+
+    transcript = "\n\n".join(
+        f"**{t['role']}:** {t['content']}" for t in turns
+    )
+    n = session.session_number
+    next_n = n + 1
+
+    # ── 2. Generate player-facing recap (intro card for next session) ─────────
+    yield _status("Generating session recap…")
+    recap_system = (
+        "You are a skilled tabletop RPG chronicler writing for Pathfinder 1st Edition. "
+        "Write only what is requested. No meta-commentary, no out-of-character notes."
+    )
+    recap_user = f"""Below is the full transcript of Session {n} of Rise of the Runelords.
+
+TRANSCRIPT:
+{transcript}
+
+Write a player-facing session recap. This will be shown to players as an intro card at the start of Session {next_n}.
+
+Output format — produce exactly these parts in order:
+1. A single line: # Session {n} — [short evocative title of 3-5 words]
+2. A single italicised line with place and in-world date, e.g.: *Sandpoint, Varisia — 1st of Lamashan, 4707 AR*
+3. A line containing only: ---
+4. 4–6 paragraphs of atmospheric prose body
+5. A final line containing only: ---
+
+Prose rules:
+- Second person ("you", "the party")
+- Describe only what the characters experienced — no GM meta-commentary
+- Name specific characters, NPCs, and locations that appeared
+- End the body on the situation as it stood when the session ended
+- No bullet points. No subheadings beyond the title line."""
+
+    try:
+        recap_text = _ollama_blocking(session, recap_system, recap_user)
+        recap_text = _enforce_recap_header(recap_text, n)
+    except Exception as e:
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Recap generation failed: {e}'})}\n\n"
+        return
+
+    # ── 3. Generate GM-facing boot context for next session ───────────────────
+    yield _status("Generating GM boot context…")
+    boot_system = (
+        "You are a precise tabletop RPG game-master assistant. "
+        "Write only structured markdown as specified. No prose, no commentary."
+    )
+    boot_user = f"""Below is the full transcript of Session {n} of Rise of the Runelords.
+
+TRANSCRIPT:
+{transcript}
+
+Write a GM-facing boot context document for Session {next_n}. This is loaded into the GM's system prompt at session start.
+
+Produce exactly these sections in this order:
+
+# Session {next_n} Boot Context
+
+## Scene State
+(bullet list — Act, Scene, Location, Time, Weather, Area state)
+
+## What Is Happening Right Now
+(2–4 sentences — the immediate situation the party is in as Session {next_n} begins)
+
+## Who Is Present
+(bullet list — named NPCs and their current disposition/status)
+
+## Party Status
+(1–2 sentences — party condition, where they are, any immediate pressures)
+
+## What the GM Must Not Do in This Scene
+(bullet list — specific constraints based on where the session ended)
+
+Be factual and precise. Base everything strictly on the transcript."""
+
+    try:
+        boot_text = _ollama_blocking(session, boot_system, boot_user)
+    except Exception as e:
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Boot generation failed: {e}'})}\n\n"
+        return
+
+    # ── 4. Write files ────────────────────────────────────────────────────────
+    yield _status("Writing session files…")
+    sessions_dir = _REPO_ROOT / "sessions"
+
+    recap_path = sessions_dir / f"session_{n:03d}" / "recap.md"
+    recap_path.parent.mkdir(parents=True, exist_ok=True)
+    recap_path.write_text(recap_text, encoding="utf-8")
+
+    boot_path = sessions_dir / f"session_{next_n:03d}" / "boot.md"
+    boot_path.parent.mkdir(parents=True, exist_ok=True)
+    boot_path.write_text(boot_text, encoding="utf-8")
+
+    _log(session, f"\n## Recap generated → {recap_path.relative_to(_REPO_ROOT)}")
+    _log(session, f"## Boot generated  → {boot_path.relative_to(_REPO_ROOT)}\n")
+
+    # ── 5. Save session ───────────────────────────────────────────────────────
+    yield _status("Saving session…")
+    saved_to = save_session(session)
+
+    yield f"data: {json.dumps({'type': 'done', 'recap_path': str(recap_path), 'boot_path': str(boot_path), 'saved_to': str(saved_to)})}\n\n"
