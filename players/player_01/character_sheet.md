@@ -50,7 +50,7 @@
 **CMB:** -1
 **CMD:** 11
 
-**Proficiencies:** Battle Aspergillum, Bayonet, Blowgun, Boar Spear, Brass Knuckles, Cestus, Club, Heavy Crossbow, Light Crossbow, Dagger, Punching Dagger, Dart, Gauntlet, Spiked Gauntlet, Grapple, Hanbo, Javelin, Longspear, Heavy Mace, Light Mace, Mere Club, Morningstar, Quarterstaff, Rock, Shortspear, Sickle, Sling, Spear, Boar Spear, Ray Spells, Touch Spells, Splash Weapon, Stake, Stingchuck, Unarmed Strike, Underwater Heavy Crossbow, Underwater Light Crossbow
+**Proficiencies:** Sorcerers are proficient with all simple weapons. They are not proficient with any type of armor or shield.
 
 
 ## Senses and Languages
@@ -74,7 +74,7 @@
 ## Primary Weapon
 
 * Name: Crossbow, Light
-* Type: Melee
+* Type: Ranged
 * Reach / Range increments (fts.): 80
 * Attack Bonus: +2
 * Damage: 1d8
