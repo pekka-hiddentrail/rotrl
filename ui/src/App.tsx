@@ -6,14 +6,14 @@ import InputBar from './components/InputBar'
 import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
 import DicePanel from './components/DicePanel'
-import { bootSession, sendTurn, endSession } from './api'
+import { bootSession, sendTurn, endSession, logRoll } from './api'
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [streaming, setStreaming] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
-  const [model, setModel] = useState('qwen3:4b')
+  const [model, setModel] = useState('qwen2.5:1.5b')
   const [devMode, setDevMode] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
@@ -73,6 +73,10 @@ export default function App() {
     setMessages([])
   }
 
+  const handleViewLog = () => {
+    if (session) window.open(`/api/sessions/${session.id}/log`, '_blank')
+  }
+
   const handleCharacterSelect = (id: string) => {
     setActiveCharacter(prev => (prev === id ? null : id))
   }
@@ -92,6 +96,7 @@ export default function App() {
         onDevModeChange={setDevMode}
         onBoot={handleBoot}
         onEnd={handleEnd}
+        onViewLog={handleViewLog}
       />
 
       {error && <div className="error-bar">{error}</div>}
@@ -119,7 +124,12 @@ export default function App() {
           {isBooted && <InputBar onSend={handleSend} disabled={streaming} />}
         </div>
 
-        <DicePanel />
+        <DicePanel
+          sessionId={session?.id ?? null}
+          onRoll={(expr: string, rolls: number[], total: number) => {
+            if (session) logRoll(session.id, expr, rolls, total)
+          }}
+        />
       </div>
 
       {activeCharacter && (

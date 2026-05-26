@@ -227,6 +227,17 @@ body {
   box-shadow: 0 0 8px #3d7a5888;
 }
 
+.btn-secondary {
+  background: linear-gradient(180deg, #4a4030 0%, #2a2418 100%);
+  color: #a09070;
+  border: 1px solid #5a5040;
+}
+
+.btn-secondary:hover {
+  box-shadow: 0 0 8px #5a504088;
+  color: #c0a870;
+}
+
 .btn-danger {
   background: linear-gradient(180deg, #c04040 0%, #7a1515 100%);
   color: #e4ddd0;

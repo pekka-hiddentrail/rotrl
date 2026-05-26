@@ -42,6 +42,19 @@ export async function endSession(sessionId: string): Promise<void> {
   await fetch(`${BASE}/sessions/${sessionId}`, { method: 'DELETE' })
 }
 
+export async function logRoll(
+  sessionId: string,
+  expr: string,
+  rolls: number[],
+  total: number,
+): Promise<void> {
+  await fetch(`${BASE}/sessions/${sessionId}/roll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expr, rolls, total }),
+  })
+}
+
 async function* parseSseStream(response: Response): AsyncGenerator<SseEvent> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()

@@ -7,6 +7,11 @@ interface RollRecord {
   total: number
 }
 
+interface Props {
+  sessionId: string | null
+  onRoll: (expr: string, rolls: number[], total: number) => void
+}
+
 const DICE = [4, 6, 8, 10, 12, 20, 100] as const
 type DieSides = typeof DICE[number]
 
@@ -44,7 +49,7 @@ function groupDice(dice: number[]): string {
 
 let nextId = 0
 
-export default function DicePanel() {
+export default function DicePanel({ onRoll }: Props) {
   const [pending, setPending] = useState<number[]>([])
   const [history, setHistory] = useState<RollRecord[]>([])
 
@@ -55,9 +60,11 @@ export default function DicePanel() {
     if (pending.length === 0) return
     const rolls = pending.map(rollDie)
     const total = rolls.reduce((a, b) => a + b, 0)
+    const expr = groupDice(pending)
     const record: RollRecord = { id: nextId++, dice: [...pending], rolls, total }
     setHistory(h => [record, ...h].slice(0, 10))
     setPending([])
+    onRoll(expr, rolls, total)
   }
 
   return (

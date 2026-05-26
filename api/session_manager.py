@@ -4,6 +4,7 @@ import json
 import sys
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Generator, Optional
 
@@ -44,9 +45,21 @@ class GameSession:
     dev_mode: bool = False
     system_prompt: str = ""
     messages: list = field(default_factory=list)
+    log_path: Optional[Path] = None
 
 
 _sessions: dict[str, GameSession] = {}
+
+
+def _ts() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _log(session: GameSession, text: str) -> None:
+    if session.log_path is None:
+        return
+    with session.log_path.open("a", encoding="utf-8") as f:
+        f.write(text + "\n")
 
 
 def create_session(
@@ -68,6 +81,10 @@ def create_session(
         agent.load_boot_contexts()
         system_prompt = agent.build_boot_system_prompt(session_number=session_number)
 
+    _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    started = datetime.now()
+    log_name = f"session_{session_number:03d}_{started.strftime('%Y%m%d_%H%M%S')}.log.md"
+
     session = GameSession(
         id=str(uuid.uuid4()),
         session_number=session_number,
@@ -76,8 +93,17 @@ def create_session(
         temperature=temperature,
         dev_mode=dev_mode,
         system_prompt=system_prompt,
+        log_path=_OUTPUTS_DIR / log_name,
     )
     _sessions[session.id] = session
+
+    mode_label = "dev" if dev_mode else "full"
+    _log(session, f"# Session {session_number:03d} — {started.strftime('%Y-%m-%d %H:%M:%S')}")
+    _log(session, f"Model: `{model}` | Mode: {mode_label} | Temp: {temperature}\n")
+    _log(session, "## System Prompt\n")
+    _log(session, f"```\n{system_prompt}\n```\n")
+    _log(session, "---\n")
+
     return session
 
 
@@ -106,8 +132,18 @@ def stream_turn(session: GameSession, user_input: str) -> Generator[str, None, N
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
+def log_roll(session: GameSession, expr: str, rolls: list[int], total: int) -> None:
+    breakdown = " + ".join(str(r) for r in rolls) if len(rolls) > 1 else str(rolls[0])
+    _log(session, f"\n### [{_ts()}] DICE — {expr}")
+    _log(session, f"{breakdown} = **{total}**\n")
+    _log(session, "---\n")
+
+
 def save_session(session: GameSession) -> Path:
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    _log(session, f"\n## Session Ended — {datetime.now().strftime('%H:%M:%S')}")
+    _log(session, f"Total exchanges: {len([m for m in session.messages if m['role'] == 'user'])}\n")
+
     out = _OUTPUTS_DIR / f"session_{session.session_number:03d}_notes.json"
     out.write_text(
         json.dumps(
@@ -135,6 +171,10 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         options["num_predict"] = _DEV_MAX_TOKENS
     accumulated: list[str] = []
 
+    last_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+    _log(session, f"\n### [{_ts()}] PLAYER")
+    _log(session, f"{last_user}\n")
+
     with _requests.post(
         f"{session.host}/api/chat",
         json={
@@ -158,4 +198,8 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             if chunk.get("done"):
                 break
 
-    session.messages.append({"role": "assistant", "content": "".join(accumulated)})
+    response_text = "".join(accumulated)
+    session.messages.append({"role": "assistant", "content": response_text})
+    _log(session, f"\n### [{_ts()}] GM")
+    _log(session, f"{response_text}\n")
+    _log(session, "---\n")

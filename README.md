@@ -43,10 +43,10 @@ cd ..
 ### 4. Pull an Ollama model
 
 ```bash
-# Recommended for testing — fast, small (986 MB)
+# Default — fast, small (986 MB), good for testing
 ollama pull qwen2.5:1.5b
 
-# Full-featured model (~2.5 GB) — better quality, slower
+# Optional — better quality, slower (~2.5 GB)
 ollama pull qwen3:4b
 ```
 
@@ -75,7 +75,8 @@ python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 ```
 
 > **Important (Windows):** Always use `python -m uvicorn`, not bare `uvicorn`. And always pass `--host 127.0.0.1` — Vite's proxy requires explicit IPv4.  
-> **Do NOT use `--reload`** — uvicorn's file-watcher (`watchfiles`) crashes silently in new PowerShell windows on Windows.
+> **Do NOT use `--reload`** — uvicorn's file-watcher (`watchfiles`) crashes silently in new PowerShell windows on Windows.  
+> **Restarting:** `start_backend.ps1` automatically kills whatever is on port 8000 before starting. If you restart manually, make sure the old process is stopped first or the new one will fail silently.
 
 ### Terminal 3 — Vite dev server
 
@@ -97,10 +98,20 @@ Navigate to **http://localhost:5173** in your browser.
 
 ## Playing a session
 
-1. **Configure** — set session number, model name (e.g. `qwen2.5:1.5b`), and check **Dev** for fast mode
+1. **Configure** — pick a model from the dropdown, set session number, check **Dev** for fast mode
 2. **Boot Session** — the GM streams the opening narration (expect 10–60 sec depending on model)
 3. **Type player actions** in the input bar; press **Enter** to send
-4. **End Session** — saves the full transcript to `outputs/session_NNN_notes.json`
+4. **View Log** — opens the live session log in a new browser tab (updates as play continues)
+5. **End Session** — saves the full transcript to `outputs/session_NNN_notes.json`
+
+### Output files
+
+Both are written to `outputs/` (git-ignored):
+
+| File | When created | Contents |
+|------|-------------|----------|
+| `session_NNN_YYYYMMDD_HHMMSS.log.md` | At boot, updated live | Timestamped log: system prompt, every exchange, dice rolls |
+| `session_NNN_notes.json` | On End Session | Full message history as JSON |
 
 ### Dev mode vs full mode
 
@@ -177,6 +188,8 @@ rotrl/
 |--------|----------|-------------|
 | `POST` | `/api/sessions` | Boot session; streams opening narration via SSE |
 | `POST` | `/api/sessions/{id}/turn` | Send player input; streams GM response via SSE |
+| `GET` | `/api/sessions/{id}/log` | Return current log file as plain text |
+| `POST` | `/api/sessions/{id}/roll` | Record a dice roll into the session log |
 | `DELETE` | `/api/sessions/{id}` | End session, save transcript to `outputs/` |
 
 The frontend talks to the backend over Server-Sent Events (SSE). Tokens stream token-by-token from Ollama → FastAPI → browser.
@@ -265,6 +278,8 @@ There is no interactive play loop in CLI mode.
 | FastAPI backend + SSE streaming | ✅ Complete |
 | Dev mode (minimal prompt, fast testing) | ✅ Complete |
 | Context window limiting per turn | ✅ Complete |
+| Session log (timestamped markdown, live view) | ✅ Complete |
+| Dice roll logging | ✅ Complete |
 | GM Agent boot protocol + verification | ✅ Complete |
 | System Authority docs (~900 lines) | ✅ Complete |
 | World Setting docs (~1,300 lines) | ✅ Complete |

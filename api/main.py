@@ -7,10 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, save_session, stream_boot, stream_turn
+from api.session_manager import create_session, get_session, log_roll, save_session, stream_boot, stream_turn
 
 app = FastAPI(title="RotRL GM API")
 
@@ -34,6 +34,12 @@ class BootRequest(BaseModel):
 
 class TurnRequest(BaseModel):
     input: str
+
+
+class RollRequest(BaseModel):
+    expr: str
+    rolls: list[int]
+    total: int
 
 
 @app.post("/api/sessions")
@@ -64,6 +70,26 @@ def get_session_info(session_id: str):
         "model": session.model,
         "message_count": len(session.messages),
     }
+
+
+@app.get("/api/sessions/{session_id}/log")
+def get_log(session_id: str):
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.log_path is None or not session.log_path.exists():
+        raise HTTPException(status_code=404, detail="No log file for this session")
+    content = session.log_path.read_text(encoding="utf-8")
+    return PlainTextResponse(content, media_type="text/plain; charset=utf-8")
+
+
+@app.post("/api/sessions/{session_id}/roll")
+def post_roll(session_id: str, req: RollRequest):
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    log_roll(session, req.expr, req.rolls, req.total)
+    return {"ok": True}
 
 
 @app.delete("/api/sessions/{session_id}")
