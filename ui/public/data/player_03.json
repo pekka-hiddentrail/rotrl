@@ -19,7 +19,7 @@
   "height": "6 ft. 1 in.",
   "weight": "178 lbs.",
   "appearance": "Ani is a tall, muscular, tanned woman from Osirion, with facial features common to her homeland, vivid purple eyes, and white hair worn in long braids. She wears a flowing white puff-sleeved shirt over an off-white top that leaves her chest and abs visible, along with thigh-high shorts and sturdy sandals suited for long marches and combat. When excitement surges through her, her skin begins to glow as if fire burns just beneath it.",
-  "hp": { "current": 11, "max": 11 },
+  "hp": { "current": 11, "max": 11, "hitDie": "d8", "baseDieRoll": 8, "conBonus": 3 },
   "ac": {
     "total": 17,
     "touch": 17,
@@ -113,25 +113,24 @@
     "summary": {
       "class": "Warpriest",
       "levels": [
-        { "level": 0, "known": 3, "slots": 0 },
-        { "level": 1, "known": 2, "slots": 5 }
+        { "level": 0, "known": 3, "slots": 0, "DC": 14 },
+        { "level": 1, "known": 0, "slots": 2, "DC": 15 }
       ]
     },
     "list": [
-      { "name": "Pyrotechnics", "level": "Racial", "perDay": "3 per day", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "10 ft.", "components": "V, S", "school": "Evocation", "target": "Up to four lights, all within a 10-ft.-radius area", "cl": 1, "sr": "", "save": "", "effect": "You create up to four lights that resemble lanterns or torches.", "source": "CR p.263" },
-      { "name": "Detect Magic", "level": "Cantrip", "perDay": "3 per day", "castTime": "1 Standard action", "duration": "Concentration, up to 1 minutes [D]", "range": "60 ft.", "components": "V, S", "school": "Divination", "target": "Cone-shaped emanation", "cl": 1, "sr": "", "save": "", "effect": "You detect magical auras.", "source": "CR p.267" },
-      { "name": "Disrupt Undead", "level": "Cantrip", "perDay": "3 per day", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "110 ft.", "components": "V, S", "school": "Evocation", "target": "Up to four lights, all within a 10-ft.-radius area", "cl": 1, "sr": "", "save": "", "effect": "You create up to four lights that resemble lanterns or torches.", "source": "CR p.263" },
-      { "name": "Message", "level": "Cantrip", "perDay": "", "castTime": "1 standard action", "duration": "10 minutes", "range": "Medium (110 ft.)", "components": "V, S, F", "school": "Transmutation, AirSchool", "target": "1 creatures", "cl": 1, "sr": "", "save": "", "effect": "You can whisper messages and receive whispered replies.", "source": "CR p.313" },
-      { "name": "Read Magic", "level": "Cantrip", "perDay": "3 per day", "castTime": "1 Standard action", "duration": "10 minutes", "range": "Personal", "components": "V, S, F", "school": "Divination", "target": "You", "cl": 1, "sr": "", "save": "", "effect": "You can decipher magical inscriptions on objects--books, scrolls, weapons, and the like--that would otherwise be unintelligible.", "source": "CR p.330" },
-      { "name": "Magic Missile", "level": "Level 1", "perDay": "3 per day", "castTime": "1 Standard action", "duration": "Instantaneous", "range": "Medium (110 ft.)", "components": "V, S", "school": "Evocation", "target": "Up to five creatures, no two of which can be more than 15 ft. apart", "cl": 1, "sr": "SR", "save": "", "effect": "1 missiles that do 1d4+1 damage each.", "source": "CR p.309" },
-      { "name": "Shield", "level": "Level 1", "perDay": "3 per day", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "Personal", "components": "V, S", "school": "Abjuration", "target": "You", "cl": 1, "sr": "", "save": "", "effect": "Shield creates an invisible shield of force that hovers in front of you.", "source": "CR p.342" }
+      { "name": "Pyrotechnics", "level": "Racial", "perDay": "1 per day", "castTime": "1 Standard action", "duration": "1d4+1 rounds, or 1d4+1 rounds after creatures leave the smoke cloud; see text [D]", "range": "440 ft.", "components": "V, S, M", "school": "Transmutation", "target": "One fire source, up to a 20-ft. cube", "cl": 1, "sr": "Yes or No; see text", "save": "Will negates or Fortitude negates; see text; Spell", "effect": "Pyrotechnics turns a fire into a burst of blinding fireworks or a thick cloud of choking smoke, depending on your choice.", "source": "CR p.328" },
+      { "name": "Detect Poison", "level": "Cantrip", "perDay": "", "castTime": "1 Standard action", "duration": "Concentration, up to 1 minutes [D]", "range": "60 ft.", "components": "V, S", "school": "Divination", "target": "Or Area one creature, one object, or a 5-ft. cube", "cl": 1, "sr": "", "save": "", "effect": "You determine whether a creature, object, or area has been poisoned or is poisonous.", "source": "CR p.268" },
+      { "name": "Resistance", "level": "Cantrip", "perDay": "", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "Touch", "components": "V, S, M", "school": "Abjuration", "target": "You imbue the subject with magical energy that protects it from harm, granting it a +1 resistance bonus on saves.", "cl": 1, "sr": "", "save": "Will negates", "effect": "Creature touched", "source": "CR p.334" },
+      { "name": "Stabilize", "level": "Cantrip", "perDay": "", "castTime": "1 standard action", "duration": "Instantaneous", "range": "Close (25 ft.)", "components": "V, S", "school": "Conjuration", "target": "1 living creature", "cl": 1, "sr": "", "save": "Will negates", "effect": "Upon casting this spell, you target a living creature that has -1 or fewer hit points.", "source": "CR p.348" },
+      { "name": "Protection from Evil", "level": "Level 1", "perDay": "1 per day", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "Touch", "components": "V, S, M", "school": "Abjuration", "target": "Creature touched", "cl": 1, "sr": "", "save": "Will negates", "effect": "This spell wards a creature from attacks by evil creatures, from mental control, and from summoned creatures.", "source": "CR p.327" },
+      { "name": "Shield of Faith", "level": "Level 1", "perDay": "1 per day", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "Touch", "components": "V, S, M", "school": "Abjuration", "target": "Touch", "cl": 1, "sr": "Yes", "save": "Will negates", "effect": "This spell creates a shimmering, magical field around the target that averts and deflects attacks.", "source": "CR p.342" }
     ]
   },
   "inventory": {
     "worn": [],
-    "weapons": ["Crossbow, Light", "Dagger", "Quarterstaff"],
-    "carried": ["Backpack, Common", "Bedroll", "Flint and Steel", "Teapot", "Waterskin", "Lamp (Common/Waterproof)", "Mirror", "Candle (10)", "Bolt, Crossbow (20)"],
-    "wealth": { "pp": 0, "gp": 11, "sp": 0, "cp": 0 }
+    "weapons": ["Crossbow, Heavy", "Dagger", "Quarterstaff"],
+    "carried": ["Backpack, Common", "Belt Pouch", "Blanket", "Soap", "Torches (12)", "Trail Rations (5 days)", "Waterskin", "Bolt, Crossbow (20)", "Candles (2)", "Chalk", "Hammer", "Pitons (4)", "Lantern, hooded", "Oil flask (5)", "Sack (2)", "Tindertwigs (4)", "Acid Flask", "Potion of Enlarge Person", "Tent"],
+    "wealth": { "pp": 0, "gp": 28, "sp": 0, "cp": 0 }
   },
   "conditions": {
     "active": [],

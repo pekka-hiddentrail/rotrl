@@ -196,6 +196,48 @@ The frontend talks to the backend over Server-Sent Events (SSE). Tokens stream t
 
 ---
 
+## Testing
+
+The backend test suite uses `pytest` and FastAPI's `TestClient`.
+
+### Run tests
+
+From project root:
+
+```bash
+python -m pytest -q
+```
+
+On Windows with a local virtual environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+### If you see "No module named pytest"
+
+Install project dependencies first:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Then rerun tests.
+
+### What is currently covered
+
+- Session lifecycle endpoints (`/api/sessions`, `/api/sessions/{id}`, roll logging, delete)
+- Turn streaming behavior with mocked Ollama responses
+- Intro file resolution and fallback behavior
+- Session log turn parsing
+- Recap header normalization
+
+### Note
+
+There are currently no endpoint tests for `/api/sessions/{id}/end` (recap + next-session boot generation), so adding those should be a high-priority test improvement.
+
+---
+
 ## Architecture
 
 ### Boot-First Design

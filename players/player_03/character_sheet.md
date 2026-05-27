@@ -223,120 +223,105 @@ List trained skills (or usable untrained).
 ## Racial Spell-like Abilities 
 
 Name: Pyrotechnics
-* Save:
+* Save: Will negates or Fortitude negates; see text; Spell
 * Time: 1 Standard action
-* Amount: 3 per day
-* Duration: 1 minutes [D]
-* Range: 10 ft.
-* Components: V, S
-* SR: 
-* School: Evocation
-* Target / Area: Up to four lights, all within a 10-ft.-radius area
+* Amount: 1 per day
+* Duration: 1d4+1 rounds, or 1d4+1 rounds after creatures leave the smoke cloud; see text [D]
+* Range: 440 ft.
+* Components: V, S, M
+* SR: Yes or No; see text
+* School: Transmutation
+* Target / Area: One fire source, up to a 20-ft. cube
 * Caster level: 1
-* Effect: You create up to four lights that resemble lanterns or torches.
-* Source:  CR p.263
+* Effect: Pyrotechnics turns a fire into a burst of blinding fireworks or a thick cloud of choking smoke, depending on your choice.
+* Source:  CR p.328
 
 
 ## Warpriest Spells
 
-| Level | Known | Slots |
-| ----- | ----- | ----- |
-| 0     | 3     | 0     |
-| 1     | 2     | 5     |
+| Level | Known | Slots | DC |
+| ----- | ----- | ----- | -- |
+| 0     | 3     | 0     | 14 |
+| 1     | 0     | 2     | 15 |
 
 ## Spells Known / Prepared
 
 **Cantrips:**
 
-Name: Detect Magic 
+Name: Detect Poison 
 * Save:
 * Time: 1 Standard action
-* Amount: 3 per day
+* Amount:
 * Duration: Concentration, up to 1 minutes [D]
 * Range: 60 ft.
 * Components: V, S
 * SR: 
 * School: Divination
-* Target / Area:  Cone-shaped emanation
+* Target / Area:  Or Area one creature, one object, or a 5-ft. cube
 * Caster level: 1
-* Effect: You detect magical auras.
-* Source:  CR p.267
+* Effect: You determine whether a creature, object, or area has been poisoned or is poisonous.
+* Source:  CR p.268
 
 
-Name: Disrupt Undead 
-* Save:
+Name: Resistance 
+* Save: Will negates 
 * Time: 1 Standard action
-* Amount: 3 per day
+* Amount:
 * Duration: 1 minutes [D]
-* Range: 110 ft.
-* Components: V, S
+* Range: Touch
+* Components: V, S, M
 * SR: 
-* School: Evocation
-* Target / Area: Up to four lights, all within a 10-ft.-radius area
+* School: Abjuration
+* Target / Area: You imbue the subject with magical energy that protects it from harm, granting it a +1 resistance bonus on saves.
 * Caster level: 1
-* Effect: You create up to four lights that resemble lanterns or torches.
-* Source:  CR p.263
+* Effect: Creature touched
+* Source:  CR p.334
 
 
-Name: Message
-* Save:
+Name: Stabilize
+* Save: Will negates 
 * Time: 1 standard action
 * Amount: 
-* Duration: 10 minutes
-* Range: Medium (110 ft.)
-* Components: V, S, F
+* Duration: Instantaneous
+* Range: Close (25 ft.)
+* Components: V, S
 * SR: 
-* School: Transmutation, AirSchool
-* Target / Area: 1 creatures
+* School: Conjuration
+* Target / Area: 1 living creature
 * Caster level: 1
-* Effect: You can whisper messages and receive whispered replies.
-* Source:  CR p.313
+* Effect: Upon casting this spell, you target a living creature that has -1 or fewer hit points.
+* Source:  CR p.348
 
-
-Name: Read Magic
-* Save:
-* Time: 1 Standard action
-* Amount: 3 per day
-* Duration: 10 minutes
-* Range: Personal
-* Components: V, S, F
-* SR: 
-* School: Divination
-* Target / Area: You
-* Caster level: 1
-* Effect: You can decipher magical inscriptions on objects--books, scrolls, weapons, and the like--that would otherwise be unintelligible.
-* Source:  CR p.330
- 
 
  **Level 1:**
 
-Name: Magic Missile
-* Save:
+Name: Protection from Evil
+* Save: Will negates 
 * Time: 1 Standard action
-* Amount: 3 per day
-* Duration: Instantaneous
-* Range: Medium (110 ft.)
-* Components: V, S
-* SR: SR
-* School: Evocation
-* Target / Area: Up to five creatures, no two of which can be more than 15 ft. apart
-* Caster level: 1
-* Effect: 1 missiles that do 1d4+1 damage each.
-* Source:  CR p.309
- 
-
-Name: Shield
-* Save:
-* Time: 1 Standard action
-* Amount: 3 per day
+* Amount: 1 per day
 * Duration: 1 minutes [D]
-* Range: Personal
-* Components: V, S
+* Range: Touch
+* Components: V, S, M
 * SR: 
 * School: Abjuration
-* Target / Area: You
+* Target / Area: Creature touched
 * Caster level: 1
-* Effect: Shield creates an invisible shield of force that hovers in front of you.
+* Effect: This spell wards a creature from attacks by evil creatures, from mental control, and from summoned creatures.
+* Source:  CR p.327
+ 
+
+Name: Shield of Faith
+* Save: Will negates 
+* Time: 1 Standard action
+* Amount: 1 per day
+* Duration: 1 minutes [D]
+* Range: Touch
+* Components: V, S, M
+* SR: Yes
+* School: Abjuration
+* Target / Area: Touch
+* Caster level: 1
+* Effect: This spell creates a shimmering, magical field around the target that averts and deflects attacks.
 * Source:  CR p.342
  
 

@@ -40,10 +40,18 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## Quality and Testing
 
-- [ ] Add validation for prompt inputs and generated outputs before they are written to session artifacts.
-- [ ] Add focused tests for boot prompt assembly, file loading, and checklist verification.
-- [ ] Add regression tests for session-start context resolution and previous-session note discovery.
-- [ ] Add smoke tests for loading character JSON in the UI.
+- [x] Add validation for prompt inputs and generated outputs before they are written to session artifacts. *(critical)*
+- [x] Add focused tests for boot prompt assembly, file loading, and checklist verification. *(critical)*
+- [x] Add regression tests for session-start context resolution and previous-session note discovery. *(critical)*
+- [x] Add smoke tests for loading character JSON in the UI. *(high)*
+- [ ] Test deferred context injection timing — verify each chunk lands on the correct turn and that the system prompt grows in the expected order. *(critical)*
+- [ ] Test the full end-session SSE stream with mocked Ollama — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
+- [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high)*
+- [ ] Test that dev mode uses the short system prompt and ignores all deferred context files regardless of what exists on disk. *(high)*
+- [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(high)*
+- [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low)*
+- [ ] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
+- [ ] Add contract tests for the SSE event shape — assert that every event emitted by boot, turn, and end-session has a `type` field and matches the known union of types. *(low)*
 
 ## Ollama Review Questions
 

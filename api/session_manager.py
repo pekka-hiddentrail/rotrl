@@ -92,7 +92,7 @@ def _log(session: GameSession, text: str) -> None:
 def _build_slim_system_prompt(session_number: int) -> str:
     """Minimal system prompt for boot — just enough to open the scene and handle
     the first few player prompts.  Detailed rules are injected via context_queue."""
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = _REPO_ROOT
     adv_root  = repo_root / "adventure_path"
 
     # Party names from player character sheets (best-effort)
@@ -161,7 +161,7 @@ def create_session(
     else:
         system_prompt = _build_slim_system_prompt(session_number)
         # Build deferred queue: read files now, inject at the scheduled turn
-        adv_root = Path(__file__).resolve().parents[1] / "adventure_path"
+        adv_root = _REPO_ROOT / "adventure_path"
         context_queue = []
         for inject_after, label, rel_path in _DEFERRED_CONTEXT_FILES:
             fpath = adv_root / rel_path
@@ -209,7 +209,29 @@ def stream_boot(session: GameSession) -> Generator[str, None, None]:
     yield f"data: {json.dumps({'type': 'done', 'session_id': session.id})}\n\n"
 
 
+def validate_turn_input(text: str) -> Optional[str]:
+    """Return an error string if the input is invalid, else None."""
+    if not text or not text.strip():
+        return "Player input must not be empty."
+    if len(text) > 4000:
+        return f"Player input is too long ({len(text)} chars; max 4000)."
+    return None
+
+
+def validate_generated_text(text: str, label: str, min_length: int = 80) -> Optional[str]:
+    """Return an error string if generated output looks malformed, else None."""
+    if not text or not text.strip():
+        return f"{label}: LLM returned an empty response."
+    if len(text.strip()) < min_length:
+        return f"{label}: response is suspiciously short ({len(text.strip())} chars)."
+    return None
+
+
 def stream_turn(session: GameSession, user_input: str) -> Generator[str, None, None]:
+    err = validate_turn_input(user_input)
+    if err:
+        yield f"data: {json.dumps({'type': 'error', 'message': err})}\n\n"
+        return
     session.messages.append({"role": "user", "content": user_input})
     try:
         yield from _stream_chat(session)
@@ -499,6 +521,10 @@ Prose rules:
 
     try:
         recap_text = _ollama_blocking(session, recap_system, recap_user)
+        err = validate_generated_text(recap_text, "Recap", min_length=120)
+        if err:
+            yield f"data: {json.dumps({'type': 'error', 'message': err})}\n\n"
+            return
         recap_text = _enforce_recap_header(recap_text, n)
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'message': f'Recap generation failed: {e}'})}\n\n"
@@ -540,6 +566,10 @@ Be factual and precise. Base everything strictly on the transcript."""
 
     try:
         boot_text = _ollama_blocking(session, boot_system, boot_user)
+        err = validate_generated_text(boot_text, "Boot context", min_length=80)
+        if err:
+            yield f"data: {json.dumps({'type': 'error', 'message': err})}\n\n"
+            return
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'message': f'Boot generation failed: {e}'})}\n\n"
         return
