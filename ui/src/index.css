@@ -248,6 +248,48 @@ body {
   box-shadow: 0 0 8px #b0404088;
 }
 
+/* ── Provider toggle ─────────────────────── */
+
+.provider-toggle {
+  display: flex;
+  border: 1px solid #4a3f2a;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.provider-btn {
+  padding: 5px 12px;
+  background: linear-gradient(180deg, #2e2618 0%, #1c1710 100%);
+  color: #7a6848;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.provider-btn + .provider-btn {
+  border-left: 1px solid #4a3f2a;
+}
+
+.provider-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3a2e1e 0%, #241c12 100%);
+  color: #c0a870;
+}
+
+.provider-btn.active {
+  background: linear-gradient(180deg, #5a4a28 0%, #3a3018 100%);
+  color: #d4aa50;
+  box-shadow: inset 0 1px 3px #00000044;
+}
+
+.provider-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .btn-send {
   background: linear-gradient(180deg, #d4aa50 0%, #9a7828 100%);
   color: #111;

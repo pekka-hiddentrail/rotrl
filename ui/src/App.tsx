@@ -16,6 +16,7 @@ export default function App() {
   const [sessionNumber, setSessionNumber] = useState(1)
   const [model, setModel] = useState('qwen2.5:1.5b')
   const [devMode, setDevMode] = useState(true)
+  const [provider, setProvider] = useState<'ollama' | 'groq'>('ollama')
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
@@ -51,7 +52,7 @@ export default function App() {
     // 2. Create the session (primes context, returns done instantly — no LLM call at boot)
     try {
       let sessionId: string | undefined
-      for await (const event of bootSession(sessionNumber, model, devMode)) {
+      for await (const event of bootSession(sessionNumber, model, devMode, provider)) {
         if (event.type === 'error') throw new Error(event.message)
         if (event.type === 'done') sessionId = event.session_id
       }
@@ -140,9 +141,14 @@ export default function App() {
         sessionNumber={sessionNumber}
         model={model}
         devMode={devMode}
+        provider={provider}
         onSessionNumberChange={setSessionNumber}
         onModelChange={setModel}
         onDevModeChange={setDevMode}
+        onProviderChange={(p) => {
+          setProvider(p)
+          setModel(p === 'groq' ? 'llama-3.1-8b-instant' : 'qwen3:4b')
+        }}
         onBoot={handleBoot}
         onEnd={handleEnd}
         onViewLog={handleViewLog}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import uuid
@@ -9,10 +10,69 @@ from datetime import datetime
 from pathlib import Path
 from typing import Generator, Optional
 
+import time as _time
+
 import requests as _requests
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+except ImportError:
+    pass  # python-dotenv not installed; rely on env vars being set externally
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _OUTPUTS_DIR = _REPO_ROOT / "outputs"
+
+_GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+_GROQ_MAX_RETRIES = 4
+_GROQ_RETRY_BASE = 5.0  # seconds — doubled each attempt
+
+
+def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.Response:
+    """POST to Groq with automatic retry on 429 (rate-limit).
+
+    Reads the ``retry-after`` or ``x-ratelimit-reset-requests`` response header
+    when present; otherwise falls back to exponential back-off starting at
+    ``_GROQ_RETRY_BASE`` seconds.  Raises on any non-retryable error.
+    """
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    wait = _GROQ_RETRY_BASE
+    for attempt in range(_GROQ_MAX_RETRIES + 1):
+        resp = _requests.post(
+            _GROQ_API_URL,
+            headers=headers,
+            json=payload,
+            stream=stream,
+            timeout=60,
+        )
+        if resp.status_code == 413:
+            raise RuntimeError(
+                "Groq rejected the request: payload too large. "
+                "The session context has grown too big for the model. "
+                "Try starting a new session or switching to dev mode."
+            )
+        if resp.status_code != 429:
+            resp.raise_for_status()
+            return resp
+        if attempt == _GROQ_MAX_RETRIES:
+            resp.raise_for_status()  # will raise a 429 HTTPError after all retries
+
+        # Parse the header-suggested wait time if available
+        retry_after = (
+            resp.headers.get("retry-after")
+            or resp.headers.get("x-ratelimit-reset-requests")
+        )
+        if retry_after:
+            try:
+                wait = float(retry_after)
+            except ValueError:
+                pass
+        _time.sleep(wait)
+        wait = min(wait * 2, 60.0)  # cap at 60 s
+
+    # Should never reach here
+    raise RuntimeError("Groq: exhausted retries")  # pragma: no cover
+
 
 _BOOT_USER_PROMPT = (
     "The session begins. Describe where the party finds themselves right now — "
@@ -29,9 +89,15 @@ _DEV_SYSTEM_PROMPT = (
 _DEV_BOOT_USER_PROMPT = "Begin. Give a one-sentence scene description of Sandpoint, then ask: What do you do?"
 
 # Dev mode limits: keep only the last N messages (pairs of user+assistant)
-_DEV_MAX_HISTORY = 6   # 3 exchanges
-_FULL_MAX_HISTORY = 30  # 15 exchanges
-_DEV_MAX_TOKENS = 180   # cap generation length in dev mode
+_DEV_MAX_HISTORY   = 6   # 3 exchanges
+_FULL_MAX_HISTORY  = 30  # 15 exchanges — Ollama (local, no payload limit)
+_GROQ_MAX_HISTORY  = 10  # 5 exchanges  — Groq (cloud, tighter payload limit)
+_DEV_MAX_TOKENS    = 180  # cap generation length in dev mode
+# Groq: hard ceiling on the system prompt character count.
+# Injected context chunks beyond this point are silently dropped.
+# ~30 000 chars ≈ 7 500 tokens — keeps all early context (base + Critical +
+# Act Overview + Adjudication) and trims only the later/lower-priority chunks.
+_GROQ_MAX_SYSTEM_CHARS = 30_000
 
 # ── Deferred context chunks injected one-per-turn after boot ──────────────────
 # Each entry: (inject_after_turn, label, relative path under adventure_path/)
@@ -64,6 +130,7 @@ class GameSession:
     host: str
     temperature: float
     dev_mode: bool = False
+    provider: str = "ollama"   # "ollama" | "groq"
     num_ctx: int = 2048
     num_gpu: int = 999
     system_prompt: str = ""
@@ -154,6 +221,7 @@ def create_session(
     dev_mode: bool = False,
     num_ctx: int = 2048,
     num_gpu: int = 999,
+    provider: str = "ollama",
 ) -> GameSession:
     if dev_mode:
         system_prompt = _DEV_SYSTEM_PROMPT
@@ -179,6 +247,7 @@ def create_session(
         host=host,
         temperature=temperature,
         dev_mode=dev_mode,
+        provider=provider,
         num_ctx=num_ctx,
         num_gpu=num_gpu,
         system_prompt=system_prompt,
@@ -280,9 +349,22 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         session.system_prompt += f"\n\n---\n## {label}\n\n{chunk}"
         _log(session, f"\n> *[Context injected at turn {session.turn_number}: {label}]*\n")
 
-    max_hist = _DEV_MAX_HISTORY if session.dev_mode else _FULL_MAX_HISTORY
+    if session.dev_mode:
+        max_hist = _DEV_MAX_HISTORY
+    elif session.provider == "groq":
+        max_hist = _GROQ_MAX_HISTORY
+    else:
+        max_hist = _FULL_MAX_HISTORY
     history = session.messages[-max_hist:] if len(session.messages) > max_hist else session.messages
-    messages = [{"role": "system", "content": session.system_prompt}] + history
+
+    # For Groq: if the system prompt has grown too large (many injected chunks),
+    # keep the *beginning* (base prompt + earliest/most critical rules) and drop
+    # later injected chunks.  Base prompt is always the most important part.
+    system_content = session.system_prompt
+    if session.provider == "groq" and len(system_content) > _GROQ_MAX_SYSTEM_CHARS:
+        system_content = system_content[:_GROQ_MAX_SYSTEM_CHARS] + "\n\n…[later context omitted to stay within payload limit]"
+
+    messages = [{"role": "system", "content": system_content}] + history
     options: dict = {
         "temperature": session.temperature,
         "num_ctx": session.num_ctx,
@@ -303,14 +385,27 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         _log(session, f"\n**[{role}]**\n```\n{msg['content']}\n```\n")
     _log(session, "</details>\n")
 
+    if session.provider == "groq":
+        yield from _stream_groq(session, messages, accumulated)
+    else:
+        yield from _stream_ollama(session, messages, options, accumulated)
+
+    response_text = "".join(accumulated)
+    session.messages.append({"role": "assistant", "content": response_text})
+    _log(session, f"\n### [{_ts()}] GM")
+    _log(session, f"{response_text}\n")
+    _log(session, "---\n")
+
+
+def _stream_ollama(
+    session: GameSession,
+    messages: list,
+    options: dict,
+    accumulated: list[str],
+) -> Generator[str, None, None]:
     with _requests.post(
         f"{session.host}/api/chat",
-        json={
-            "model": session.model,
-            "messages": messages,
-            "stream": True,
-            "options": options,
-        },
+        json={"model": session.model, "messages": messages, "stream": True, "options": options},
         stream=True,
         timeout=180,
     ) as resp:
@@ -326,11 +421,39 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             if chunk.get("done"):
                 break
 
-    response_text = "".join(accumulated)
-    session.messages.append({"role": "assistant", "content": response_text})
-    _log(session, f"\n### [{_ts()}] GM")
-    _log(session, f"{response_text}\n")
-    _log(session, "---\n")
+
+def _stream_groq(
+    session: GameSession,
+    messages: list,
+    accumulated: list[str],
+) -> Generator[str, None, None]:
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        raise RuntimeError(
+            "GROQ_API_KEY environment variable is not set. "
+            "Get a free key at https://console.groq.com"
+        )
+    payload = {
+        "model": session.model,
+        "messages": messages,
+        "stream": True,
+        "temperature": session.temperature,
+        "max_tokens": 1024,
+    }
+    with _groq_post(api_key, payload, stream=True) as resp:
+        for raw in resp.iter_lines():
+            if not raw:
+                continue
+            line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+            if line == "data: [DONE]":
+                break
+            if not line.startswith("data: "):
+                continue
+            chunk = json.loads(line[6:])
+            content = ((chunk.get("choices") or [{}])[0].get("delta") or {}).get("content", "")
+            if content:
+                accumulated.append(content)
+                yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
 
 
 # ── Session-end recap generation ──────────────────────────────────────────────
@@ -446,27 +569,42 @@ def _enforce_recap_header(text: str, session_number: int) -> str:
     return f"# Session {session_number} — {title}\n\n{place_date}\n\n---\n\n{body}\n\n---\n"
 
 
-def _ollama_blocking(session: GameSession, system: str, user: str) -> str:
-    """Single non-streaming Ollama call. Used for recap generation."""
-    resp = _requests.post(
-        f"{session.host}/api/chat",
-        json={
+def _call_blocking(session: GameSession, system: str, user: str) -> str:
+    """Single non-streaming LLM call dispatched by provider. Used for recap generation."""
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user",   "content": user},
+    ]
+    if session.provider == "groq":
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY environment variable is not set.")
+        payload = {
             "model": session.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user",   "content": user},
-            ],
+            "messages": messages,
             "stream": False,
-            "options": {
-                "temperature": 0.5,   # slight creativity for prose
-                "num_ctx": 4096,      # recap needs more room
-                "num_gpu": session.num_gpu,
+            "temperature": 0.5,
+            "max_tokens": 2048,
+        }
+        resp = _groq_post(api_key, payload, stream=False)
+        return (resp.json()["choices"][0]["message"] or {}).get("content", "").strip()
+    else:
+        resp = _requests.post(
+            f"{session.host}/api/chat",
+            json={
+                "model": session.model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.5,
+                    "num_ctx": 4096,
+                    "num_gpu": session.num_gpu,
+                },
             },
-        },
-        timeout=300,
-    )
-    resp.raise_for_status()
-    return (resp.json().get("message") or {}).get("content", "").strip()
+            timeout=300,
+        )
+        resp.raise_for_status()
+        return (resp.json().get("message") or {}).get("content", "").strip()
 
 
 def stream_end_session(session: GameSession) -> Generator[str, None, None]:
@@ -520,7 +658,7 @@ Prose rules:
 - No bullet points. No subheadings beyond the title line."""
 
     try:
-        recap_text = _ollama_blocking(session, recap_system, recap_user)
+        recap_text = _call_blocking(session, recap_system, recap_user)
         err = validate_generated_text(recap_text, "Recap", min_length=120)
         if err:
             yield f"data: {json.dumps({'type': 'error', 'message': err})}\n\n"
@@ -565,7 +703,7 @@ Produce exactly these sections in this order:
 Be factual and precise. Base everything strictly on the transcript."""
 
     try:
-        boot_text = _ollama_blocking(session, boot_system, boot_user)
+        boot_text = _call_blocking(session, boot_system, boot_user)
         err = validate_generated_text(boot_text, "Boot context", min_length=80)
         if err:
             yield f"data: {json.dumps({'type': 'error', 'message': err})}\n\n"

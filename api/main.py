@@ -32,8 +32,9 @@ class BootRequest(BaseModel):
     host: str = "http://localhost:11434"
     temperature: float = 0.3
     dev_mode: bool = False
-    num_ctx: int = 2048   # context window — smaller = faster
-    num_gpu: int = 999    # GPU layers — 999 = push everything possible to GPU
+    provider: str = "ollama"  # "ollama" | "groq"
+    num_ctx: int = 2048       # context window — smaller = faster (Ollama only)
+    num_gpu: int = 999        # GPU layers — 999 = push everything to GPU (Ollama only)
 
 
 class TurnRequest(BaseModel):
@@ -71,7 +72,7 @@ def get_intro(session: int = 1):
 @app.post("/api/sessions")
 def post_sessions(req: BootRequest):
     try:
-        session = create_session(req.session_number, req.model, req.host, req.temperature, req.dev_mode, req.num_ctx, req.num_gpu)
+        session = create_session(req.session_number, req.model, req.host, req.temperature, req.dev_mode, req.num_ctx, req.num_gpu, req.provider)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return StreamingResponse(stream_boot(session), media_type="text/event-stream", headers=_SSE_HEADERS)

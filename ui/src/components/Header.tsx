@@ -1,9 +1,17 @@
 import type { SessionInfo } from '../types'
 
-const MODELS = [
-  { value: 'qwen2.5:1.5b', label: 'qwen2.5:1.5b — fast' },
-  { value: 'qwen3:4b',     label: 'qwen3:4b' },
-]
+const MODELS: Record<string, { value: string; label: string }[]> = {
+  ollama: [
+    { value: 'qwen3:4b',     label: 'qwen3:4b' },
+    { value: 'qwen2.5:1.5b', label: 'qwen2.5:1.5b — fast' },
+  ],
+  groq: [
+    { value: 'llama-3.1-8b-instant',    label: 'llama-3.1-8b-instant — fastest' },
+    { value: 'llama3-8b-8192',          label: 'llama3-8b-8192' },
+    { value: 'llama-3.3-70b-versatile', label: 'llama-3.3-70b — best quality' },
+    { value: 'mixtral-8x7b-32768',      label: 'mixtral-8x7b — long context' },
+  ],
+}
 
 interface Props {
   session: SessionInfo | null
@@ -12,9 +20,11 @@ interface Props {
   sessionNumber: number
   model: string
   devMode: boolean
+  provider: 'ollama' | 'groq'
   onSessionNumberChange: (n: number) => void
   onModelChange: (m: string) => void
   onDevModeChange: (v: boolean) => void
+  onProviderChange: (p: 'ollama' | 'groq') => void
   onBoot: () => void
   onEnd: () => void
   onViewLog: () => void
@@ -32,8 +42,8 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 }))
 
 export default function Header({
-  session, streaming, ending, sessionNumber, model, devMode,
-  onSessionNumberChange, onModelChange, onDevModeChange, onBoot, onEnd, onViewLog,
+  session, streaming, ending, sessionNumber, model, devMode, provider,
+  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onViewLog,
 }: Props) {
   const isBooted = session !== null
   const locked = streaming || ending
@@ -71,6 +81,18 @@ export default function Header({
       <div className="header-controls">
         {!isBooted && (
           <>
+            <div className="provider-toggle" title="LLM backend">
+              {(['ollama', 'groq'] as const).map(p => (
+                <button
+                  key={p}
+                  className={`provider-btn${provider === p ? ' active' : ''}`}
+                  onClick={() => onProviderChange(p)}
+                  disabled={locked}
+                >
+                  {p === 'groq' ? '⚡ Groq' : '🖥 Ollama'}
+                </button>
+              ))}
+            </div>
             <label className="control-label">
               Session
               <input
@@ -90,7 +112,7 @@ export default function Header({
                 className="input-model"
                 disabled={locked}
               >
-                {MODELS.map(m => (
+                {MODELS[provider].map(m => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
               </select>

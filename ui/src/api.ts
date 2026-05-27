@@ -10,11 +10,12 @@ export async function* bootSession(
   sessionNumber: number,
   model: string,
   devMode: boolean = false,
+  provider: string = 'ollama',
 ): AsyncGenerator<SseEvent> {
   const res = await fetch(`${BASE}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_number: sessionNumber, model, dev_mode: devMode }),
+    body: JSON.stringify({ session_number: sessionNumber, model, dev_mode: devMode, provider }),
   })
   if (!res.ok) {
     const detail = await res.text()
