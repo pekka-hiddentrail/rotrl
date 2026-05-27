@@ -74,3 +74,7 @@ models/
 sessions/
 !sessions/session_001/
 !sessions/session_001/**
+
+# NPC delta files — session-specific state changes, one file per session per NPC
+# base.md files are tracked; session_NNN.md deltas are not
+adventure_path/05_npcs/*/session_*.md

@@ -20,8 +20,30 @@ try:
 except ImportError:
     pass  # python-dotenv not installed; rely on env vars being set externally
 
+from api.context.npc_lookup import NpcIndex
+from api.context.skill_lookup import SkillIndex
+from api.api_logger import write_api_log
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _OUTPUTS_DIR = _REPO_ROOT / "outputs"
+
+# Context indexes — built lazily on first use, shared across all sessions
+_npc_index: Optional[NpcIndex] = None
+_skill_index: Optional[SkillIndex] = None
+
+
+def _get_npc_index() -> NpcIndex:
+    global _npc_index
+    if _npc_index is None:
+        _npc_index = NpcIndex(_repo_root=_REPO_ROOT)
+    return _npc_index
+
+
+def _get_skill_index() -> SkillIndex:
+    global _skill_index
+    if _skill_index is None:
+        _skill_index = SkillIndex(_repo_root=_REPO_ROOT)
+    return _skill_index
 
 _GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 _GROQ_MAX_RETRIES = 4
@@ -99,27 +121,53 @@ _DEV_MAX_TOKENS    = 180  # cap generation length in dev mode
 # Act Overview + Adjudication) and trims only the later/lower-priority chunks.
 _GROQ_MAX_SYSTEM_CHARS = 30_000
 
-# ── Deferred context chunks injected one-per-turn after boot ──────────────────
-# Each entry: (inject_after_turn, label, relative path under adventure_path/)
-#   inject_after_turn=0  → injected before turn 1 (first player message)
-#   inject_after_turn=N  → injected before turn N+1
+# Regex that matches a %%ROLL%% … %%END%% block anywhere in GM output.
 #
-# GM Operating Rules are split into three tiers so the LLM receives the most
-# critical behaviour rules immediately, then fills in detail gradually.
+# The LLM sometimes writes the skill line in non-standard ways:
+#   skill: Diplomacy          ← correct
+#   Diplomacy: 15             ← LLM added an extra number (Sense Motive modifier etc.)
+#   skill: Sense Motive       ← multi-word, correct
+#   Sense Motive: 12          ← multi-word with extra number
 #
-#   Turn 1  — Critical rules + Adjudication Principles (must-know before first response)
-#   Turn 3  — GM Guidelines (style, pacing, NPC handling)
-#   Turn 6  — Trivial / edge-case rules (nice-to-have once play is underway)
-#   Turn 2  — Act overview (scene intelligence)
-#   Turn 4  — Campaign overview (wider world context)
-_DEFERRED_CONTEXT_FILES = [
-    (0, "GM Operating Rules — Critical",    "00_system_authority/GM_OPERATING_RULES_01_CRITICAL.md"),
-    (1, "Act 01 Overview",                  "03_books/BOOK_01_BURNT_OFFERINGS/act_01/act_overview.md"),
-    (2, "Adjudication Principles",          "00_system_authority/ADJUDICATION_PRINCIPLES.md"),
-    (3, "GM Operating Rules — Guidelines",  "00_system_authority/GM_OPERATING_RULES_02_GUIDELINES.md"),
-    (4, "Campaign Overview",                "02_campaign_setting/CAMPAIGN_OVERVIEW.md"),
-    (6, "GM Operating Rules — Trivial",     "00_system_authority/GM_OPERATING_RULES_03_TRIVIAL.md"),
-]
+# The pattern handles all of these:
+#   (?:skill:\s*)? — optional "skill:" prefix
+#   (?P<skill>[^\n:]+?) — skill name (stops at colon or newline, lazy)
+#   (?:\s*:\s*\d+)? — optional ": <number>" suffix (swallowed, not captured)
+# Regex that matches a %%DELTA%% … %%END%% block in GM output.
+# All fields except npc: and summary: are optional.
+# findall is used — there can be multiple delta blocks per response (one per NPC).
+#
+# Format:
+#   %%DELTA%%
+#   npc: Kendra Deverin
+#   disposition: neutral → suspicious   (optional)
+#   location: Festival Square           (optional)
+#   knowledge: Ani tried to deceive her (optional)
+#   summary: One sentence of what happened.
+#   %%END%%
+_DELTA_BLOCK_RE = re.compile(
+    r'\s*%%DELTA%%\s*\n'
+    r'npc:\s*(?P<npc>[^\n]+)\n'
+    r'(?:disposition:\s*(?P<disposition>[^\n]+)\n)?'
+    r'(?:location:\s*(?P<location>[^\n]+)\n)?'
+    r'(?:knowledge:\s*(?P<knowledge>[^\n]+)\n)?'
+    r'summary:\s*(?P<summary>[^\n]+)\n'
+    r'%%END%%',
+    re.IGNORECASE,
+)
+
+_ROLL_BLOCK_RE = re.compile(
+    r'\s*%%ROLL%%\s*\n'
+    r'(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n'
+    r'dc:\s*(?P<dc>\d+)\s*\n'
+    r'success:\s*(?P<success>[^\n]+)\n'
+    r'failure:\s*(?P<failure>[^\n]+)\n'
+    r'%%END%%\s*',
+    re.IGNORECASE,
+)
+
+# context_queue removed — system prompt is fixed at boot.
+# All dynamic context is injected per-turn via keyword detection (NPC, skill, location).
 
 
 @dataclass
@@ -136,10 +184,9 @@ class GameSession:
     system_prompt: str = ""
     messages: list = field(default_factory=list)
     log_path: Optional[Path] = None
-    # Deferred context: list of (inject_after_turn, label, content)
-    # Chunks whose inject_after_turn <= turn_number are all injected before the LLM call.
-    context_queue: list = field(default_factory=list)
     turn_number: int = 0  # incremented at the start of each player turn
+    # Set when GM requests a dice roll; cleared after resolve_roll() is called.
+    pending_roll: Optional[dict] = None  # {skill, dc, success, failure}
 
 
 _sessions: dict[str, GameSession] = {}
@@ -210,7 +257,10 @@ PARTY
 CURRENT SITUATION
 {situation}
 
-Additional rules and scene details will be provided as the session progresses."""
+DICE ROLLS
+- Do NOT request rolls on your own. Rolls are requested only when the system explicitly instructs you to via a GM DIRECTIVE section below.
+- When no GM DIRECTIVE is present: narrate outcomes directly. Do not append any %%ROLL%% block.
+- When a GM DIRECTIVE orders a roll: follow its instructions exactly."""
 
 
 def create_session(
@@ -225,16 +275,8 @@ def create_session(
 ) -> GameSession:
     if dev_mode:
         system_prompt = _DEV_SYSTEM_PROMPT
-        context_queue: list = []
     else:
         system_prompt = _build_slim_system_prompt(session_number)
-        # Build deferred queue: read files now, inject at the scheduled turn
-        adv_root = _REPO_ROOT / "adventure_path"
-        context_queue = []
-        for inject_after, label, rel_path in _DEFERRED_CONTEXT_FILES:
-            fpath = adv_root / rel_path
-            if fpath.exists():
-                context_queue.append((inject_after, label, fpath.read_text(encoding="utf-8")))
 
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     started = datetime.now()
@@ -251,9 +293,20 @@ def create_session(
         num_ctx=num_ctx,
         num_gpu=num_gpu,
         system_prompt=system_prompt,
-        context_queue=context_queue,
         log_path=_OUTPUTS_DIR / log_name,
     )
+
+    # Delete any delta files left over from a previous run of this session number.
+    # Delta files are session-scoped: session_NNN.md lives next to each NPC's base.md.
+    _npcs_root = _REPO_ROOT / "adventure_path" / "05_npcs"
+    if _npcs_root.exists():
+        _delta_filename = f"session_{session_number:03d}.md"
+        for _npc_dir in _npcs_root.iterdir():
+            if _npc_dir.is_dir():
+                _old_delta = _npc_dir / _delta_filename
+                if _old_delta.exists():
+                    _old_delta.unlink()
+
     _sessions[session.id] = session
 
     mode_label = "dev" if dev_mode else "full"
@@ -317,6 +370,38 @@ def log_roll(session: GameSession, expr: str, rolls: list[int], total: int) -> N
     _log(session, "---\n")
 
 
+def resolve_roll(session: GameSession, rolled: int) -> dict:
+    """Compare *rolled* against the pending roll DC and record the outcome.
+
+    Returns {passed, skill, dc, rolled, outcome} or raises if no roll is pending.
+    Adds the result to session.messages so the LLM stays in context.
+    """
+    if not session.pending_roll:
+        raise ValueError("No pending roll for this session.")
+
+    pr = session.pending_roll
+    passed = rolled >= pr["dc"]
+    outcome = pr["success"] if passed else pr["failure"]
+    label = "SUCCESS" if passed else "FAILURE"
+
+    # Inform the LLM of the result so it has full context on the next turn
+    session.messages.append({
+        "role": "assistant",
+        "content": (
+            f"[{pr['skill']} check — rolled {rolled} vs DC {pr['dc']}: {label}]\n\n"
+            f"{outcome}"
+        ),
+    })
+
+    _log(session, f"\n### [{_ts()}] ROLL RESULT — {pr['skill']} DC {pr['dc']}")
+    _log(session, f"Rolled: {rolled}  |  {label}")
+    _log(session, f"{outcome}\n")
+    _log(session, "---\n")
+
+    session.pending_roll = None
+    return {"passed": passed, "skill": pr["skill"], "dc": pr["dc"], "rolled": rolled, "outcome": outcome}
+
+
 def save_session(session: GameSession) -> Path:
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     _log(session, f"\n## Session Ended — {datetime.now().strftime('%H:%M:%S')}")
@@ -340,14 +425,115 @@ def save_session(session: GameSession) -> Path:
     return out
 
 
+def _build_turn_directive(npc_match, skill_match, location_matches=None) -> str:
+    """Return an explicit GM instruction for the current turn based on what was detected.
+
+    This is injected as the last section of the system prompt so the model
+    sees a clear, unambiguous action item rather than having to infer from
+    the reference data above.
+    """
+    has_npc   = npc_match   is not None
+    has_skill = skill_match is not None
+    loc_npc_names = [m.canonical_name for m in (location_matches or [])]
+
+    # All NPCs active this turn (for delta block instruction)
+    active_npc_names: list[str] = []
+    if has_npc:
+        active_npc_names.append(npc_match.canonical_name)
+    for n in loc_npc_names:
+        if n not in active_npc_names:
+            active_npc_names.append(n)
+
+    roll_template = (
+        "%%ROLL%%\n"
+        "skill: {skill}\n"
+        "dc: [DC as a plain integer — nothing else on this line]\n"
+        "success: [one sentence — what happens if the roll meets or exceeds DC]\n"
+        "failure: [one sentence — what happens if the roll falls below DC]\n"
+        "%%END%%\n"
+        "IMPORTANT: 'skill:' must be exactly the skill name only — no numbers, no modifiers."
+    )
+
+    # Delta block instruction — appended to every directive that involves NPCs.
+    # The GM must write one %%DELTA%% block per NPC after the narrative.
+    # The backend strips these blocks before display and writes them to delta files.
+    _delta_block_instructions = ""
+    if active_npc_names:
+        npc_list_str = ", ".join(active_npc_names)
+        _delta_block_instructions = (
+            f"\n\nNPC STATE TRACKING (MANDATORY)\n"
+            f"After your narrative (and after any %%ROLL%% block), append one %%DELTA%% block "
+            f"for EACH of these NPCs: {npc_list_str}.\n"
+            "Use this exact format — include only fields that changed or are relevant:\n\n"
+            "%%DELTA%%\n"
+            "npc: [exact canonical NPC name]\n"
+            "disposition: [change description, e.g. 'neutral → suspicious']  ← omit if unchanged\n"
+            "location: [current location]  ← omit if not mentioned\n"
+            "knowledge: [what the NPC learned about the party]  ← omit if nothing\n"
+            "summary: [one sentence — what happened with this NPC this turn]\n"
+            "%%END%%\n\n"
+            "These blocks are stripped by the system before display. The player never sees them."
+        )
+
+    if has_skill and has_npc:
+        npc_name   = npc_match.canonical_name
+        skill_name = skill_match.skill_name
+        template   = roll_template.format(skill=skill_name)
+        return (
+            f"THIS TURN: the player is attempting a {skill_name} check against {npc_name}.\n\n"
+            "STEP 1 — Write 1–2 sentences of scene setup (what the character attempts). Do not reveal the outcome.\n\n"
+            f"STEP 2 — Decide: is the outcome genuinely uncertain?\n"
+            f"  YES → Stop the narrative. Copy the block below EXACTLY as the final lines of your response, replacing only the bracketed values:\n\n"
+            f"{template}\n\n"
+            f"  NO (auto-fail / impossible) → Narrate the immediate failure. No roll block.\n\n"
+            "Do NOT write 'What do you do?' if you output the roll block — the roll IS the next action."
+            + _delta_block_instructions
+        )
+
+    elif has_skill:
+        skill_name = skill_match.skill_name
+        template   = roll_template.format(skill=skill_name)
+        return (
+            f"THIS TURN: the player is attempting a {skill_name} check.\n\n"
+            "STEP 1 — Write 1–2 sentences of scene setup. Do not reveal the outcome.\n\n"
+            f"STEP 2 — Decide: is the outcome genuinely uncertain?\n"
+            f"  YES → Stop the narrative. Copy the block below EXACTLY as the final lines of your response, replacing only the bracketed values:\n\n"
+            f"{template}\n\n"
+            f"  NO (auto-succeed / impossible) → Narrate the result directly. No roll block.\n\n"
+            "Do NOT write 'What do you do?' if you output the roll block."
+            + _delta_block_instructions
+        )
+
+    elif has_npc:
+        npc_name = npc_match.canonical_name
+        # NPC only: softer but still instructive — social checks handled by keyword detection above;
+        # this catches edge cases like "talk to / approach / ask" without a skill keyword.
+        return (
+            f"THIS TURN: the player is interacting with {npc_name}.\n"
+            f"Use the {npc_name} profile above.\n"
+            "If this interaction requires a skill check (Diplomacy, Bluff, Intimidate, Sense Motive):\n"
+            "  → Write a 1–2 sentence setup, then output the %%ROLL%% block as described in the SYSTEM ROLL PROTOCOL.\n"
+            "If no check is needed: narrate the NPC's reaction based on their profile and current state.\n"
+            + _delta_block_instructions
+        )
+
+    elif location_matches:
+        loc_keyword = location_matches[0].matched_location
+        npc_names = ", ".join(m.canonical_name for m in location_matches)
+        return (
+            f"THIS TURN: the player is at or heading to '{loc_keyword}'.\n"
+            f"NPCs present at this location: {npc_names}.\n"
+            "Use the NPC profiles above to describe who the party finds there and how they react.\n"
+            "If the player interacts with an NPC in a way that requires a skill check, output the %%ROLL%% block.\n"
+            + _delta_block_instructions
+        )
+
+    # Fallback — should not normally be reached
+    return "Respond to the player's action using the reference context above."
+
+
 def _stream_chat(session: GameSession) -> Generator[str, None, None]:
-    # Advance turn counter and inject all context chunks due at this turn
     session.turn_number += 1
-    due = [entry for entry in session.context_queue if entry[0] < session.turn_number]
-    session.context_queue = [entry for entry in session.context_queue if entry[0] >= session.turn_number]
-    for _, label, chunk in due:
-        session.system_prompt += f"\n\n---\n## {label}\n\n{chunk}"
-        _log(session, f"\n> *[Context injected at turn {session.turn_number}: {label}]*\n")
 
     if session.dev_mode:
         max_hist = _DEV_MAX_HISTORY
@@ -364,6 +550,52 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     if session.provider == "groq" and len(system_content) > _GROQ_MAX_SYSTEM_CHARS:
         system_content = system_content[:_GROQ_MAX_SYSTEM_CHARS] + "\n\n…[later context omitted to stay within payload limit]"
 
+    # ── Context lookup — NPC and/or skill detected in player input ────────────
+    last_user = next(
+        (m["content"] for m in reversed(history) if m["role"] == "user"), ""
+    )
+    injected: list[str] = []
+
+    npc_match = _get_npc_index().detect(last_user)
+    if npc_match:
+        injected.append(_get_npc_index().format_context(npc_match))
+        _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (alias: \"{npc_match.matched_alias}\")]*\n")
+
+    skill_match = _get_skill_index().detect(last_user)
+    if skill_match:
+        injected.append(_get_skill_index().format_context(skill_match))
+        _log(session, f"\n> *[Skill context injected: {skill_match.skill_name} (trigger: \"{skill_match.matched_trigger}\")]*\n")
+
+    # Location detection — inject NPCs found at the mentioned location
+    # Skip any NPC already injected by name above (de-duplicate by canonical name)
+    already_injected = {npc_match.canonical_name} if npc_match else set()
+    location_matches = _get_npc_index().detect_by_location(last_user)
+    location_matches = [m for m in location_matches if m.canonical_name not in already_injected]
+    for loc_match in location_matches:
+        injected.append(_get_npc_index().format_context(loc_match))
+        _log(session, f"\n> *[Location context injected: {loc_match.canonical_name} at \"{loc_match.matched_location}\")]*\n")
+
+
+    if injected:
+        block = "\n\n---\n".join(injected)
+        directive = _build_turn_directive(npc_match, skill_match, location_matches)
+        system_content = (
+            system_content
+            + f"\n\n---\n[CONTEXT FOR THIS TURN]\n{block}"
+            + f"\n\n---\n[GM DIRECTIVE FOR THIS TURN — follow exactly]\n{directive}"
+        )
+
+    # ── Context detection event (dev tooling) ─────────────────────────────────
+    yield "data: " + json.dumps({
+        "type": "context",
+        "npc":              npc_match.canonical_name   if npc_match else None,
+        "npc_trigger":      npc_match.matched_alias    if npc_match else None,
+        "skill":            skill_match.skill_name     if skill_match else None,
+        "skill_trigger":    skill_match.matched_trigger if skill_match else None,
+        "location":         location_matches[0].matched_location if location_matches else None,
+        "location_npcs":    [m.canonical_name for m in location_matches] if location_matches else [],
+    }) + "\n\n"
+
     messages = [{"role": "system", "content": system_content}] + history
     options: dict = {
         "temperature": session.temperature,
@@ -374,26 +606,117 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         options["num_predict"] = _DEV_MAX_TOKENS
     accumulated: list[str] = []
 
-    last_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
     _log(session, f"\n### [{_ts()}] PLAYER")
     _log(session, f"{last_user}\n")
 
-    # ── Full LLM payload (what actually goes to Ollama) ──────────────────────
+    # ── Full LLM payload ──────────────────────────────────────────────────────
     _log(session, f"\n<details><summary>LLM payload — turn {session.turn_number}</summary>\n")
     for msg in messages:
         role = msg["role"].upper()
         _log(session, f"\n**[{role}]**\n```\n{msg['content']}\n```\n")
     _log(session, "</details>\n")
 
+    # Build the exact payload that will be posted — mirrored from _stream_groq / _stream_ollama
     if session.provider == "groq":
-        yield from _stream_groq(session, messages, accumulated)
+        _raw_request: dict = {
+            "model":       session.model,
+            "messages":    messages,
+            "stream":      True,
+            "temperature": session.temperature,
+            "max_tokens":  1024,
+        }
     else:
-        yield from _stream_ollama(session, messages, options, accumulated)
+        _raw_request = {
+            "model":    session.model,
+            "messages": messages,
+            "stream":   True,
+            "options":  options,
+        }
+
+    _llm_start = _time.monotonic()
+    _llm_error: Optional[str] = None
+    try:
+        if session.provider == "groq":
+            yield from _stream_groq(session, messages, accumulated)
+        else:
+            yield from _stream_ollama(session, messages, options, accumulated)
+    except Exception as _llm_exc:
+        _llm_error = str(_llm_exc)
+        raise
+    finally:
+        _llm_ms = int((_time.monotonic() - _llm_start) * 1000)
+        write_api_log(
+            provider=session.provider,
+            session_id=session.id,
+            session_number=session.session_number,
+            turn=session.turn_number,
+            raw_request=_raw_request,
+            response_text="".join(accumulated),
+            duration_ms=_llm_ms,
+            status="error" if _llm_error else "ok",
+            error=_llm_error,
+        )
 
     response_text = "".join(accumulated)
-    session.messages.append({"role": "assistant", "content": response_text})
+
+    # ── Roll block detection ───────────────────────────────────────────────────
+    roll_m = _ROLL_BLOCK_RE.search(response_text)
+    if roll_m:
+        clean_text = _ROLL_BLOCK_RE.sub("", response_text).rstrip()
+        roll_data = {
+            "skill":   roll_m.group("skill").strip(),
+            "dc":      int(roll_m.group("dc")),
+            "success": roll_m.group("success").strip(),
+            "failure": roll_m.group("failure").strip(),
+        }
+        session.pending_roll = roll_data
+        # Patch the already-streamed message to remove the raw block tokens
+        yield f"data: {json.dumps({'type': 'patch_last', 'content': clean_text})}\n\n"
+        yield f"data: {json.dumps({'type': 'roll_request', **roll_data})}\n\n"
+        _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
+        history_text = clean_text  # store without block in LLM history
+    else:
+        history_text = response_text
+
+    # ── Delta block extraction ────────────────────────────────────────────────
+    # The GM is instructed to append %%DELTA%%…%%END%% blocks for every NPC
+    # involved in the turn.  Parse them all, strip from display text, write to
+    # per-NPC delta files.  Errors are silently swallowed — delta writes are
+    # best-effort and must never crash the main flow.
+    _delta_matches = list(_DELTA_BLOCK_RE.finditer(history_text))
+    if _delta_matches:
+        # Strip ALL delta blocks from the text shown to the player and
+        # always send a patch_last so the already-streamed text is updated.
+        history_text = _DELTA_BLOCK_RE.sub("", history_text).strip()
+        yield f"data: {json.dumps({'type': 'patch_last', 'content': history_text})}\n\n"
+
+        for _dm in _delta_matches:
+            try:
+                _npc_name  = (_dm.group("npc") or "").strip()
+                _npc_dir   = _get_npc_index().npc_dir_for(_npc_name)
+                if _npc_dir is None:
+                    continue
+                _delta_path = _npc_dir / f"session_{session.session_number:03d}.md"
+                _ts_now     = datetime.now().strftime("%H:%M:%S")
+                _lines      = [f"## Turn {session.turn_number} — {_ts_now}"]
+                if _dm.group("disposition"):
+                    _lines.append(f"**Disposition:** {_dm.group('disposition').strip()}")
+                if _dm.group("location"):
+                    _lines.append(f"**Location:** {_dm.group('location').strip()}")
+                if _dm.group("knowledge"):
+                    _lines.append(f"**Knowledge:** {_dm.group('knowledge').strip()}")
+                if _dm.group("summary"):
+                    _lines.append(f"**Summary:** {_dm.group('summary').strip()}")
+                _lines.append("")  # trailing blank line between entries
+                with _delta_path.open("a", encoding="utf-8") as _df:
+                    _df.write("\n".join(_lines) + "\n")
+                _log(session, f"\n> *[Delta written: {_npc_name} → {_delta_path.name}]*\n")
+            except Exception:
+                pass  # delta writes are best-effort
+
+    session.messages.append({"role": "assistant", "content": history_text})
     _log(session, f"\n### [{_ts()}] GM")
-    _log(session, f"{response_text}\n")
+    _log(session, f"{history_text}\n")
     _log(session, "---\n")
 
 

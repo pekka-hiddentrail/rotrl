@@ -6,8 +6,9 @@ import InputBar from './components/InputBar'
 import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
 import DicePanel from './components/DicePanel'
+import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
-import { bootSession, sendTurn, endSessionWithRecap, logRoll } from './api'
+import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll } from './api'
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -20,6 +21,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
+  const [lastInput, setLastInput] = useState('')
+  const [rollInjection, setRollInjection] = useState<{ id: number; value: string } | null>(null)
+  const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null } | null>(null)
+  const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
   const appendToken = useCallback((token: string) => {
@@ -67,12 +72,23 @@ export default function App() {
   const handleSend = async (input: string) => {
     if (!session) return
     setError(null)
+    setLastInput(input)
+    setIntent(null)
     setMessages(prev => [...prev, { role: 'player', content: input }])
     setStreaming(true)
 
     try {
       for await (const event of sendTurn(session.id, input)) {
         if (event.type === 'token') appendToken(event.content)
+        if (event.type === 'context') setIntent(event)
+        if (event.type === 'patch_last') {
+          setMessages(prev => {
+            const last = prev[prev.length - 1]
+            if (last?.role === 'gm') return [...prev.slice(0, -1), { ...last, content: event.content }]
+            return prev
+          })
+        }
+        if (event.type === 'roll_request') setPendingRoll(event)
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
@@ -179,13 +195,32 @@ export default function App() {
             <ChatWindow messages={messages} streaming={streaming} />
           )}
 
-          {isBooted && <InputBar onSend={handleSend} disabled={streaming || ending} />}
+          {isBooted && (
+            <InputBar
+              onSend={handleSend}
+              disabled={streaming || ending}
+              injectedValue={rollInjection?.value ?? null}
+              injectionId={rollInjection?.id ?? 0}
+            />
+          )}
         </div>
 
         <DicePanel
           sessionId={session?.id ?? null}
-          onRoll={(expr: string, rolls: number[], total: number) => {
-            if (session) logRoll(session.id, expr, rolls, total)
+          pendingRoll={pendingRoll}
+          onRoll={async (expr: string, rolls: number[], total: number) => {
+            setRollInjection(prev => ({ id: (prev?.id ?? 0) + 1, value: String(total) }))
+            if (!session) return
+            logRoll(session.id, expr, rolls, total)
+            if (pendingRoll) {
+              try {
+                const result = await resolveRoll(session.id, total)
+                setPendingRoll(null)
+                setMessages(prev => [...prev, { role: 'gm', content: result.outcome }])
+              } catch {
+                setPendingRoll(null)
+              }
+            }
           }}
         />
       </div>
@@ -193,6 +228,8 @@ export default function App() {
       {activeCharacter && characterMap[activeCharacter] && (
         <CharacterSheet character={characterMap[activeCharacter]} onClose={() => setActiveCharacter(null)} />
       )}
+
+      <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />
     </div>
   )
 }

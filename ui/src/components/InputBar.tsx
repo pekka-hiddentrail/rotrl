@@ -1,13 +1,23 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 
 interface Props {
   onSend: (input: string) => void
   disabled: boolean
+  injectedValue?: string | null
+  injectionId?: number
 }
 
-export default function InputBar({ onSend, disabled }: Props) {
+export default function InputBar({ onSend, disabled, injectedValue = null, injectionId = 0 }: Props) {
   const [value, setValue] = useState('')
+
+  useEffect(() => {
+    if (!injectedValue || injectionId <= 0) return
+    setValue(prev => {
+      const trimmedPrev = prev.trim()
+      return trimmedPrev ? `${trimmedPrev} ${injectedValue}` : injectedValue
+    })
+  }, [injectedValue, injectionId])
 
   const submit = () => {
     const trimmed = value.trim()

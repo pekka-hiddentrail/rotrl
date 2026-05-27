@@ -37,6 +37,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  padding-bottom: 28px; /* reserve space for the fixed IntentBar */
 }
 
 /* ── Header ─────────────────────────────────────── */
@@ -704,6 +705,55 @@ body {
   overflow-y: auto;
 }
 
+.dice-panel-active {
+  border-left-color: #c9a84c;
+  box-shadow: inset -3px 0 12px #c9a84c18;
+}
+
+/* ── Roll request banner ─────────────────── */
+
+.roll-request-banner {
+  width: 100%;
+  background: linear-gradient(180deg, #2a2010 0%, #1a1408 100%);
+  border: 1px solid #c9a84c44;
+  border-radius: 5px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: roll-pulse 2s ease-in-out infinite;
+}
+
+@keyframes roll-pulse {
+  0%, 100% { border-color: #c9a84c44; box-shadow: none; }
+  50%       { border-color: #c9a84caa; box-shadow: 0 0 10px #c9a84c22; }
+}
+
+.roll-request-skill {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  color: #d4aa50;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.roll-request-dc {
+  font-family: 'Cinzel', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #e8c870;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.roll-request-hint {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #7a6838;
+}
+
 .dice-panel-label {
   font-family: 'Cinzel', serif;
   font-size: 8px;
@@ -1305,4 +1355,122 @@ body {
   color: var(--text-muted);
   padding: 1px 0;
   line-height: 1.5;
+}
+
+/* ── Intent debug bar ────────────────────────── */
+
+.intent-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  height: 28px;
+  background: #0e0b09;
+  border-top: 1px solid #3a2e1e;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.intent-bar-label {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: #6a5840;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.intent-idle {
+  color: #6a5c40;
+}
+
+.intent-input {
+  color: #c8aa70;
+  font-style: italic;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.intent-sep {
+  color: #b08840;
+  flex-shrink: 0;
+}
+
+.intent-detecting {
+  color: #c0a060;
+  font-style: italic;
+  animation: detecting-blink 1s ease-in-out infinite;
+}
+
+@keyframes detecting-blink {
+  0%, 100% { opacity: 0.35; }
+  50%       { opacity: 1; }
+}
+
+/* shown when no context event arrived (backend not running / not restarted) */
+.intent-no-event {
+  color: #885030;
+  font-style: italic;
+  font-size: 10px;
+}
+
+.intent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.intent-tag-kind {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.intent-tag-name {
+  font-weight: 600;
+}
+
+.intent-tag-trigger {
+  font-size: 10px;
+  opacity: 0.75;
+  font-style: italic;
+}
+
+.intent-npc {
+  background: #1c1a30;
+  color: #b8c4f8;
+  border: 1px solid #4a4880;
+}
+
+.intent-skill {
+  background: #141c10;
+  color: #90d060;
+  border: 1px solid #3a5828;
+}
+
+.intent-location {
+  background: #1a1810;
+  color: #d4a840;
+  border: 1px solid #5a4010;
+}
+
+.intent-none-tag {
+  background: transparent;
+  color: #887060;
+  border: 1px solid #504030;
+  font-style: italic;
 }

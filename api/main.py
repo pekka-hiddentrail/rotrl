@@ -7,10 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, log_roll, save_session, stream_boot, stream_end_session, stream_turn
+from api.session_manager import create_session, get_session, log_roll, resolve_roll, save_session, stream_boot, stream_end_session, stream_turn
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -119,6 +119,25 @@ def post_roll(session_id: str, req: RollRequest):
     return {"ok": True}
 
 
+class ResolveRollRequest(BaseModel):
+    rolled: int
+
+
+@app.post("/api/sessions/{session_id}/resolve_roll")
+def post_resolve_roll(session_id: str, req: ResolveRollRequest):
+    """Resolve a pending dice roll: compare against DC, record outcome in history."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.pending_roll:
+        raise HTTPException(status_code=409, detail="No pending roll for this session")
+    try:
+        result = resolve_roll(session, req.rolled)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return result
+
+
 @app.post("/api/sessions/{session_id}/end")
 def end_session(session_id: str):
     """Generate recap + boot files for the next session, then save and close."""
@@ -126,6 +145,35 @@ def end_session(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return StreamingResponse(stream_end_session(session), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
+@app.get("/api/log/api")
+def list_api_logs(limit: int = 50):
+    """List the most recent API call log files (newest first)."""
+    log_dir = _REPO_ROOT / "outputs" / "api_log"
+    if not log_dir.exists():
+        return JSONResponse({"files": []})
+    files = sorted(log_dir.glob("*.json"), key=lambda p: p.name, reverse=True)[:limit]
+    return JSONResponse({
+        "files": [
+            {"name": f.name, "size_bytes": f.stat().st_size}
+            for f in files
+        ]
+    })
+
+
+@app.get("/api/log/api/{filename}")
+def get_api_log(filename: str):
+    """Return a single API call log file as JSON."""
+    # Sanitise: only allow filenames with safe characters (no path traversal)
+    import re as _re
+    if not _re.fullmatch(r"[\w.\-]+\.json", filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = _REPO_ROOT / "outputs" / "api_log" / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+    import json as _json
+    return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
 
 
 @app.delete("/api/sessions/{session_id}")
