@@ -2,30 +2,36 @@
 
 This file is a working backlog for the RotRL automation project. Items are grouped by area and ordered roughly by impact.
 
+**Every time this file is updated, the open items should be at the top of the list, done should be middle and "obsolete" are at the bottom.**
+
 ## High Priority
 
 - [ ] Update player character knowledge files after each session so each PC only retains facts they actually learned in play.
-- [x] Update NPC knowledge and memory state after each session, including attitude shifts, known facts, suspicions, and unresolved goals. *(per-turn `%%DELTA%%` blocks written to `session_NNN.md` per NPC; delta files cleared on session boot)*
 - [ ] Refine LLM output so GM responses are shorter, cleaner, and more mechanically grounded under pressure.
-- [ ] Evaluate whether Ollama should remain the serving layer by comparing latency, determinism, prompt adherence, operational cost, and recovery behavior against alternatives. *(Groq added as a second provider; full comparison not done)*
+- [ ] Refine the initial system prompt and the GM behavior.
+- [ ] Make sure the DCs for rolls are from NPC stats AND supplemented by the skill file.
+- [ ] Remove the functionality where the diceroll goes to the input field. Feed the roll directly to the stream as an input.
+- [x] Update NPC knowledge and memory state after each session, including attitude shifts, known facts, suspicions, and unresolved goals. *(per-turn `%%DELTA%%` blocks written to `session_NNN.md` per NPC; delta files cleared on session boot)*
+- [x] Evaluate whether Ollama should remain the serving layer. *(Groq is now the primary provider — faster, no GPU overhead, better structured-output adherence. Ollama kept as offline fallback only; no further investment planned.)*
 
 ## GM and Session Flow
 
+- [ ] Make player identity loading consistent across code paths; current boot logic still expects some optional files in different locations than the repo uses.
+- [x] Set Groq as the default provider in the GUI; default model `llama-3.1-8b-instant`; dev mode off by default. *(dev mode with Groq only shows `%%` markers — the dev system prompt strips the full structured format, so leaving it on breaks `%%DELTAS%%` etc.)*
 - [x] Split boot-time context from active-play context so the first prompt loads only critical rules and immediate continuity. *(`context_queue` removed; per-turn keyword RAG injection replaces it)*
 - [x] Wire a true normal-session path instead of routing every start through the full boot pipeline. *(boot makes no LLM call; first GM response fires on the player's first turn)*
 - [x] Reduce duplicate verification work in boot, especially where a second LLM call can be replaced with deterministic checks. *(boot LLM call eliminated entirely; delta extraction moved from second Groq call to parsed `%%DELTA%%` block)*
-- [ ] Make player identity loading consistent across code paths; current boot logic still expects some optional files in different locations than the repo uses.
 - [x] Define a post-session pipeline that writes recap, continuity, PC knowledge, and NPC state in one consistent pass. *(`stream_end_session` writes recap + next-session boot file; NPC deltas written per-turn; PC knowledge update still pending)*
 - [x] Enforce a structured response template so the LLM writes `%%NARRATIVE%%`, `%%ROLL%%`, `%%DELTAS%%`, and `%%GENERATE%%` sections consistently. *(`_build_slim_system_prompt` now includes a `RESPONSE STRUCTURE` block with the full template; `_parse_response_sections` + `_parse_bracket_blocks` handle parsing)*
 - [x] Hide internal `%%`-section markers from the player in non-dev mode. *(`_stream_with_narrative_filter` wraps the raw SSE token stream; dev mode passes all tokens, non-dev streams only `%%NARRATIVE%%` content and stops at the next section marker)*
 
 ## NPC Lifecycle and Knowledge
 
+- [ ] Promote auto-created session NPCs to permanent records via a lightweight review workflow (currently requires manual file edit to remove the `session_npc:` flag).
+- [ ] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` somewhere visible (log or UI) so the GM can verify the model caught them.
 - [x] Write structured NPC deltas per turn with multi-line knowledge support. *(`%%DELTAS%%` section uses bracket blocks, one per NPC; `knowledge:` lines collected as a list; `_write_npc_delta` helper extracted)*
 - [x] Auto-create NPC stub when a `%%DELTAS%%` block references an unknown NPC (Layer 2 fallback). *(if `npc_dir_for` returns `None`, `_process_generate_block` is called with stub data before writing the delta)*
 - [x] Detect NPCs introduced in narrative text without any structured block (deferred Layer 3). *(`_detect_narrative_npcs` scans completed narrative for Title Case name pairs, adds to `session.scene_npcs`; stub creation is deferred until the model writes a `%%DELTAS%%` block for that name)*
-- [ ] Promote auto-created session NPCs to permanent records via a lightweight review workflow (currently requires manual file edit to remove the `session_npc:` flag).
-- [ ] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` somewhere visible (log or UI) so the GM can verify the model caught them.
 
 ## Knowledge and State Management
 
@@ -45,12 +51,26 @@ This file is a working backlog for the RotRL automation project. Items are group
 ## Runtime and Tooling
 
 - [ ] Harden backend startup further so orphaned Python child processes and stale listeners are detected and cleaned consistently on Windows.
+- [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
 - [x] Fix the UI startup path and determine why `npm run dev` is currently failing. *(was a port conflict — pinned Vite to port 5173 with `strictPort: true`)*
 - [x] Add one command that boots backend and UI together for local development. *(`python dev.py` — runs tests, then starts API + UI; `--skip-tests` flag to bypass)*
-- [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
+
+## LLM Model Routing
+
+Groq is the primary provider. Ollama is kept as an offline fallback — no active investment planned.
+
+- [ ] Add `first_token_ms` to the API log so first-token latency is captured alongside total response time.
+- [ ] Add `section_format_ok` boolean to the API log (true if `_HAS_SECTION_MARKERS_RE` matched) to track structured-output adherence passively across real sessions.
+- [ ] Route boot and recap generation to `llama-3.3-70b-versatile` and normal turns to `llama-3.1-8b-instant` — add a per-call-type model override in `_stream_groq`.
 
 ## Quality and Testing
 
+- [ ] Test the full end-session SSE stream with mocked Groq — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
+- [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high)*
+- [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(high)*
+- [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low)*
+- [ ] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
+- [ ] Add contract tests for the SSE event shape — assert that every event emitted by boot, turn, and end-session has a `type` field and matches the known union of types. *(low)*
 - [x] Add validation for prompt inputs and generated outputs before they are written to session artifacts.
 - [x] Add focused tests for boot prompt assembly, file loading, and checklist verification.
 - [x] Add regression tests for session-start context resolution and previous-session note discovery.
@@ -60,20 +80,7 @@ This file is a working backlog for the RotRL automation project. Items are group
 - [x] Test Layer 2 NPC auto-stub creation and index re-validation after stub write.
 - [x] Test `_detect_narrative_npcs` — unknown name added to `scene_npcs`, no stub created, exclude-word filtering, already-tracked and already-indexed names skipped, short sentence-starters skipped.
 - ~~[ ] Test deferred context injection timing — verify each chunk lands on the correct turn and that the system prompt grows in the expected order.~~ *(obsolete — `context_queue` and deferred injection removed)*
-- [ ] Test the full end-session SSE stream with mocked Ollama — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
-- [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high)*
 - ~~[ ] Test that dev mode uses the short system prompt and ignores all deferred context files regardless of what exists on disk.~~ *(obsolete — deferred context files no longer exist; dev mode is now about the stream filter, which is tested)*
-- [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(high)*
-- [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low)*
-- [ ] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
-- [ ] Add contract tests for the SSE event shape — assert that every event emitted by boot, turn, and end-session has a `type` field and matches the known union of types. *(low)*
-
-## Ollama Review Questions
-
-- [ ] Measure first-token latency and total response time for boot and normal turns.
-- [ ] Measure prompt adherence across boot, rules adjudication, and recap generation.
-- [ ] Compare local Ollama against at least one hosted model path for reliability and maintenance overhead.
-- [ ] Decide whether different tasks should use different models rather than one model for all work.
 
 ## Nice-to-Have
 

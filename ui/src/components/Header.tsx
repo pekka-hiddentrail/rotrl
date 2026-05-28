@@ -117,7 +117,7 @@ export default function Header({
                 ))}
               </select>
             </label>
-            <label className="control-label dev-toggle" title="Dev mode uses a minimal prompt — fast but no rules">
+            <label className="control-label dev-toggle" title="Dev mode: shows raw %%section%% markers in the stream. With Ollama also caps tokens for speed.">
               <input
                 type="checkbox"
                 checked={devMode}

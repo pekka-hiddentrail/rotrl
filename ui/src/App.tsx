@@ -15,9 +15,9 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [streaming, setStreaming] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
-  const [model, setModel] = useState('qwen2.5:1.5b')
-  const [devMode, setDevMode] = useState(true)
-  const [provider, setProvider] = useState<'ollama' | 'groq'>('ollama')
+  const [model, setModel] = useState('llama-3.1-8b-instant')
+  const [devMode, setDevMode] = useState(false)
+  const [provider, setProvider] = useState<'ollama' | 'groq'>('groq')
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
@@ -189,7 +189,7 @@ export default function App() {
               <div className="splash-runes" aria-hidden="true">ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ᛇ ᛈ ᛉ ᛊ</div>
               <div className="splash-title">Rise of the Runelords</div>
               <div className="splash-sub">Configure your session above and click Boot Session</div>
-              <div className="splash-hint">Make sure Ollama is running: <code>ollama serve</code></div>
+              <div className="splash-hint">Using Groq — make sure <code>GROQ_API_KEY</code> is set in <code>.env</code></div>
             </div>
           )}
 
