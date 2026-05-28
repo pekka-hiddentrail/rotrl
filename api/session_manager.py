@@ -1006,9 +1006,28 @@ def _detect_narrative_npcs(text: str, session: GameSession) -> None:
         _log(session, f"\n> *[Suspected NPC detected in narrative: {_full_name} — added to scene tracking]*\n")
 
 
-def _stream_chat(session: GameSession) -> Generator[str, None, None]:
-    session.turn_number += 1
+def _inject_context(session: GameSession) -> tuple[str, dict]:
+    """Assemble the per-turn system prompt and context metadata.
 
+    Handles steps 1–5 of the turn pipeline:
+    1. Message history trimming to provider/mode limits
+    2. Groq system prompt truncation
+    3. NPC / skill / location keyword detection in the last player message
+    4. scene_npcs accumulation (mutates session.scene_npcs as a side-effect)
+    5. Context injection or delta-reminder appended to system_content
+
+    Returns
+    -------
+    system_content : str
+        Fully assembled system prompt for this turn (base + injected context).
+    context_info : dict
+        Keys for the SSE ``context`` event (npc, npc_trigger, skill,
+        skill_trigger, location, location_npcs) plus ``history`` (the trimmed
+        message list the caller uses to build the LLM payload).
+
+    Note: signature changes in M4 — the function will write to
+    session.context_blocks instead of returning system_content as a string.
+    """
     if session.dev_mode:
         max_hist = _DEV_MAX_HISTORY
     elif session.provider == "groq":
@@ -1017,14 +1036,10 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         max_hist = _FULL_MAX_HISTORY
     history = session.messages[-max_hist:] if len(session.messages) > max_hist else session.messages
 
-    # For Groq: if the system prompt has grown too large (many injected chunks),
-    # keep the *beginning* (base prompt + earliest/most critical rules) and drop
-    # later injected chunks.  Base prompt is always the most important part.
     system_content = session.system_prompt
     if session.provider == "groq" and len(system_content) > _GROQ_MAX_SYSTEM_CHARS:
         system_content = system_content[:_GROQ_MAX_SYSTEM_CHARS] + "\n\n…[later context omitted to stay within payload limit]"
 
-    # ── Context lookup — NPC and/or skill detected in player input ────────────
     last_user = next(
         (m["content"] for m in reversed(history) if m["role"] == "user"), ""
     )
@@ -1040,8 +1055,6 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         injected.append(_get_skill_index().format_context(skill_match))
         _log(session, f"\n> *[Skill context injected: {skill_match.skill_name} (trigger: \"{skill_match.matched_trigger}\")]*\n")
 
-    # Location detection — inject NPCs found at the mentioned location
-    # Skip any NPC already injected by name above (de-duplicate by canonical name)
     already_injected = {npc_match.canonical_name} if npc_match else set()
     location_matches = _get_npc_index().detect_by_location(last_user)
     location_matches = [m for m in location_matches if m.canonical_name not in already_injected]
@@ -1049,10 +1062,6 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         injected.append(_get_npc_index().format_context(loc_match))
         _log(session, f"\n> *[Location context injected: {loc_match.canonical_name} at \"{loc_match.matched_location}\"]*\n")
 
-    # ── Track scene NPCs across turns ─────────────────────────────────────────
-    # Accumulate any NPC detected this turn into the session-level scene list.
-    # This ensures the %%DELTAS%% instruction keeps firing on later turns even
-    # when the player doesn't name the NPC explicitly.
     if npc_match and npc_match.canonical_name not in session.scene_npcs:
         session.scene_npcs.append(npc_match.canonical_name)
     for _loc in location_matches:
@@ -1068,8 +1077,6 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             + f"\n\n---\n[GM DIRECTIVE FOR THIS TURN — follow exactly]\n{directive}"
         )
     elif session.scene_npcs:
-        # No new context detected this turn, but NPCs remain active in the scene.
-        # Append a lightweight delta reminder so the GM keeps writing state blocks.
         _npc_list = ", ".join(session.scene_npcs)
         system_content += (
             f"\n\n---\n[GM DIRECTIVE FOR THIS TURN — follow exactly]\n"
@@ -1080,15 +1087,34 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         )
         _log(session, f"\n> *[Delta reminder injected for scene NPCs: {_npc_list}]*\n")
 
+    context_info: dict = {
+        "npc":           npc_match.canonical_name    if npc_match else None,
+        "npc_trigger":   npc_match.matched_alias     if npc_match else None,
+        "skill":         skill_match.skill_name      if skill_match else None,
+        "skill_trigger": skill_match.matched_trigger if skill_match else None,
+        "location":      location_matches[0].matched_location if location_matches else None,
+        "location_npcs": [m.canonical_name for m in location_matches] if location_matches else [],
+        "history":       history,
+    }
+
+    return system_content, context_info
+
+
+def _stream_chat(session: GameSession) -> Generator[str, None, None]:
+    session.turn_number += 1
+
+    system_content, context_info = _inject_context(session)
+    history = context_info["history"]
+
     # ── Context detection event (dev tooling) ─────────────────────────────────
     yield "data: " + json.dumps({
-        "type": "context",
-        "npc":              npc_match.canonical_name   if npc_match else None,
-        "npc_trigger":      npc_match.matched_alias    if npc_match else None,
-        "skill":            skill_match.skill_name     if skill_match else None,
-        "skill_trigger":    skill_match.matched_trigger if skill_match else None,
-        "location":         location_matches[0].matched_location if location_matches else None,
-        "location_npcs":    [m.canonical_name for m in location_matches] if location_matches else [],
+        "type":          "context",
+        "npc":           context_info["npc"],
+        "npc_trigger":   context_info["npc_trigger"],
+        "skill":         context_info["skill"],
+        "skill_trigger": context_info["skill_trigger"],
+        "location":      context_info["location"],
+        "location_npcs": context_info["location_npcs"],
     }) + "\n\n"
 
     messages = [{"role": "system", "content": system_content}] + history
@@ -1101,6 +1127,9 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         options["num_predict"] = _DEV_MAX_TOKENS
     accumulated: list[str] = []
 
+    last_user = next(
+        (m["content"] for m in reversed(history) if m["role"] == "user"), ""
+    )
     _log(session, f"\n### [{_ts()}] PLAYER")
     _log(session, f"{last_user}\n")
 
