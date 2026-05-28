@@ -118,7 +118,8 @@ Navigate to **http://localhost:5173** in your browser.
 3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
 4. **Roll dice** when prompted; the UI shows a dice panel and feeds the result back automatically
 5. **View Log** — opens the live session log in a new browser tab
-6. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn
+6. **Purge NPCs** — deletes all auto-created session NPC directories (dot-prefixed); useful between sessions to clear temporaries before promoting any keepers
+7. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn
 
 ### Response sections
 
@@ -142,6 +143,7 @@ In **dev mode** all markers are visible in the stream so you can see the raw out
 | `sessions/session_NNN/recap.md` | On End Session | Player-facing recap for the next session's intro card |
 | `sessions/session_NNN+1/boot.md` | On End Session | GM-facing continuity brief for the next session's system prompt |
 | `adventure_path/05_npcs/<slug>/session_NNN.md` | Per turn (per NPC) | NPC disposition, location, knowledge written after each interaction |
+| `adventure_path/05_npcs/.<slug>/` | On `%%GENERATE%%` | Session-NPC stub directory (dot-prefix = temporary). Rename to `<slug>/` to promote to permanent. Purge all via **Purge NPCs** button or `DELETE /api/npcs/session`. |
 
 ---
 
@@ -235,6 +237,8 @@ rotrl/
 | `POST` | `/api/sessions/{id}/resolve_roll` | Resolve pending roll: compare `rolled` against DC, record outcome |
 | `POST` | `/api/sessions/{id}/end` | Generate recap + next-session boot; streams status events via SSE |
 | `DELETE` | `/api/sessions/{id}` | Discard session without recap (emergency close) |
+| `GET`  | `/api/npcs/session` | List all session NPC slugs (dot-prefixed directories) |
+| `DELETE` | `/api/npcs/session` | Purge all session NPC directories; invalidates the NPC index |
 | `GET`  | `/api/log/api` | List recent LLM call log files (newest first, optional `?limit=N`) |
 | `GET`  | `/api/log/api/{filename}` | Return a single LLM call log as JSON |
 
@@ -308,7 +312,7 @@ POST /api/sessions/{id}/turn  (repeated each exchange)
        │    _stream_with_narrative_filter() → only %%NARRATIVE%% reaches player
        ├─ parse complete response:
        │    %%ROLL%%     → set pending_roll, yield roll_request event
-       │    %%GENERATE%% → create new NPC stub in adventure_path/05_npcs/
+       │    %%GENERATE%% → create new NPC stub in adventure_path/05_npcs/.<slug>/
        │    %%DELTAS%%   → write NPC status + knowledge files
        └─ yield patch_last (non-dev), append to history
 
@@ -386,6 +390,7 @@ ollama list                            # confirm model is pulled
 | Per-turn NPC RAG (keyword lookup + profile injection) | ✅ Complete |
 | Per-turn skill RAG (trigger detection + rules injection) | ✅ Complete |
 | NPC stub auto-creation from `%%GENERATE%%` blocks | ✅ Complete |
+| Session NPC lifecycle (dot-prefix dirs, UI purge button) | ✅ Complete |
 | NPC state persistence (session_NNN.md per NPC per session) | ✅ Complete |
 | End-session recap + next-session boot generation | ✅ Complete |
 | Dice roll request + resolution (UI panel + API) | ✅ Complete |
@@ -399,7 +404,6 @@ ollama list                            # confirm model is pulled
 | Player character — Yanyeeku (Kitsune Sorcerer L1) | ✅ Complete |
 | Roll outcome fed into next GM turn directive | 🔴 Not done — GM narrates blind after resolve |
 | Location tracking (`07_locations/` analog to NPCs) | 🔴 Not started |
-| Facet injection (FACET_*.md into scene context) | 🔴 Not started |
 | Session crash recovery (in-memory sessions lost on restart) | 🔴 Not started |
 | Acts II–III of Burnt Offerings | 🔴 Placeholder |
 | Player agent (autonomous PC AI) | 🔴 Not started |

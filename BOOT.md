@@ -98,8 +98,9 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 │      ├─ %%GENERATE%% section (processed before %%DELTAS%% so stubs are findable)
 │      │    for each bracket block:
 │      │      if type == "location": log and skip
-│      │      else: create adventure_path/05_npcs/<slug>/base.md
+│      │      else: create adventure_path/05_npcs/.<slug>/base.md   ← dot-prefix = session NPC
 │      │            invalidate NPC index
+│      │            (rename dir to <slug>/ to promote to permanent)
 │      │
 │      ├─ %%DELTAS%% section
 │      │    for each bracket block:
@@ -177,7 +178,7 @@ POST /api/sessions/{id}/end
 |------|-----------|------|
 | `outputs/*.log.md` | `_log()` | Continuously — every turn |
 | `outputs/api_log/*.json` | `write_api_log()` | After each LLM call |
-| `adventure_path/05_npcs/<slug>/base.md` | `_process_generate_block()` | When `%%GENERATE%%` names a new NPC |
+| `adventure_path/05_npcs/.<slug>/base.md` | `_process_generate_block()` | When `%%GENERATE%%` names a new NPC (dot-prefix = session NPC, purgeable) |
 | `adventure_path/05_npcs/<slug>/session_NNN.md` | `_write_npc_delta()` | When `%%DELTAS%%` references an NPC |
 | `adventure_path/05_npcs/<slug>/knowledge.md` | `_write_npc_delta()` | When `%%DELTAS%%` includes `knowledge:` lines |
 | `sessions/session_NNN/recap.md` | `stream_end_session()` | On End Session |
@@ -196,6 +197,10 @@ Session number: N
 
 CORE BEHAVIOR
 ...5 rules about description, player agency, lore fidelity...
+
+GM STYLE
+...7 style directives — NPC demeanor, location detail, rules rulings, player drift,
+   events, inventory, travel...
 
 PARTY
   - Yanyeeku (Kitsune Sorcerer / Crossblooded)

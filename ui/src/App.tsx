@@ -8,7 +8,7 @@ import CharacterSheet from './components/CharacterSheet'
 import DicePanel from './components/DicePanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
-import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll } from './api'
+import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs } from './api'
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -144,6 +144,16 @@ export default function App() {
     if (session) window.open(`/api/sessions/${session.id}/log`, '_blank')
   }
 
+  const handlePurgeNpcs = async () => {
+    if (!window.confirm('Delete all session NPCs (dot-prefixed directories)? This cannot be undone.')) return
+    try {
+      const { purged } = await purgeSessionNpcs()
+      setMessages(prev => [...prev, { role: 'gm', content: `Session NPCs purged: ${purged} ${purged === 1 ? 'directory' : 'directories'} removed.` }])
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   const handleCharacterSelect = (id: string) => {
     setActiveCharacter(prev => (prev === id ? null : id))
   }
@@ -170,6 +180,7 @@ export default function App() {
         onBoot={handleBoot}
         onEnd={handleEnd}
         onViewLog={handleViewLog}
+        onPurgeNpcs={handlePurgeNpcs}
       />
 
       {error && <div className="error-bar">{error}</div>}

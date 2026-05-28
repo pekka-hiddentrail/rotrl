@@ -28,6 +28,7 @@ interface Props {
   onBoot: () => void
   onEnd: () => void
   onViewLog: () => void
+  onPurgeNpcs: () => void
 }
 
 const RUNE_CHARS = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ'
@@ -43,7 +44,7 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 
 export default function Header({
   session, streaming, ending, sessionNumber, model, devMode, provider,
-  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onViewLog,
+  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onViewLog, onPurgeNpcs,
 }: Props) {
   const isBooted = session !== null
   const locked = streaming || ending
@@ -138,6 +139,9 @@ export default function Header({
             </span>
             <button onClick={onViewLog} disabled={ending} className="btn btn-secondary">
               View Log
+            </button>
+            <button onClick={onPurgeNpcs} disabled={ending || streaming} className="btn btn-secondary" title="Delete all auto-created session NPCs">
+              Purge NPCs
             </button>
             <button onClick={onEnd} disabled={ending} className="btn btn-danger">
               {ending ? 'Ending…' : 'End Session'}

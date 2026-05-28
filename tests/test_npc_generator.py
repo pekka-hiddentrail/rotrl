@@ -254,7 +254,7 @@ def test_generate_block_creates_stub(tmp_path, monkeypatch):
     )
     sm._process_generate_block(body, session)
 
-    stub = tmp_path / "adventure_path" / "05_npcs" / "gorm_hysys" / "base.md"
+    stub = tmp_path / "adventure_path" / "05_npcs" / ".gorm_hysys" / "base.md"
     assert stub.exists(), "base.md should be created"
     text = stub.read_text(encoding="utf-8")
     assert "# Gorm Hysys" in text
@@ -392,7 +392,7 @@ def test_delta_loop_creates_stub_for_unknown_npc(tmp_path, monkeypatch):
         stub_body += f"location: {fields['location']}\n"
     sm._process_generate_block(stub_body, session)
 
-    stub = tmp_path / "adventure_path" / "05_npcs" / "grimbold_ironfist" / "base.md"
+    stub = tmp_path / "adventure_path" / "05_npcs" / ".grimbold_ironfist" / "base.md"
     assert stub.exists(), "Layer 2 must create a stub from delta data"
     text = stub.read_text(encoding="utf-8")
     assert "# Grimbold Ironfist" in text

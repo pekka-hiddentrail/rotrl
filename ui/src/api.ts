@@ -69,6 +69,12 @@ export async function resolveRoll(
   return res.json()
 }
 
+export async function purgeSessionNpcs(): Promise<{ purged: number }> {
+  const res = await fetch(`${BASE}/npcs/session`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Purge session NPCs failed (${res.status})`)
+  return res.json()
+}
+
 export async function logRoll(
   sessionId: string,
   expr: string,

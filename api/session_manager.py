@@ -816,7 +816,8 @@ def _process_generate_block(body: str, session: GameSession) -> None:
         return
 
     npc_slug = _slugify(npc_name)
-    npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / npc_slug
+    # Dot-prefix marks this as a session NPC (temporary, purgeable from the UI).
+    npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / f".{npc_slug}"
     npc_dir.mkdir(parents=True, exist_ok=True)
 
     loc_str   = fields.get("location", "")
@@ -835,6 +836,37 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
     _log(session, f"\n> *[New NPC stub created: {npc_name} → {npc_dir.name}/base.md]*\n")
 
+
+def list_session_npcs() -> list[str]:
+    """Return the slug names of all session NPCs (dot-prefixed directories)."""
+    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    if not npc_base.exists():
+        return []
+    return sorted(
+        d.name[1:]  # strip the leading dot to expose the slug
+        for d in npc_base.iterdir()
+        if d.is_dir() and d.name.startswith(".")
+    )
+
+
+def purge_session_npcs() -> int:
+    """Delete all session NPC directories (dot-prefixed).
+
+    Returns the number of directories removed.  The NPC index is invalidated
+    so the next turn no longer injects profiles for purged NPCs.
+    """
+    import shutil as _shutil
+    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    if not npc_base.exists():
+        return 0
+    count = 0
+    for d in list(npc_base.iterdir()):
+        if d.is_dir() and d.name.startswith("."):
+            _shutil.rmtree(d)
+            count += 1
+    if count:
+        _invalidate_npc_index()
+    return count
 
 
 def _stream_with_narrative_filter(

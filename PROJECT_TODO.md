@@ -24,7 +24,6 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 - [ ] Make player identity loading consistent across code paths; current boot logic still expects some optional files in different locations than the repo uses.
 - [ ] Route boot and recap generation to `llama-3.3-70b-versatile` and normal turns to `llama-3.1-8b-instant` — add a per-call-type model override in `_stream_groq`.
-- [ ] Facet injection — `facets/FACET_*.md` files (combat, travel, skill checks, conditions, saving throws, etc.) exist but are never referenced by any Python code. Inject relevant facets as system context based on scene type: if `%%ROLL%%` pending → inject matching `FACET_SKILL_CHECK.md`; if `in_combat` flag → inject `FACET_COMBAT.md`, `FACET_CONDITIONS.md`. Lightweight: inject body the same way `skill_lookup` injects rules text.
 - [x] Split skill files into GM payload and reader reference sections. *(`<!-- REFERENCE -->` separator added to all five skill files; `_parse_skill_file` stops at the marker — payload ~26–39% smaller per injection, reader docs preserved below the line.)*
 - [x] Set Groq as the default provider in the GUI; default model `llama-3.1-8b-instant`; dev mode off by default. *(dev mode with Groq only shows `%%` markers — the dev system prompt strips the full structured format, so leaving it on breaks `%%DELTAS%%` etc.)*
 - [x] Split boot-time context from active-play context so the first prompt loads only critical rules and immediate continuity. *(`context_queue` removed; per-turn keyword RAG injection replaces it)*
@@ -38,7 +37,7 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## NPC Lifecycle and Knowledge
 
-- [ ] Promote auto-created session NPCs to permanent records via a lightweight review workflow (currently requires manual file edit to remove the `session_npc:` flag).
+- [x] Promote auto-created session NPCs to permanent records via a lightweight review workflow. *(session NPCs now live in dot-prefixed directories under `05_npcs/`; rename the directory to drop the dot to promote. UI "Purge NPCs" button bulk-deletes all dot-prefixed dirs via `DELETE /api/npcs/session`.)*
 - [ ] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` somewhere visible (log or UI) so the GM can verify the model caught them.
 - [ ] Write `%%GENERATE%%` summary field to NPC knowledge — the `summary:` field in `%%GENERATE%%` blocks is parsed but silently dropped. Write it as the first entry in the new NPC's `knowledge.md`: `- [world] {summary} — S{session:03d} T000`. Bootstraps the NPC's knowledge file immediately.
 - [ ] Single-word NPC name detection — `_detect_narrative_npcs` regex requires two Title Case words (`r'\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b'`). Known NPCs with single-word canonical names (e.g., "Aldern", "Lonjiku") are never auto-tracked. Fix: add an exact-match pass against `_get_npc_index().known_npcs` canonical names; keep the two-word heuristic for unknown-NPC suspicion only.

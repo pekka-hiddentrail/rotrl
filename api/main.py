@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, log_roll, resolve_roll, save_session, stream_boot, stream_end_session, stream_turn
+from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_roll, save_session, stream_boot, stream_end_session, stream_turn
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -177,6 +177,19 @@ def get_api_log(filename: str):
         raise HTTPException(status_code=404, detail="Log file not found")
     import json as _json
     return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
+
+
+@app.get("/api/npcs/session")
+def get_session_npcs():
+    """List all auto-created session NPC slugs (dot-prefixed directories)."""
+    return {"npcs": list_session_npcs()}
+
+
+@app.delete("/api/npcs/session")
+def delete_session_npcs():
+    """Purge all session NPC directories and invalidate the NPC index."""
+    count = purge_session_npcs()
+    return {"purged": count}
 
 
 @app.delete("/api/sessions/{session_id}")
