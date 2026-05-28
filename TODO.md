@@ -10,7 +10,9 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 - [ ] Make sure the DCs for rolls are from NPC stats AND supplemented by the skill file.
 - [ ] Feed resolved roll outcome into the next GM turn directive — `resolve_roll()` returns pass/fail but this result is never injected into the next turn's `system_content`, so the GM is narrating blind. *(closed by M5 — roll turns in history)*
-- [ ] Remove the functionality where the diceroll goes to the input field. Feed the roll directly to the stream as an input. *(addressed by M5)*
+- [x] Remove the functionality where the diceroll goes to the input field. *(Removed `rollInjection` state and InputBar injection props; roll now appears as a local player speech bubble in the chat showing raw roll, bonus, and final total. Not sent to backend as a turn.)*
+- [x] **Dice skill bonus — auto-apply modifier** — when a pending skill roll is active and an active character is set, auto-compute `finalTotal = d20 + skillModifier` and submit that to `/resolve_roll`. Show breakdown in roll history, e.g. `1d20(13) + Perception +7 = 20 vs DC 18` (dice-panel.feature AC-007).
+- [x] **Dice skill bonus — toggle and fallback** — add "Auto-apply skill bonus" toggle (default ON) in the dice panel. When unmapped skill or no active character, fall back to raw roll and show a visible indicator (AC-008, AC-009, AC-010, AC-011).
 - [ ] Update player character knowledge files after each session so each PC only retains facts they actually learned in play.
 - [x] Refine LLM output so GM responses are shorter, cleaner, and more mechanically grounded under pressure.
 - [x] Update NPC knowledge and memory state after each session, including attitude shifts, known facts, suspicions, and unresolved goals. *(per-turn `%%DELTA%%` blocks written to `session_NNN.md` per NPC; delta files cleared on session boot)*
@@ -65,6 +67,10 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## Character Data and UI Content
 
+- [ ] Open the "character action menu" to the right side of the character avatar.
+- [x] **Active character UX — sidebar split** — split the avatar click action into two: "Set Active" and "Open Sheet" (character-system.feature AC-007). Rename existing `activeCharacter` state in `App.tsx` to avoid collision with sheet-open state.
+- [x] **Active character UX — halo and input badge** — show halo/ring on the active avatar in the sidebar (AC-008). Show small portrait badge and "Speaking as \<Name\>" label near the input bar (AC-009).
+- [x] **Active character UX — speaker tag in chat** — prefix sent input with `@<Name>:` when an active character is set; render without prefix when no character is active (AC-010).
 - [ ] Normalize all player JSON files to one agreed UI schema and keep them synchronized with the markdown sheets.
 - [ ] Audit Ani's data and other player records for internal inconsistencies before relying on them in UI or prompts.
 - [ ] Add a small sync tool or documented workflow for copying approved sheet changes into UI JSON files.
@@ -135,12 +141,19 @@ Do these in order — each step is independently shippable and leaves the system
 ## Quality and Testing
 
 - [ ] **E2E — Playwright UI test suite** — add Playwright to `ui/` (`npm install -D @playwright/test`). Cover the seven key flows with a mocked backend (MSW or a lightweight FastAPI fixture): (1) boot → session badge appears; (2) send turn → GM message streams in; (3) `roll_request` event → dice panel activates; (4) end session → chat clears; (5) Kill button on stuck ending → inline confirm → UI resets to pre-boot; (6) Purge NPCs button → inline confirm → toast notification; (7) character sidebar → sheet modal opens. These are the regression cases that break silently on UI refactors and are invisible to pytest.
+- [ ] **Vitest — DicePanel AC coverage** — add component tests for `dice-panel.feature` AC-001 through AC-011: queue accumulation, roll history limit/latest highlight, `/roll` payload, pending roll banner, `/resolve_roll` pass/fail handling, auto skill bonus, raw-roll fallbacks, toggle persistence, and normalized skill lookup.
+- [ ] **Vitest — Character data and sheet AC coverage** — add tests for `character-system.feature` AC-001 through AC-006 and remaining AC-010/AC-011 integration: static JSON loading/failure, HP bar colors, sheet modal close behavior, stat/spell tooltips, spell grouping, active speaker persistence, and backend/chat prefixing in `App`.
+- [ ] **Vitest — Header/session controls AC coverage** — add tests for `session-controls.feature` AC-001 through AC-008 plus `llm-providers.feature` AC-001/AC-005: provider/model switching, pre/post-boot control visibility, boot disabled state, View Log target, purge inline confirm/toast, rate-limit badge, and Kill inline confirm/abort reset.
+- [ ] **Vitest — Chat and turn UI AC coverage** — add tests for `chat-display.feature` AC-001 through AC-006 and `player-turn.feature` AC-001/AC-005: immediate player bubble, thinking indicator, token append/cursor, intro markdown rendering, autoscroll, streaming disabled state, and end-session status bubble updates.
+- [ ] **Vitest — IntentBar AC coverage** — add component tests for `intent-bar.feature` AC-001 through AC-005: 52-character truncation, NPC/skill/location tags, null tags, detecting state, and no-context-event diagnostic.
+- [ ] **Vitest — App SSE integration smoke tests** — with mocked API async iterators, cover boot intro/session setup, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), error bar handling, and session end cleanup.
 - [ ] Test the full end-session SSE stream with mocked Groq — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
 - [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high)*
 - [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(high)*
 - [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low)*
 - [ ] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
 - [ ] Add contract tests for the SSE event shape — assert that every event emitted by boot, turn, and end-session has a `type` field and matches the known union of types. *(low)*
+- [x] Document Vitest setup, commands, and current UI component tests. *(`README.md`; `ui/vitest.config.ts`; `ui/src/test/setup.ts`; `ui/src/components/__tests__/InputBar.test.tsx` and `CharacterSidebar.test.tsx` — 30 tests)*
 - [x] Add validation for prompt inputs and generated outputs before they are written to session artifacts.
 - [x] Add focused tests for boot prompt assembly, file loading, and checklist verification.
 - [x] Add regression tests for session-start context resolution and previous-session note discovery.

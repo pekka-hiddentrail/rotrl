@@ -67,7 +67,7 @@ ollama pull qwen3:4b
 python dev.py
 ```
 
-This runs the full test suite, then starts the backend and UI together with colour-coded output. Press **Ctrl-C** to stop both.
+This runs the backend pytest suite, then starts the backend and UI together with colour-coded output. Press **Ctrl-C** to stop both. Run the frontend Vitest suite separately with `cd ui && npm run test`.
 
 ```bash
 python dev.py --skip-tests   # skip pytest and start immediately
@@ -116,10 +116,14 @@ Navigate to **http://localhost:5173** in your browser.
 1. **Configure** — pick provider (`groq` recommended), model, session number; uncheck **Dev** for real play
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
 3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
-4. **Roll dice** when prompted; the UI shows a dice panel and feeds the result back automatically
-5. **View Log** — opens the live session log in a new browser tab (shown during active session)
+4. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
+5. **View Log** — opens the live session log in a new browser tab (shown during an active session)
 6. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
-7. **Purge NPCs** — shown on the pre-boot screen only; deletes all auto-created session NPC stub directories (dot-prefixed). Inline confirmation, then a toast shows how many were removed
+7. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
+
+### Rate limit badge
+
+After each Groq turn, a compact badge appears in the header showing remaining per-minute quota (e.g. `⚡ 4,500/6,000 TPM · 28/30 RPM`). Hover for reset times. When the daily limit is exhausted, the error message from Groq is surfaced directly in the UI.
 
 ### Response sections
 
@@ -143,7 +147,7 @@ In **dev mode** all markers are visible in the stream so you can see the raw out
 | `sessions/session_NNN/recap.md` | On End Session | Player-facing recap for the next session's intro card |
 | `sessions/session_NNN+1/boot.md` | On End Session | GM-facing continuity brief for the next session's system prompt |
 | `adventure_path/05_npcs/<slug>/session_NNN.md` | Per turn (per NPC) | NPC disposition, location, knowledge written after each interaction |
-| `adventure_path/05_npcs/.<slug>/` | On `%%GENERATE%%` | Session-NPC stub directory (dot-prefix = temporary). Rename to `<slug>/` to promote to permanent. Purge all via **Purge NPCs** button or `DELETE /api/npcs/session`. |
+| `adventure_path/05_npcs/.<slug>/` | On `%%GENERATE%%` | Session-NPC stub directory (dot-prefix = temporary). Rename to `<slug>/` to promote to permanent. Purge all via **Purge NPCs** or `DELETE /api/npcs/session`. |
 
 ---
 
@@ -175,13 +179,14 @@ rotrl/
 │
 ├── ui/                            # Vite 5 + React 18 + TypeScript
 │   └── src/
-│       ├── App.tsx
-│       ├── api.ts                 # SSE fetch helpers
+│       ├── App.tsx                # Session state, SSE event handling
+│       ├── api.ts                 # SSE fetch helpers + SseEvent types
 │       ├── types.ts
 │       └── components/
-│           ├── Header.tsx         # Session controls, provider/model/dev toggles
+│           ├── Header.tsx         # Logo + controls (column layout); rate-limit badge
 │           ├── ChatWindow.tsx     # Message list + thinking indicator
-│           ├── InputBar.tsx       # Player input
+│           ├── InputBar.tsx       # Player input textarea
+│           ├── IntentBar.tsx      # NPC/skill context display (fixed bottom)
 │           ├── CharacterSidebar.tsx
 │           ├── CharacterSheet.tsx
 │           └── DicePanel.tsx      # Dice roller — feeds result back to API
@@ -209,13 +214,16 @@ rotrl/
 │       ├── intro.md               # Player-facing intro card
 │       └── recap.md               # Generated at end of prior session
 │
+├── specs/                         # Feature specs (Gherkin-style ACs)
+│
 ├── outputs/                       # Runtime-generated — git-ignored
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
 ├── tests/                         # 309 pytest tests
+├── ui/src/components/__tests__/    # 30 Vitest + Testing Library component tests
 │
-├── dev.py                         # One-command dev startup (tests → API + UI)
+├── dev.py                         # One-command dev startup (pytest → API + UI)
 ├── start_backend.ps1              # Windows: start FastAPI backend
 ├── start_ui.ps1                   # Windows: start Vite dev server
 ├── requirements.txt
@@ -228,6 +236,7 @@ rotrl/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `GET`  | `/api/health` | Liveness check — returns `{"status": "ok"}` |
 | `GET`  | `/api/intro` | Player-facing intro card for a session (intro.md → recap.md fallback) |
 | `POST` | `/api/sessions` | Create session, build system prompt; streams `done` SSE event |
 | `GET`  | `/api/sessions/{id}` | Session info (model, message count) |
@@ -259,22 +268,30 @@ All streaming endpoints use Server-Sent Events. Each event is a JSON object with
 
 ## Testing
 
-The backend test suite uses `pytest` and FastAPI's `TestClient`.
+There are two local test layers: backend `pytest` tests and frontend `Vitest` component tests.
 
 ```bash
-python -m pytest -q               # run all tests
+python -m pytest -q               # run all backend tests
 python -m pytest tests/test_groq_provider.py -q   # run one file
 ```
 
-**309 tests passing** across 16 test files:
+```bash
+cd ui
+npm run test                      # run all frontend Vitest tests once
+npm run test:watch                # watch frontend tests during UI work
+```
+
+`python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest, so use `npm run test` from `ui/` before merging frontend changes.
+
+**Backend:** 309 pytest tests passing across 16 test files:
 
 | File | Covers |
 |------|--------|
-| `test_sessions.py` | Session lifecycle endpoints, boot, turn, delete, purge session NPCs |
+| `test_sessions.py` | Session lifecycle endpoints, boot, turn, delete |
 | `test_turns.py` | Turn streaming, Ollama mock, error cases |
 | `test_boot_prompt.py` | System prompt assembly, party extraction, situation loading, delta cleanup |
 | `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, `stream_options` 400 fallback, streaming, max-history, rate-limit SSE event |
-| `test_api_logger.py` | LLM call log file format, summary truncation |
+| `test_api_logger.py` | LLM call log file format, usage field, summary truncation |
 | `test_api_logs.py` | Log list and fetch endpoints, path traversal rejection |
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
@@ -286,6 +303,13 @@ python -m pytest tests/test_groq_provider.py -q   # run one file
 | `test_npc_generator.py` | `generate_base_md`, NPC stub creation |
 | `test_character_data.py` | Character sheet loading |
 | `test_intro.py` | Intro file resolution and fallback |
+
+**Frontend:** 30 Vitest tests passing across 2 test files:
+
+| File | Covers |
+|------|--------|
+| `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
+| `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |
 
 ---
 
@@ -311,6 +335,7 @@ POST /api/sessions/{id}/turn  (repeated each exchange)
        ├─ trim message history to provider limit
        ├─ stream LLM response token-by-token
        │    _stream_with_narrative_filter() → only %%NARRATIVE%% reaches player
+       │    Groq: capture x-ratelimit-* headers → emit rate_limits SSE event
        ├─ parse complete response:
        │    %%ROLL%%     → set pending_roll, yield roll_request event
        │    %%GENERATE%% → create new NPC stub in adventure_path/05_npcs/.<slug>/
@@ -351,9 +376,6 @@ session state          ← Live NPC files, knowledge, recap
 
 ## Troubleshooting
 
-### End Session is stuck on "Ending…"
-The recap/boot LLM calls can hang if Groq is overloaded or the request times out. Click **Kill** next to the "Ending…" button — it aborts the HTTP request and force-resets the UI. The session JSON notes file and all per-turn NPC deltas are already on disk; only the recap and boot files for the next session will be missing.
-
 ### "Boot failed" or session fails to create
 - Check the backend is running on port 8000
 - On Windows: use `start_backend.ps1` — it kills stale processes before starting
@@ -365,6 +387,9 @@ The recap/boot LLM calls can hang if Groq is overloaded or the request times out
 
 ### Subsequent turns get progressively slower (Ollama)
 - The model is accumulating context. Dev mode caps history automatically. Reduce model size or increase RAM.
+
+### End Session is stuck on "Ending…"
+- The recap/boot LLM calls can hang if Groq is overloaded or the request times out. Click **Kill** next to the "Ending…" button — it aborts the HTTP request and force-resets the UI. All per-turn NPC deltas are already on disk; only the recap and next-session boot file will be missing.
 
 ### `uvicorn: command not found`
 - Use `python -m uvicorn ...` — uvicorn may not be on PATH after install.
@@ -394,16 +419,17 @@ ollama list                            # confirm model is pulled
 | Per-turn NPC RAG (keyword lookup + profile injection) | ✅ Complete |
 | Per-turn skill RAG (trigger detection + rules injection) | ✅ Complete |
 | NPC stub auto-creation from `%%GENERATE%%` blocks | ✅ Complete |
-| Session NPC lifecycle (dot-prefix dirs, UI purge button) | ✅ Complete |
+| Session NPC lifecycle (dot-prefix dirs, UI purge button + toast) | ✅ Complete |
 | NPC state persistence (session_NNN.md per NPC per session) | ✅ Complete |
 | End-session recap + next-session boot generation | ✅ Complete |
+| Kill button to abort stuck End Session | ✅ Complete |
 | Dice roll request + resolution (UI panel + API) | ✅ Complete |
 | Dev mode (raw marker visibility, full pass-through) | ✅ Complete |
 | Session log (timestamped markdown, live view) | ✅ Complete |
 | API call logging (`outputs/api_log/`) with Groq token usage | ✅ Complete |
 | Groq rate limit display in header (RPM/TPM remaining) | ✅ Complete |
-| Kill button to abort stuck End Session | ✅ Complete |
-| Test suite — 309 tests | ✅ Complete |
+| `stream_options` graceful degradation for older Groq models | ✅ Complete |
+| Test suites — 309 pytest + 30 Vitest tests | ✅ Complete |
 | System Authority docs | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I (Swallowtail Festival + Goblin Raid) | ✅ Complete |
@@ -425,7 +451,7 @@ ollama list                            # confirm model is pulled
 | Backend | Python 3.9+, FastAPI, uvicorn |
 | Frontend | Vite 5, React 18, TypeScript |
 | Streaming | Server-Sent Events (SSE) |
-| Tests | pytest, FastAPI TestClient |
+| Tests | pytest, FastAPI TestClient; Vitest, jsdom, React Testing Library |
 | Rules system | Pathfinder 1st Edition RAW |
 
 ---

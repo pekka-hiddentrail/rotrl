@@ -21,8 +21,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
+  const [sheetCharId, setSheetCharId] = useState<string | null>(null)
   const [lastInput, setLastInput] = useState('')
-  const [rollInjection, setRollInjection] = useState<{ id: number; value: string } | null>(null)
   const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null } | null>(null)
   const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
   const [diceKey, setDiceKey] = useState(0)
@@ -47,7 +47,6 @@ export default function App() {
     setSession(null)
     setStreaming(true)
     setDiceKey(k => k + 1)
-    setRollInjection(null)   // clear any leftover roll value from the previous session
 
     // 1. Fetch and show the intro card immediately
     try {
@@ -77,14 +76,16 @@ export default function App() {
 
   const handleSend = async (input: string) => {
     if (!session) return
+    const speaker = activeCharacter ? characterMap[activeCharacter] : null
+    const sentInput = speaker ? `@${speaker.name}: "${input}"` : input
     setError(null)
     setLastInput(input)
     setIntent(null)
-    setMessages(prev => [...prev, { role: 'player', content: input }])
+    setMessages(prev => [...prev, { role: 'player', content: sentInput }])
     setStreaming(true)
 
     try {
-      for await (const event of sendTurn(session.id, input)) {
+      for await (const event of sendTurn(session.id, sentInput)) {
         if (event.type === 'token') appendToken(event.content)
         if (event.type === 'context') setIntent(event)
         if (event.type === 'patch_last') {
@@ -177,6 +178,10 @@ export default function App() {
     setActiveCharacter(prev => (prev === id ? null : id))
   }
 
+  const handleOpenSheet = (id: string) => {
+    setSheetCharId(id)
+  }
+
   const isBooted = session !== null
 
   return (
@@ -211,8 +216,9 @@ export default function App() {
         <CharacterSidebar
           characters={characters}
           loading={charsLoading}
-          activeCharacter={activeCharacter}
-          onSelect={handleCharacterSelect}
+          activeSpeakerId={activeCharacter}
+          onSetActive={handleCharacterSelect}
+          onOpenSheet={handleOpenSheet}
         />
 
         <div className="chat-area">
@@ -233,8 +239,7 @@ export default function App() {
             <InputBar
               onSend={handleSend}
               disabled={streaming || ending}
-              injectedValue={rollInjection?.value ?? null}
-              injectionId={rollInjection?.id ?? 0}
+              activeSpeaker={activeCharacter ? characterMap[activeCharacter] : null}
             />
           )}
         </div>
@@ -243,25 +248,41 @@ export default function App() {
           key={diceKey}
           sessionId={session?.id ?? null}
           pendingRoll={pendingRoll}
+          activeSpeaker={activeCharacter ? characterMap[activeCharacter] : null}
           onRoll={async (expr: string, rolls: number[], total: number) => {
-            setRollInjection(prev => ({ id: (prev?.id ?? 0) + 1, value: String(total) }))
-            if (!session) return
+            const speaker = activeCharacter ? characterMap[activeCharacter] : null
+            const speakerName = speaker?.name ?? null
+            const rawTotal = rolls.reduce((a, b) => a + b, 0)
+            const modifier = total - rawTotal
+            let rollMsg: string
+            if (modifier !== 0) {
+              const sign = modifier > 0 ? `+${modifier}` : String(modifier)
+              rollMsg = speakerName
+                ? `${speakerName} rolled a ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
+                : `Rolled ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
+            } else {
+              rollMsg = speakerName ? `${speakerName} rolled a ${rawTotal}.` : `Rolled ${rawTotal}.`
+            }
+            setMessages(prev => [...prev, { role: 'player', content: rollMsg }])
+            if (!session) return null
             logRoll(session.id, expr, rolls, total)
             if (pendingRoll) {
               try {
                 const result = await resolveRoll(session.id, total)
                 setPendingRoll(null)
                 setMessages(prev => [...prev, { role: 'gm', content: result.outcome }])
+                return { passed: result.passed }
               } catch {
                 setPendingRoll(null)
               }
             }
+            return null
           }}
         />
       </div>
 
-      {activeCharacter && characterMap[activeCharacter] && (
-        <CharacterSheet character={characterMap[activeCharacter]} onClose={() => setActiveCharacter(null)} />
+      {sheetCharId && characterMap[sheetCharId] && (
+        <CharacterSheet character={characterMap[sheetCharId]} onClose={() => setSheetCharId(null)} />
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />

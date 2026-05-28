@@ -414,6 +414,61 @@ body {
   background: #251515;
 }
 
+/* Wrapper gives the menu an anchor for absolute positioning */
+.char-icon-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Circular ring container — box-shadow shows outside the avatar overflow boundary */
+.char-halo-ring {
+  border-radius: 50%;
+  display: inline-flex;
+  transition: box-shadow 0.2s;
+}
+
+/* Two-action dropdown menu */
+.char-action-menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: #1e1212;
+  border: 1px solid #4a2828;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px #0009;
+  display: flex;
+  flex-direction: column;
+  min-width: 130px;
+  overflow: hidden;
+}
+
+.char-action-menu-item {
+  background: none;
+  border: none;
+  color: #c0a888;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 9px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.char-action-menu-item:hover {
+  background: #2e1818;
+  color: #e8c888;
+}
+
+.char-action-menu-item + .char-action-menu-item {
+  border-top: 1px solid #3a2020;
+}
+
 .char-avatar {
   border-radius: 50%;
   border: 2px solid #5a3030;
@@ -712,8 +767,53 @@ body {
   flex-shrink: 0;
 }
 
+/* Vertical stack holding optional speaker badge + textarea */
+.input-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Speaker indicator shown above the textarea when a character is active */
+.speaker-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--speaker-color, #c9a84c) 12%, #1a1010);
+  border: 1px solid color-mix(in srgb, var(--speaker-color, #c9a84c) 40%, transparent);
+  border-radius: 4px;
+  font-size: 11px;
+  color: #c0a888;
+  animation: badge-in 0.15s ease;
+}
+
+@keyframes badge-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.speaker-badge-rune {
+  font-family: serif;
+  font-size: 14px;
+  color: var(--speaker-color, #c9a84c);
+  text-shadow: 0 0 6px var(--speaker-color, #c9a84c);
+  line-height: 1;
+}
+
+.speaker-badge-label {
+  color: #a09070;
+}
+
+.speaker-badge-label strong {
+  color: var(--speaker-color, #c9a84c);
+  font-weight: 600;
+}
+
 .input-area {
   flex: 1;
+  width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
@@ -801,6 +901,44 @@ body {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: #7a6838;
+}
+
+/* Bonus preview line inside the roll-request banner */
+.roll-bonus-preview {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+
+.roll-bonus-matched {
+  color: #7acc88;
+  font-family: 'Cinzel', serif;
+}
+
+.roll-bonus-note {
+  color: #7a6838;
+  font-style: italic;
+}
+
+/* Auto-bonus toggle inside the roll-request banner */
+.roll-bonus-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 9px;
+  color: #7a6848;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+}
+
+.roll-bonus-toggle input[type="checkbox"] {
+  accent-color: #c9a84c;
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
 }
 
 .dice-panel-label {
@@ -998,6 +1136,53 @@ body {
   color: var(--gm);
   font-weight: bold;
   font-family: 'Cinzel', serif;
+}
+
+/* Skill name + modifier portion of the breakdown, e.g. "Perception +7" */
+.hist-skill-label {
+  font-size: 10px;
+  color: #a8c8a0;
+  font-family: 'Cinzel', serif;
+  letter-spacing: 0.04em;
+}
+
+/* "vs DC 18" suffix */
+.hist-dc {
+  font-size: 10px;
+  color: #7a6848;
+  margin-left: 2px;
+}
+
+/* PASSED / FAILED badge */
+.hist-outcome {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.hist-passed {
+  background: #1e3a2a;
+  color: #70cc88;
+  border: 1px solid #3a7a50;
+}
+
+.hist-failed {
+  background: #3a1818;
+  color: #cc6868;
+  border: 1px solid #7a3030;
+}
+
+/* Note shown when bonus cannot be applied */
+.hist-bonus-note {
+  font-size: 9px;
+  color: #5a4838;
+  font-style: italic;
+  margin-top: 2px;
 }
 
 /* ── Character Sheet Modal ───────────────── */

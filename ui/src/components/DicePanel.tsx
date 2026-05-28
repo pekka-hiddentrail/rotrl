@@ -1,10 +1,18 @@
 import { useState } from 'react'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface RollRecord {
   id: number
   dice: number[]
   rolls: number[]
-  total: number
+  rawTotal: number
+  modifier: number | null   // skill modifier applied (null = no pending roll or no match)
+  total: number             // rawTotal + (modifier ?? 0)
+  modifierLabel: string | null  // e.g. "Perception +7"
+  dc: number | null
+  passed: boolean | null    // null until resolve_roll responds
+  bonusNote: string | null  // shown when modifier cannot be applied
 }
 
 interface PendingRoll {
@@ -14,11 +22,19 @@ interface PendingRoll {
   failure: string
 }
 
+interface ActiveSpeaker {
+  name: string
+  skills: { name: string; total: number }[]
+}
+
 interface Props {
   sessionId: string | null
   pendingRoll: PendingRoll | null
-  onRoll: (expr: string, rolls: number[], total: number) => void
+  activeSpeaker: ActiveSpeaker | null
+  onRoll: (expr: string, rolls: number[], total: number) => Promise<{ passed: boolean } | null>
 }
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DICE = [4, 6, 8, 10, 12, 20, 100] as const
 type DieSides = typeof DICE[number]
@@ -38,12 +54,13 @@ const DIE_LABELS: Record<DieSides, string> = {
   4: 'd4', 6: 'd6', 8: 'd8', 10: 'd10', 12: 'd12', 20: 'd20', 100: 'd100',
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function rollDie(sides: number): number {
   return Math.floor(Math.random() * sides) + 1
 }
 
 function groupDice(dice: number[]): string {
-  // Preserve first-click order — no sorting
   const order: number[] = []
   const counts = new Map<number, number>()
   for (const d of dice) {
@@ -55,25 +72,92 @@ function groupDice(dice: number[]): string {
     .join('+')
 }
 
+/** Case- and whitespace-insensitive normalisation for skill name matching (AC-011). */
+export function normaliseSkill(s: string): string {
+  return s.trim().toLowerCase().replace(/[\s\-_]+/g, ' ')
+}
+
+type BonusResult =
+  | { kind: 'matched'; modifier: number; label: string }
+  | { kind: 'no-character' }
+  | { kind: 'unmapped'; skill: string }
+
+export function lookupSkillBonus(skill: string, speaker: ActiveSpeaker | null): BonusResult {
+  if (!speaker) return { kind: 'no-character' }
+  const norm = normaliseSkill(skill)
+  const matched = speaker.skills.find(s => normaliseSkill(s.name) === norm)
+  if (!matched) return { kind: 'unmapped', skill }
+  const sign = matched.total >= 0 ? '+' : ''
+  return { kind: 'matched', modifier: matched.total, label: `${skill} ${sign}${matched.total}` }
+}
+
+function signedStr(n: number): string {
+  return n >= 0 ? `+${n}` : String(n)
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 let nextId = 0
 
-export default function DicePanel({ pendingRoll, onRoll }: Props) {
+export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props) {
   const [pending, setPending] = useState<number[]>([])
   const [history, setHistory] = useState<RollRecord[]>([])
+  const [autoBonus, setAutoBonus] = useState(true)
 
   const addDie = (sides: number) => setPending(p => [...p, sides])
   const clearPending = () => setPending([])
 
-  const doRoll = () => {
+  const doRoll = async () => {
     if (pending.length === 0) return
+
     const rolls = pending.map(rollDie)
-    const total = rolls.reduce((a, b) => a + b, 0)
+    const rawTotal = rolls.reduce((a, b) => a + b, 0)
     const expr = groupDice(pending)
-    const record: RollRecord = { id: nextId++, dice: [...pending], rolls, total }
+
+    let modifier: number | null = null
+    let modifierLabel: string | null = null
+    let bonusNote: string | null = null
+
+    if (pendingRoll && autoBonus) {
+      const bonus = lookupSkillBonus(pendingRoll.skill, activeSpeaker)
+      if (bonus.kind === 'matched') {
+        modifier = bonus.modifier
+        modifierLabel = bonus.label
+      } else if (bonus.kind === 'no-character') {
+        bonusNote = 'No active character — raw roll only'
+      } else {
+        bonusNote = `No mapped bonus for ${pendingRoll.skill}`
+      }
+    }
+
+    const total = rawTotal + (modifier ?? 0)
+    const recordId = nextId++
+    const record: RollRecord = {
+      id: recordId,
+      dice: [...pending],
+      rolls,
+      rawTotal,
+      modifier,
+      total,
+      modifierLabel,
+      dc: pendingRoll?.dc ?? null,
+      passed: null,
+      bonusNote,
+    }
+
     setHistory(h => [record, ...h].slice(0, 10))
     setPending([])
-    onRoll(expr, rolls, total)
+
+    const result = await onRoll(expr, rolls, total)
+    if (result !== null) {
+      setHistory(h => h.map(r => r.id === recordId ? { ...r, passed: result.passed } : r))
+    }
   }
+
+  // Bonus preview shown in the roll-request banner (pure computation — no state needed)
+  const bonusPreview = (pendingRoll && autoBonus)
+    ? lookupSkillBonus(pendingRoll.skill, activeSpeaker)
+    : null
 
   return (
     <aside className={`dice-panel${pendingRoll ? ' dice-panel-active' : ''}`}>
@@ -82,6 +166,27 @@ export default function DicePanel({ pendingRoll, onRoll }: Props) {
           <div className="roll-request-skill">{pendingRoll.skill}</div>
           <div className="roll-request-dc">DC {pendingRoll.dc}</div>
           <div className="roll-request-hint">roll d20</div>
+
+          {bonusPreview?.kind === 'matched' && (
+            <div className="roll-bonus-preview roll-bonus-matched">
+              {signedStr(bonusPreview.modifier)} from {pendingRoll.skill}
+            </div>
+          )}
+          {bonusPreview?.kind === 'no-character' && (
+            <div className="roll-bonus-preview roll-bonus-note">No active character</div>
+          )}
+          {bonusPreview?.kind === 'unmapped' && (
+            <div className="roll-bonus-preview roll-bonus-note">No mapped bonus</div>
+          )}
+
+          <label className="roll-bonus-toggle">
+            <input
+              type="checkbox"
+              checked={autoBonus}
+              onChange={e => setAutoBonus(e.target.checked)}
+            />
+            Auto bonus
+          </label>
         </div>
       ) : (
         <div className="dice-panel-label">Dice</div>
@@ -130,21 +235,47 @@ export default function DicePanel({ pendingRoll, onRoll }: Props) {
             {history.map((r, i) => (
               <div key={r.id} className={`history-row${i === 0 ? ' history-latest' : ''}`}>
                 <div className="history-expr">{groupDice(r.dice)}</div>
-                {r.rolls.length > 1 ? (
+
+                {r.modifier !== null ? (
+                  // Skill roll with modifier: show "13 + Perception +7 = 20"
                   <div className="history-breakdown">
-                    {r.rolls.map((v, j) => (
-                      <span key={j}>
-                        {j > 0 && <span className="hist-op">+</span>}
-                        <span className="hist-num">{v}</span>
-                      </span>
-                    ))}
+                    <span className="hist-num">{r.rawTotal}</span>
+                    <span className="hist-op"> + </span>
+                    <span className="hist-skill-label">{r.modifierLabel}</span>
                     <span className="hist-eq"> = </span>
                     <span className="history-total">{r.total}</span>
+                    {r.dc !== null && (
+                      <span className="hist-dc"> vs DC {r.dc}</span>
+                    )}
                   </div>
                 ) : (
+                  // Plain roll
                   <div className="history-breakdown">
-                    <span className="history-total">{r.total}</span>
+                    {r.rolls.length > 1 ? (
+                      <>
+                        {r.rolls.map((v, j) => (
+                          <span key={j}>
+                            {j > 0 && <span className="hist-op">+</span>}
+                            <span className="hist-num">{v}</span>
+                          </span>
+                        ))}
+                        <span className="hist-eq"> = </span>
+                        <span className="history-total">{r.total}</span>
+                      </>
+                    ) : (
+                      <span className="history-total">{r.total}</span>
+                    )}
                   </div>
+                )}
+
+                {r.passed !== null && (
+                  <span className={`hist-outcome ${r.passed ? 'hist-passed' : 'hist-failed'}`}>
+                    {r.passed ? 'PASSED' : 'FAILED'}
+                  </span>
+                )}
+
+                {r.bonusNote && (
+                  <div className="hist-bonus-note">{r.bonusNote}</div>
                 )}
               </div>
             ))}
@@ -154,3 +285,4 @@ export default function DicePanel({ pendingRoll, onRoll }: Props) {
     </aside>
   )
 }
+

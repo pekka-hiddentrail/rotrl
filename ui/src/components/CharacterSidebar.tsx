@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { CharacterData } from '../data/characters'
 
 function Portrait({ src, rune, color, name, size }: {
@@ -78,39 +78,81 @@ function Portrait({ src, rune, color, name, size }: {
 interface Props {
   characters: CharacterData[]
   loading: boolean
-  activeCharacter: string | null
-  onSelect: (id: string) => void
+  activeSpeakerId: string | null
+  onSetActive: (id: string) => void
+  onOpenSheet: (id: string) => void
 }
 
-export default function CharacterSidebar({ characters, loading, activeCharacter, onSelect }: Props) {
+export default function CharacterSidebar({ characters, loading, activeSpeakerId, onSetActive, onOpenSheet }: Props) {
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  // Close the action menu when the user clicks outside the character's wrap element
+  const handleDocMouseDown = useCallback((e: MouseEvent) => {
+    if (!menuId) return
+    const wrap = document.querySelector(`[data-char-wrap="${menuId}"]`)
+    if (wrap && !wrap.contains(e.target as Node)) {
+      setMenuId(null)
+    }
+  }, [menuId])
+
+  useEffect(() => {
+    if (!menuId) return
+    document.addEventListener('mousedown', handleDocMouseDown)
+    return () => document.removeEventListener('mousedown', handleDocMouseDown)
+  }, [menuId, handleDocMouseDown])
+
   return (
     <aside className="char-sidebar">
       <div className="sidebar-label">Party</div>
       {loading && <div className="sidebar-loading">…</div>}
       {characters.map(c => {
         const hpPct = (c.hp.current / c.hp.max) * 100
-        const isActive = activeCharacter === c.id
+        const isActive = activeSpeakerId === c.id
+        const isMenuOpen = menuId === c.id
         return (
-          <button
-            key={c.id}
-            className={`char-icon-btn${isActive ? ' active' : ''}`}
-            onClick={() => onSelect(c.id)}
-            title={`${c.name} — ${c.race} ${c.class} Lv.${c.level}`}
-          >
-            <div style={{ filter: isActive ? `drop-shadow(0 0 6px ${c.color}88)` : undefined }}>
-              <Portrait src={c.portrait} rune={c.rune} color={c.color} name={c.name} size={76} />
-            </div>
-            <div className="char-name-label">{c.name}</div>
-            <div className="char-hp-bar-wrap">
+          <div key={c.id} className="char-icon-wrap" data-char-wrap={c.id}>
+            <button
+              className={`char-icon-btn${isActive ? ' active' : ''}`}
+              onClick={() => setMenuId(prev => prev === c.id ? null : c.id)}
+              title={`${c.name} — ${c.race} ${c.class} Lv.${c.level}`}
+            >
               <div
-                className="char-hp-bar"
-                style={{
-                  width: `${hpPct}%`,
-                  background: hpPct > 50 ? '#3d7a58' : hpPct > 25 ? '#c9a84c' : '#b04040',
-                }}
-              />
-            </div>
-          </button>
+                className="char-halo-ring"
+                style={isActive ? {
+                  boxShadow: `0 0 0 3px ${c.color}, 0 0 10px ${c.color}88`,
+                } : undefined}
+              >
+                <Portrait src={c.portrait} rune={c.rune} color={c.color} name={c.name} size={76} />
+              </div>
+              <div className="char-name-label">{c.name}</div>
+              <div className="char-hp-bar-wrap">
+                <div
+                  className="char-hp-bar"
+                  style={{
+                    width: `${hpPct}%`,
+                    background: hpPct > 50 ? '#3d7a58' : hpPct > 25 ? '#c9a84c' : '#b04040',
+                  }}
+                />
+              </div>
+            </button>
+            {isMenuOpen && (
+              <div className="char-action-menu" ref={menuRef}>
+                <button
+                  className="char-action-menu-item"
+                  onClick={() => { onSetActive(c.id); setMenuId(null) }}
+                >
+                  {isActive ? '✕  Clear Active' : '◈  Set Active'}
+                </button>
+                <button
+                  className="char-action-menu-item"
+                  onClick={() => { onOpenSheet(c.id); setMenuId(null) }}
+                >
+                  ◳  Open Sheet
+                </button>
+              </div>
+            )}
+          </div>
         )
       })}
     </aside>

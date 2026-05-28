@@ -59,17 +59,27 @@ And   POST /api/sessions/{id}/roll is called with the expression, per-die breakd
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-003 — Roll result is injected into the input bar
+### AC-003 — Roll result is shown as a player speech bubble in the chat
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-**Scenario:** Player rolls and the result appears in the chat input
+**Scenario:** Player rolls and the result appears as a chat message
 
 ```gherkin
 Given the player rolls 1d20 with result 14
+And   no modifier is applied
 When  the roll completes
-Then  the total (14) is injected into the InputBar text field
-And   the player can then submit it as part of their next action
+Then  a player-style speech bubble appears in the chat: "<Name> rolled a 14."
+And   the InputBar text field is NOT modified
+
+Given Yanyeeku is the active character with Perception +7
+And   a pending Perception DC 18 roll is active
+When  the player rolls 1d20 with result 13
+Then  a player-style speech bubble appears: "Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."
+And   the speech bubble is shown in the UI only — it is not sent to the backend as a turn
 ```
+
+> **Implementation note:** The bubble uses `role: 'player'` and is appended to the message list
+> before `logRoll` / `resolveRoll` are called. It is never transmitted as a chat turn.
 
 ---
 
@@ -121,10 +131,95 @@ And   each history entry shows the expression, per-die breakdown, and total
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-007 — Skill bonus is auto-applied when active character and pending roll are both set
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Player rolls d20 while a skill check is pending and a character is active
+
+```gherkin
+Given a pending roll for Perception DC 18 is active
+And   Yanyeeku is the active character
+And   Yanyeeku has a Perception modifier of +7
+When  the player rolls 1d20 and gets 13
+Then  the UI computes finalTotal = 13 + 7 = 20
+And   POST /api/sessions/{id}/resolve_roll is called with rolled=20
+And   the roll history shows "1d20(13) + Perception +7 = 20 vs DC 18 — passed"
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-008 — Skill bonus is not applied when no character is active
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Pending roll exists but no active character is set
+
+```gherkin
+Given a pending roll for Diplomacy DC 15 is active
+And   no character is active
+When  the player rolls 1d20 and gets 11
+Then  POST /api/sessions/{id}/resolve_roll is called with rolled=11 (raw total)
+And   no modifier is added
+And   the dice panel shows "No active character — raw roll only"
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-009 — Unknown skill mapping falls back to raw roll with indicator
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Pending skill name cannot be mapped to the active character's data
+
+```gherkin
+Given a pending roll for "Spellcraft" DC 20 is active
+And   Yanyeeku is the active character
+And   Yanyeeku's character data does not include a Spellcraft entry
+When  the player rolls 1d20
+Then  the raw total is sent to resolve_roll unchanged
+And   the dice panel shows "No mapped bonus for Spellcraft"
+And   no modifier is added to the total
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-010 — Auto-bonus toggle allows player to override and roll raw
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Player wants to override the auto-bonus and roll without modifier
+
+```gherkin
+Given a pending skill roll and an active character with a mapped modifier
+When  the player turns off the "Auto-apply skill bonus" toggle in the dice panel
+Then  the modifier is not applied and the raw d20 total is submitted
+And   the toggle state is preserved for the remainder of the session
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-011 — Skill mapping uses normalised name comparison
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Pending skill name varies in case or spacing vs. character data key
+
+```gherkin
+Given the pending skill name is "sense motive"
+And   the active character's skills include "Sense Motive" with modifier +4
+Then  the modifier is correctly resolved to +4
+And   the auto-bonus is applied
+```
+
+---
+
 ## Out of Scope
 
 - Backend DC storage (covered by SPEC-006 %%ROLL%% parsing)
 - Chat narrative showing roll outcome (covered by SPEC-002)
+- Manual modifier override input field (post-MVP)
+- Storing active character across browser refresh (covered by character-system.feature)
 
 ---
 
@@ -132,5 +227,13 @@ And   each history entry shows the expression, per-die breakdown, and total
 
 - See: [INDEX.md §12 — Frontend: Dice Panel](INDEX.md)
 - Die types: d4 · d6 · d8 · d10 · d12 · d20 · d100 (SVG polygon shapes)
-- `onRoll(expr, rolls[], total)` callback passed from App.tsx to DicePanel
+- `onRoll(expr, rolls[], total)` callback passed from App.tsx to DicePanel. Returns `Promise<{ passed: boolean } | null>`.
+- Roll speech bubble is built in App.tsx's `onRoll` handler: `rawTotal = rolls.reduce(…)`, `modifier = total − rawTotal`. Speaker name taken from `activeCharacter` → `characterMap`.
+- The bubble is local-only. It is **not** sent to the backend as a player turn.
+- `InputBar` no longer has `injectedValue` / `injectionId` props — injection was removed in favour of the speech bubble.
 - `POST /api/sessions/{id}/roll` only fires when a session is active; silently skipped otherwise
+- AC-007 through AC-011 implemented in `DicePanel.tsx`. Key exports: `normaliseSkill(s)`, `lookupSkillBonus(skill, speaker)` (pure helpers, independently testable).
+- `onRoll` callback signature changed to `(expr, rolls, total) => Promise<{ passed: boolean } | null>`. App.tsx returns `{ passed }` from `resolveRoll`; DicePanel awaits and updates the history record to show PASSED/FAILED badge.
+- `autoBonus` toggle state lives in DicePanel; resets to ON on session boot (DicePanel is keyed with `diceKey` which increments on boot).
+- Skill modifier read from `activeSpeaker.skills[i].total` (matches `CharacterData.skills[i]`). DicePanel accepts a narrower `ActiveSpeaker` interface so it does not depend on the full `CharacterData` type.
+- Skill name normalisation: `trim → lowercase → collapse whitespace/hyphens/underscores → single space` before map lookup.
