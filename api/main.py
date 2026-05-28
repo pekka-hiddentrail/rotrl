@@ -169,7 +169,10 @@ def get_api_log(filename: str):
     import re as _re
     if not _re.fullmatch(r"[\w.\-]+\.json", filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
-    path = _REPO_ROOT / "outputs" / "api_log" / filename
+    log_dir = (_REPO_ROOT / "outputs" / "api_log").resolve()
+    path = (log_dir / filename).resolve()
+    if not path.is_relative_to(log_dir):
+        raise HTTPException(status_code=400, detail="Invalid filename")
     if not path.exists():
         raise HTTPException(status_code=404, detail="Log file not found")
     import json as _json

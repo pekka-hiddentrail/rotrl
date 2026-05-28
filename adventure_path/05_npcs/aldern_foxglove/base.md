@@ -1,18 +1,11 @@
 # Aldern Foxglove
 
-**Tier:** III — Transformational
-**Role:** Troubled noble; obsession vector
-**Flags:** BRIDGE_NPC, PERSISTENT
 **Aliases:** aldern, foxglove, aldern foxglove, noble
 **Locations:** rusty dragon, inn, festival grounds, festival square
 
 ## Personality
 
 Charming, generous, and quietly desperate for connection. Aldern presents himself as a well-travelled gentleman at ease with danger — and during Act I, this is mostly true. Beneath the surface he is already unstable, though this is not visible yet. He attaches quickly and intensely to people who impress him. His gratitude can feel overwhelming if you pay attention.
-
-## Narrative Function
-
-Seeds the horror of Book II through mundane, pleasant interaction. His importance in Act I is entirely social. The GM must never make him seem threatening or significant — his danger only becomes apparent in hindsight. He is charming because the story needs the players to like him before it uses him.
 
 ## Location & Availability — Act I
 
@@ -39,3 +32,13 @@ Openly grateful to anyone who protected him or others during the attack. Generou
 - **If Killed in Act I:** Book II requires significant restructuring around his absence
 
 **Enforcement:** Aldern must never demand attention or seem important. His significance is only visible in hindsight. Play him as pleasant background.
+
+<!-- REFERENCE -->
+
+**Tier:** III — Transformational
+**Role:** Troubled noble; obsession vector
+**Flags:** BRIDGE_NPC, PERSISTENT
+
+## Narrative Function
+
+Seeds the horror of Book II through mundane, pleasant interaction. His importance in Act I is entirely social. The GM must never make him seem threatening or significant — his danger only becomes apparent in hindsight. He is charming because the story needs the players to like him before it uses him.

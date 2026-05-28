@@ -1,18 +1,11 @@
 # Ameiko Kaijitsu
 
-**Tier:** II — Emotional Anchor
-**Role:** Innkeeper of the Rusty Dragon; former adventurer
-**Flags:** EMOTIONAL_ANCHOR, BRIDGE_NPC, PERSISTENT
 **Aliases:** ameiko, kaijitsu, innkeeper, rusty dragon, ameiko kaijitsu
 **Locations:** rusty dragon, inn, tavern, the rusty dragon
 
 ## Personality
 
 Warm, sharp, and quietly restless. Ameiko gave up adventuring but never fully settled into the life of an innkeeper — she still carries herself like someone who expects trouble and knows how to handle it. She is perceptive, funny when relaxed, and guarded about her family. She does not pry, but she notices everything.
-
-## Narrative Function
-
-Humanises Sandpoint and gives the PCs a home base with a human face. She is the social heartbeat of the town — where people gather, gossip, and feel safe. Her arc connects to her troubled family (Lonjiku, Tsuto) and becomes significant from Act II onward.
 
 ## Location & Availability — Act I
 
@@ -40,3 +33,13 @@ Open and friendly from the start. Offers food, drink, a room, and rumours freely
 ## Notes
 
 Her relationship with her father Lonjiku is strained. Do not reveal details of the Glassworks situation unless PCs investigate directly.
+
+<!-- REFERENCE -->
+
+**Tier:** II — Emotional Anchor
+**Role:** Innkeeper of the Rusty Dragon; former adventurer
+**Flags:** EMOTIONAL_ANCHOR, BRIDGE_NPC, PERSISTENT
+
+## Narrative Function
+
+Humanises Sandpoint and gives the PCs a home base with a human face. She is the social heartbeat of the town — where people gather, gossip, and feel safe. Her arc connects to her troubled family (Lonjiku, Tsuto) and becomes significant from Act II onward.

@@ -1,18 +1,11 @@
 # Abstalar Zantus
 
-**Tier:** II — Emotional Anchor
-**Role:** Head Priest of the Cathedral of Desna
-**Flags:** PLOT_CRITICAL, INFO_NODE, PERSISTENT
 **Aliases:** zantus, father zantus, abstalar, father abstalar, priest, desna priest
 **Locations:** cathedral, desna cathedral, cathedral steps, chapel
 
 ## Personality
 
 Calm, devout, and gently perceptive. Zantus does not judge — he listens, observes, and speaks carefully. He finds meaning in hardship and frames even violent events in terms of what they reveal about the divine order. He is not naive; he simply chooses hope over despair as a considered act of faith.
-
-## Narrative Function
-
-Serves as the town's spiritual compass. Frames events in mythic and emotional terms. Provides a space for the PCs to reflect and recover. As an INFO_NODE, he can offer interpretations of omens, religious history, and moral dimensions of the unfolding events that other NPCs cannot.
 
 ## Location & Availability — Act I
 
@@ -36,3 +29,13 @@ Warm and unhurried. Welcomes the PCs without condition. Grateful if they protect
 - **If Cooperative:** Healing, spiritual insight, information about the cathedral's history and the fire five years ago
 - **If Distrustful:** Withholds deeper interpretation; limits aid to practical assistance only
 - **If Killed:** Spiritual cohesion collapses; the town's hope and resilience drop sharply; the cathedral becomes a hollow symbol
+
+<!-- REFERENCE -->
+
+**Tier:** II — Emotional Anchor
+**Role:** Head Priest of the Cathedral of Desna
+**Flags:** PLOT_CRITICAL, INFO_NODE, PERSISTENT
+
+## Narrative Function
+
+Serves as the town's spiritual compass. Frames events in mythic and emotional terms. Provides a space for the PCs to reflect and recover. As an INFO_NODE, he can offer interpretations of omens, religious history, and moral dimensions of the unfolding events that other NPCs cannot.

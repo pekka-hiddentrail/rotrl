@@ -332,6 +332,9 @@ def _parse_base(path: Path) -> tuple[str, list[str], list[str], str]:
             locations = [l.strip() for l in m.group(1).split(",") if l.strip()]
             continue
 
+        if line.strip() == "<!-- REFERENCE -->":
+            break  # everything below is reader documentation, never injected
+
         body_lines.append(line)
 
     profile = "\n".join(body_lines).strip()
