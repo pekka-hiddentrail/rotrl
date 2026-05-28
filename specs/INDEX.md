@@ -11,20 +11,20 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [session-boot.feature](session-boot.feature) | Backend | `@session` `@boot` `@intro` | 5 | `create_session()`, `boot.md`, `intro` endpoint, `NpcIndex` |
 | [player-turn.feature](player-turn.feature) | Backend \| Frontend | `@turn` `@streaming` `@core` | 5 | `stream_turn()`, SSE token events, section filter |
 | [session-end-recap.feature](session-end-recap.feature) | Backend \| Frontend | `@session` `@recap` `@end` `@llm` | 4 | `stream_end_session()`, `recap.md`, `boot.md`, `notes.json` |
-| [llm-providers.feature](llm-providers.feature) | Backend \| Frontend | `@llm` `@groq` `@ollama` `@provider` | 5 | Groq API, Ollama API, rate-limit headers, `Header.tsx` model dropdown |
+| [llm-providers.feature](llm-providers.feature) | Backend \| Frontend | `@llm` `@groq` `@ollama` `@provider` | 6 | Groq API, Ollama API, rate-limit headers, `stream_options` fallback, `Header.tsx` model dropdown |
 | [context-detection.feature](context-detection.feature) | Backend | `@context` `@npc` `@skill` `@location` | 5 | `NpcIndex`, `SkillIndex`, `context` SSE event |
 | [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 5 | Streaming filter, holdback buffer, `patch_last` event |
 | [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `06_rules/skills/` |
 | [session-logging.feature](session-logging.feature) | Backend | `@logging` `@session-log` `@api-log` `@dice` | 6 | `api_logger.py`, `*.log.md`, `api_log/` |
-| [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 7 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge |
+| [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button |
 | [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 6 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
 | [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 6 | `DicePanel.tsx`, `resolve_roll` endpoint |
 | [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 6 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters` |
 | [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
 
-**Total: 82 acceptance criteria across 15 feature files**
+**Total: 83 acceptance criteria across 15 feature files**
 
 ---
 

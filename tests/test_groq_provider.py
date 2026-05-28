@@ -114,6 +114,40 @@ def test_groq_post_exponential_backoff_without_header(monkeypatch):
     assert slept[1] >= slept[0]
 
 
+def test_groq_post_strips_stream_options_on_400(monkeypatch):
+    """A 400 caused by stream_options triggers a one-shot retry without that key."""
+    ok = _make_resp(200)
+    bad = _make_resp(400)
+    payloads_sent: list[dict] = []
+
+    def mock_post(url, headers, json, stream, timeout):
+        payloads_sent.append(dict(json))  # snapshot — payload dict is mutated after the call
+        return bad if len(payloads_sent) == 1 else ok
+
+    monkeypatch.setattr(sm._requests, "post", mock_post)
+    result = _groq_post("key", {"model": "x", "stream_options": {"include_usage": True}})
+    assert result is ok
+    assert len(payloads_sent) == 2
+    assert "stream_options" in payloads_sent[0]   # first attempt had it
+    assert "stream_options" not in payloads_sent[1]  # retry dropped it
+
+
+def test_groq_post_400_without_stream_options_raises_immediately(monkeypatch):
+    """A 400 not related to stream_options is raised without retrying."""
+    bad = _make_resp(400)
+    call_count = 0
+
+    def mock_post(*a, **kw):
+        nonlocal call_count
+        call_count += 1
+        return bad
+
+    monkeypatch.setattr(sm._requests, "post", mock_post)
+    with pytest.raises(Exception):
+        _groq_post("key", {"model": "x"})  # no stream_options in payload
+    assert call_count == 1
+
+
 def test_groq_post_raises_on_413(monkeypatch):
     resp = MagicMock()
     resp.status_code = 413

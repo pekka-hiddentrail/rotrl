@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import type { Message, SessionInfo } from './types'
 import Header from './components/Header'
 import ChatWindow from './components/ChatWindow'
@@ -28,6 +28,7 @@ export default function App() {
   const [diceKey, setDiceKey] = useState(0)
   const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const endAbortRef = useRef<AbortController | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
   const appendToken = useCallback((token: string) => {
@@ -46,6 +47,7 @@ export default function App() {
     setSession(null)
     setStreaming(true)
     setDiceKey(k => k + 1)
+    setRollInjection(null)   // clear any leftover roll value from the previous session
 
     // 1. Fetch and show the intro card immediately
     try {
@@ -103,15 +105,25 @@ export default function App() {
     }
   }
 
+  const handleKillEnd = () => {
+    endAbortRef.current?.abort()
+    endAbortRef.current = null
+    setEnding(false)
+    setSession(null)
+    setMessages([])
+  }
+
   const handleEnd = async () => {
     if (!session) return
+    const controller = new AbortController()
+    endAbortRef.current = controller
     setEnding(true)
     setStreaming(false)
     // Add the ending status bubble
     setMessages(prev => [...prev, { role: 'ending', content: 'Wrapping up the session…' }])
 
     try {
-      for await (const event of endSessionWithRecap(session.id)) {
+      for await (const event of endSessionWithRecap(session.id, controller.signal)) {
         if (event.type === 'status') {
           setMessages(prev => {
             const last = prev[prev.length - 1]
@@ -187,6 +199,7 @@ export default function App() {
         rateLimits={rateLimits}
         onBoot={handleBoot}
         onEnd={handleEnd}
+        onKillEnd={handleKillEnd}
         onViewLog={handleViewLog}
         onPurgeNpcs={handlePurgeNpcs}
       />

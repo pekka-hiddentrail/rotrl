@@ -155,10 +155,34 @@ Then  no rate limit badge is shown
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-008 — Kill button aborts a stuck End Session
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** End Session LLM call hangs
+
+```gherkin
+Given End Session has been triggered and the header shows "Ending…"
+Then  a "Kill" button appears next to the "Ending…" button
+
+When  the GM clicks "Kill"
+Then  an inline confirm appears: "Discard and quit? [Yes] [No]"
+
+When  the GM clicks "Yes"
+Then  the in-flight HTTP request to /end is aborted
+And   the session is cleared from state (ending=false, session=null, messages=[])
+And   the UI returns to the pre-boot screen
+
+When  the GM clicks "No"
+Then  the inline confirm collapses and ending continues
+```
+
+---
+
 ## Out of Scope
 
-- End Session flow (covered by SPEC-003)
-- Booting logic and system prompt assembly (covered by SPEC-001)
+- End Session flow (covered by session-end-recap.feature)
+- Booting logic and system prompt assembly (covered by session-boot.feature)
 
 ---
 

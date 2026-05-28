@@ -118,7 +118,7 @@ Navigate to **http://localhost:5173** in your browser.
 3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
 4. **Roll dice** when prompted; the UI shows a dice panel and feeds the result back automatically
 5. **View Log** — opens the live session log in a new browser tab (shown during active session)
-6. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn
+6. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
 7. **Purge NPCs** — shown on the pre-boot screen only; deletes all auto-created session NPC stub directories (dot-prefixed). Inline confirmation, then a toast shows how many were removed
 
 ### Response sections
@@ -213,7 +213,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 303 pytest tests
+├── tests/                         # 309 pytest tests
 │
 ├── dev.py                         # One-command dev startup (tests → API + UI)
 ├── start_backend.ps1              # Windows: start FastAPI backend
@@ -266,14 +266,14 @@ python -m pytest -q               # run all tests
 python -m pytest tests/test_groq_provider.py -q   # run one file
 ```
 
-**303 tests passing** across 16 test files:
+**309 tests passing** across 16 test files:
 
 | File | Covers |
 |------|--------|
-| `test_sessions.py` | Session lifecycle endpoints, boot, turn, delete |
+| `test_sessions.py` | Session lifecycle endpoints, boot, turn, delete, purge session NPCs |
 | `test_turns.py` | Turn streaming, Ollama mock, error cases |
 | `test_boot_prompt.py` | System prompt assembly, party extraction, situation loading, delta cleanup |
-| `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, streaming, max-history, rate-limit SSE event |
+| `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, `stream_options` 400 fallback, streaming, max-history, rate-limit SSE event |
 | `test_api_logger.py` | LLM call log file format, summary truncation |
 | `test_api_logs.py` | Log list and fetch endpoints, path traversal rejection |
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
@@ -351,6 +351,9 @@ session state          ← Live NPC files, knowledge, recap
 
 ## Troubleshooting
 
+### End Session is stuck on "Ending…"
+The recap/boot LLM calls can hang if Groq is overloaded or the request times out. Click **Kill** next to the "Ending…" button — it aborts the HTTP request and force-resets the UI. The session JSON notes file and all per-turn NPC deltas are already on disk; only the recap and boot files for the next session will be missing.
+
 ### "Boot failed" or session fails to create
 - Check the backend is running on port 8000
 - On Windows: use `start_backend.ps1` — it kills stale processes before starting
@@ -399,7 +402,8 @@ ollama list                            # confirm model is pulled
 | Session log (timestamped markdown, live view) | ✅ Complete |
 | API call logging (`outputs/api_log/`) with Groq token usage | ✅ Complete |
 | Groq rate limit display in header (RPM/TPM remaining) | ✅ Complete |
-| Test suite — 303 tests | ✅ Complete |
+| Kill button to abort stuck End Session | ✅ Complete |
+| Test suite — 309 tests | ✅ Complete |
 | System Authority docs | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I (Swallowtail Festival + Goblin Raid) | ✅ Complete |

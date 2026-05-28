@@ -119,6 +119,29 @@ And   hovering the badge shows a tooltip with reset times
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-006 — stream_options degrades gracefully on older Groq models
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Model does not support stream_options (e.g. llama3-8b-8192, mixtral-8x7b-32768)
+
+```gherkin
+Given the provider is Groq
+And   the selected model does not support stream_options
+When  a turn is submitted
+Then  Groq returns HTTP 400
+And   the backend detects stream_options in the payload
+And   retries immediately with stream_options removed (does not sleep, does not consume a retry slot)
+And   the turn completes normally
+And   the api_log entry has usage: null for that turn
+And   no rate_limits SSE event is emitted for that turn
+
+Given the same model receives a 400 for a different reason (stream_options absent)
+Then  the backend raises immediately without retrying
+```
+
+---
+
 ## Out of Scope
 
 - Model quality comparison
@@ -132,3 +155,5 @@ And   hovering the badge shows a tooltip with reset times
 - Default model: `llama-3.3-70b-versatile` (Groq), `qwen3:4b` (Ollama)
 - History trimmed to 10 messages for Groq, 30 for Ollama
 - Per-day limits only appear in the 429 error body — per-minute limits surface via headers on every successful response
+- Models confirmed to support `stream_options`: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`
+- Models confirmed NOT to support `stream_options`: `llama3-8b-8192`, `mixtral-8x7b-32768`

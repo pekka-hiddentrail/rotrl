@@ -67,8 +67,15 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
     Reads the ``retry-after`` or ``x-ratelimit-reset-requests`` response header
     when present; otherwise falls back to exponential back-off starting at
     ``_GROQ_RETRY_BASE`` seconds.  Raises on any non-retryable error.
+
+    Some older Groq models (e.g. llama3-8b-8192) reject ``stream_options``
+    with a 400.  On the first 400 we silently drop that key and retry once
+    so usage tracking degrades gracefully rather than hard-failing.
     """
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    # Work on a shallow copy so the caller's payload is never mutated.
+    payload = dict(payload)
+    _stream_options_dropped = False
     wait = _GROQ_RETRY_BASE
     for attempt in range(_GROQ_MAX_RETRIES + 1):
         resp = _requests.post(
@@ -84,6 +91,12 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
                 "The session context has grown too big for the model. "
                 "Try starting a new session or switching to dev mode."
             )
+        # Older models return 400 when stream_options is present — drop it and
+        # retry immediately (does not count against the rate-limit retry budget).
+        if resp.status_code == 400 and not _stream_options_dropped and "stream_options" in payload:
+            payload.pop("stream_options")
+            _stream_options_dropped = True
+            continue
         if resp.status_code != 429:
             resp.raise_for_status()
             return resp

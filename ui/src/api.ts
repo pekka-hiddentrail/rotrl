@@ -44,13 +44,13 @@ export async function* sendTurn(
   yield* parseSseStream(res)
 }
 
-export async function* endSessionWithRecap(sessionId: string): AsyncGenerator<SseEvent> {
-  const res = await fetch(`${BASE}/sessions/${sessionId}/end`, { method: 'POST' })
+export async function* endSessionWithRecap(sessionId: string, signal?: AbortSignal): AsyncGenerator<SseEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/end`, { method: 'POST', signal })
   if (!res.ok) {
     const detail = await res.text()
     throw new Error(`End session failed (${res.status}): ${detail}`)
   }
-  yield* parseSseStream(res)
+  yield* parseSseStream(res, signal)
 }
 
 export async function endSession(sessionId: string): Promise<void> {
@@ -89,14 +89,16 @@ export async function logRoll(
   })
 }
 
-async function* parseSseStream(response: Response): AsyncGenerator<SseEvent> {
+async function* parseSseStream(response: Response, signal?: AbortSignal): AsyncGenerator<SseEvent> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
 
+  signal?.addEventListener('abort', () => reader.cancel())
+
   while (true) {
     const { done, value } = await reader.read()
-    if (done) break
+    if (done || signal?.aborted) break
     buffer += decoder.decode(value, { stream: true })
 
     const lines = buffer.split('\n')

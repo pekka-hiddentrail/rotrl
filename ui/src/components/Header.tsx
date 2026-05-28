@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { SessionInfo } from '../types'
 
 const MODELS: Record<string, { value: string; label: string }[]> = {
@@ -38,6 +38,7 @@ interface Props {
   onProviderChange: (p: 'ollama' | 'groq') => void
   onBoot: () => void
   onEnd: () => void
+  onKillEnd: () => void
   onViewLog: () => void
   onPurgeNpcs: () => void
 }
@@ -55,9 +56,11 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 
 export default function Header({
   session, streaming, ending, sessionNumber, model, devMode, provider, rateLimits,
-  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onViewLog, onPurgeNpcs,
+  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onKillEnd, onViewLog, onPurgeNpcs,
 }: Props) {
   const [confirmingPurge, setConfirmingPurge] = useState(false)
+  const [confirmingKill, setConfirmingKill] = useState(false)
+  useEffect(() => { if (!ending) setConfirmingKill(false) }, [ending])
   const isBooted = session !== null
   const locked = streaming || ending
 
@@ -186,9 +189,24 @@ export default function Header({
             <button onClick={onViewLog} disabled={ending} className="btn btn-secondary">
               View Log
             </button>
-            <button onClick={onEnd} disabled={ending} className="btn btn-danger">
-              {ending ? 'Ending…' : 'End Session'}
-            </button>
+            {ending ? (
+              <>
+                <button disabled className="btn btn-danger">Ending…</button>
+                {confirmingKill ? (
+                  <span className="inline-confirm">
+                    <span className="inline-confirm-label">Discard and quit?</span>
+                    <button className="btn btn-danger btn-sm" onClick={() => { setConfirmingKill(false); onKillEnd() }}>Yes</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setConfirmingKill(false)}>No</button>
+                  </span>
+                ) : (
+                  <button className="btn btn-secondary" onClick={() => setConfirmingKill(true)} title="Force-quit the ending process and discard recap">
+                    Kill
+                  </button>
+                )}
+              </>
+            ) : (
+              <button onClick={onEnd} className="btn btn-danger">End Session</button>
+            )}
           </>
         )}
       </div>
