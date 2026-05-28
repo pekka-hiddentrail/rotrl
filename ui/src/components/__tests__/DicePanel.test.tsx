@@ -113,23 +113,112 @@ describe('lookupSkillBonus', () => {
   })
 })
 
-// ─── Component: baseline ─────────────────────────────────────────────────────
+// ─── Component: AC-001 — queue accumulation ───────────────────────────────────
 
-describe('DicePanel — baseline', () => {
+describe('DicePanel — AC-001 queue accumulation', () => {
   it('renders the Roll button as disabled when no dice are pending', () => {
     renderPanel()
     expect(screen.getByRole('button', { name: 'Roll' })).toBeDisabled()
   })
 
-  it('enables Roll after clicking a die', () => {
+  it('enables Roll after clicking a die (AC-001)', () => {
     renderPanel()
     fireEvent.click(screen.getByTitle('d20'))
     expect(screen.getByRole('button', { name: 'Roll' })).not.toBeDisabled()
   })
 
+  it('shows correct grouped expression after clicking multiple dice (AC-001)', () => {
+    renderPanel()
+    fireEvent.click(screen.getByTitle('d6'))
+    fireEvent.click(screen.getByTitle('d6'))
+    fireEvent.click(screen.getByTitle('d20'))
+    expect(screen.getByText('2d6+1d20')).toBeInTheDocument()
+  })
+
+  it('accumulates dice without replacing the queue (AC-001)', () => {
+    renderPanel()
+    fireEvent.click(screen.getByTitle('d6'))
+    fireEvent.click(screen.getByTitle('d6'))
+    // Queue should show 2d6, not just 1d6
+    expect(screen.getByText('2d6')).toBeInTheDocument()
+  })
+
   it('shows no history initially', () => {
     renderPanel()
     expect(screen.queryByText(/vs DC/)).not.toBeInTheDocument()
+  })
+})
+
+// ─── Component: AC-002 — roll history and latest highlight ────────────────────
+
+describe('DicePanel — AC-002 roll history highlight', () => {
+  it('most recent roll has history-latest class (AC-002)', async () => {
+    const onRoll = vi.fn().mockResolvedValue(null)
+    const { container } = renderPanel({ onRoll })
+    fireEvent.click(screen.getByTitle('d20'))
+    fireEvent.click(screen.getByRole('button', { name: 'Roll' }))
+    await waitFor(() => expect(onRoll).toHaveBeenCalled())
+    const rows = container.querySelectorAll('.history-row')
+    expect(rows[0]).toHaveClass('history-latest')
+  })
+
+  it('only the first row has history-latest class after multiple rolls (AC-002)', async () => {
+    const onRoll = vi.fn().mockResolvedValue(null)
+    const { container } = renderPanel({ onRoll })
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByTitle('d20'))
+      fireEvent.click(screen.getByRole('button', { name: 'Roll' }))
+      await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(i + 1))
+    }
+    const rows = container.querySelectorAll('.history-row')
+    expect(rows[0]).toHaveClass('history-latest')
+    expect(rows[1]).not.toHaveClass('history-latest')
+    expect(rows[2]).not.toHaveClass('history-latest')
+  })
+})
+
+// ─── Component: AC-004 — pending roll banner ──────────────────────────────────
+
+describe('DicePanel — AC-004 pending roll banner', () => {
+  it('shows skill name in the banner (AC-004)', () => {
+    renderPanel({ pendingRoll: DIPLOMACY_ROLL })
+    expect(screen.getByText('Diplomacy')).toBeInTheDocument()
+  })
+
+  it('shows DC number in the banner (AC-004)', () => {
+    renderPanel({ pendingRoll: DIPLOMACY_ROLL })
+    expect(screen.getByText('DC 15')).toBeInTheDocument()
+  })
+
+  it('shows "roll d20" hint in the banner (AC-004)', () => {
+    renderPanel({ pendingRoll: DIPLOMACY_ROLL })
+    expect(screen.getByText('roll d20')).toBeInTheDocument()
+  })
+
+  it('adds dice-panel-active class to aside when pending roll is set (AC-004)', () => {
+    const { container } = renderPanel({ pendingRoll: DIPLOMACY_ROLL })
+    expect(container.querySelector('aside')).toHaveClass('dice-panel-active')
+  })
+
+  it('does not show dice-panel-active class when no pending roll', () => {
+    const { container } = renderPanel({ pendingRoll: null })
+    expect(container.querySelector('aside')).not.toHaveClass('dice-panel-active')
+  })
+})
+
+// ─── Component: AC-006 — roll history limit ───────────────────────────────────
+
+describe('DicePanel — AC-006 roll history limit', () => {
+  it('keeps only the last 10 rolls when 12 have been made (AC-006)', async () => {
+    const onRoll = vi.fn().mockResolvedValue(null)
+    const { container } = renderPanel({ onRoll })
+    for (let i = 0; i < 12; i++) {
+      fireEvent.click(screen.getByTitle('d20'))
+      fireEvent.click(screen.getByRole('button', { name: 'Roll' }))
+      await waitFor(() => expect(onRoll).toHaveBeenCalledTimes(i + 1))
+    }
+    const rows = container.querySelectorAll('.history-row')
+    expect(rows).toHaveLength(10)
   })
 })
 

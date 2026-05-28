@@ -140,4 +140,5 @@ And   characters without a character_sheet.md are silently skipped
 
 - See: [INDEX.md §16 — System Prompt Architecture](INDEX.md)
 - Boot context lookup order: `sessions/session_NNN/boot.md` → `sessions/session_N-1/recap.md` → hardcoded fallback text
-- `_build_slim_system_prompt()` in `api/session_manager.py` is the source of truth
+- `_build_slim_system_prompt()` in `api/session_manager.py` assembles the fixed prompt at boot
+- Per-turn copy assembly (AC-002, AC-003, AC-004) is the responsibility of `_inject_context(session) -> tuple[str, dict]`; `_stream_chat` calls it and unpacks `(system_content, context_info)` to build the LLM payload

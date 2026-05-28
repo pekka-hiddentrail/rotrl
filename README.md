@@ -222,8 +222,9 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 309 pytest tests
-├── ui/src/components/__tests__/    # 30 Vitest + Testing Library component tests
+├── tests/                         # 322 pytest tests
+├── ui/src/components/__tests__/    # 69 Vitest component tests
+├── ui/src/__tests__/               # 19 Vitest App SSE integration tests
 │
 ├── dev.py                         # One-command dev startup (pytest → API + UI)
 ├── start_backend.ps1              # Windows: start FastAPI backend
@@ -306,10 +307,12 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_character_data.py` | Character sheet loading |
 | `test_intro.py` | Intro file resolution and fallback |
 
-**Frontend:** 30 Vitest tests passing across 2 test files:
+**Frontend:** 88 Vitest tests passing across 4 test files:
 
 | File | Covers |
 |------|--------|
+| `App.test.tsx` | App-level SSE integration — boot flow, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), error bar, session end cleanup |
+| `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display |
 | `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
 | `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |
 
@@ -431,7 +434,7 @@ ollama list                            # confirm model is pulled
 | API call logging (`outputs/api_log/`) with Groq token usage | ✅ Complete |
 | Groq rate limit display in header (RPM/TPM remaining) | ✅ Complete |
 | `stream_options` graceful degradation for older Groq models | ✅ Complete |
-| Test suites — 309 pytest + 30 Vitest tests | ✅ Complete |
+| Test suites — 322 pytest + 88 Vitest tests | ✅ Complete |
 | System Authority docs | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I (Swallowtail Festival + Goblin Raid) | ✅ Complete |

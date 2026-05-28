@@ -113,3 +113,4 @@ And   no context block is injected into the per-turn prompt
 - See: [INDEX.md §4 — Context Detection & Injection](INDEX.md)
 - Detection runs zero additional LLM calls — pure regex word-boundary matching
 - Scene NPCs accumulate in `session.scene_npcs` across turns so DELTAS reminders persist
+- All detection + injection logic lives in `_inject_context(session) -> tuple[str, dict]` in `api/session_manager.py`; `_stream_chat` calls it and unpacks `context_info` for the SSE `context` event
