@@ -5,71 +5,139 @@
   "rune": "ᚨ",
   "name": "Ani",
   "player": "Player 03",
-  "race": "Emberkin Aasimar",
+  "campaign": "Rise of the Runelords",
+  "race": "Peri-Blooded (Emberkin) Aasimar",
   "class": "Warpriest",
   "archetype": "Sacred Fist",
-  "alignment": "Lawful Neutral",
-  "deity": "Cayden Cailean",
+  "alignment": "Neutral Good",
+  "deity": "Irori",
   "level": 1,
-  "appearance": "An Emberkin Aasimar from the Shackles, Ani carries the quiet intensity of celestial fire within a compact frame. As a Sacred Fist Warpriest of Cayden Cailean, she channels divine will through martial discipline, blending unyielding law with the freedom her deity champions.",
-  "hp": { "current": 7, "max": 7, "hitDie": "d8", "baseDieRoll": 6, "conBonus": 1 },
-  "ac": { "total": 12, "touch": 12, "flatFooted": 10, "components": [{ "source": "Base", "value": 10 }, { "source": "DEX", "value": 2 }] },
+  "xp": 0,
+  "homeland": "Osirion",
+  "age": 20,
+  "gender": "Female",
+  "height": "6 ft. 1 in.",
+  "weight": "178 lbs.",
+  "appearance": "Ani is a tall, muscular, tanned woman from Osirion, with facial features common to her homeland, vivid purple eyes, and white hair worn in long braids. She wears a flowing white puff-sleeved shirt over an off-white top that leaves her chest and abs visible, along with thigh-high shorts and sturdy sandals suited for long marches and combat. When excitement surges through her, her skin begins to glow as if fire burns just beneath it.",
+  "hp": { "current": 11, "max": 11, "hitDie": "d8", "baseDieRoll": 8, "conBonus": 3 },
+  "ac": {
+    "total": 17,
+    "touch": 17,
+    "flatFooted": 14,
+    "components": [
+      { "source": "Base", "value": 10 },
+      { "source": "DEX", "value": 2 },
+      { "source": "WIS", "value": 4 },
+      { "source": "Other", "value": 1 }
+    ]
+  },
   "initiative": "+2",
   "speed": "30 ft.",
   "bab": "+0",
+  "cmb": "+0",
+  "cmd": "17",
+  "resistances": [
+    "Resistance 5 to acid damage",
+    "Resistance 5 to cold damage",
+    "Resistance 5 to electricity damage"
+  ],
+  "senses": "Darkvision 60 ft.",
+  "perception": "+8",
+  "languages": ["Common", "Celestial", "Osiriani"],
+  "proficiencies": "Sacred fists are proficient with the club, crossbow (light or heavy), dagger, handaxe, javelin, kama, nunchaku, quarterstaff, sai, shortspear, short sword, shuriken, siangham, sling, and spear. Sacred fists are not proficient with any armor or shields. When wearing armor, using shield, or carrying a medium or heavy load, a sacred fist loses his AC bonus and flurry of blows",
   "abilities": [
-    { "name": "STR", "score": 9,  "mod": "−1" },
+    { "name": "STR", "score": 10, "mod": "+0" },
     { "name": "DEX", "score": 15, "mod": "+2" },
-    { "name": "CON", "score": 12, "mod": "+1" },
+    { "name": "CON", "score": 14, "mod": "+2" },
     { "name": "INT", "score": 12, "mod": "+1" },
-    { "name": "WIS", "score": 10, "mod": "+0" },
-    { "name": "CHA", "score": 20, "mod": "+6" }
+    { "name": "WIS", "score": 18, "mod": "+4" },
+    { "name": "CHA", "score": 9, "mod": "-1" }
   ],
   "saves": [
-    { "name": "Fortitude", "ability": "CON", "total": "+1", "base": "+0", "abilityMod": "+1", "magic": "+0", "misc": "+0" },
-    { "name": "Reflex",    "ability": "DEX", "total": "+2", "base": "+0", "abilityMod": "+2", "magic": "+0", "misc": "+0" },
-    { "name": "Will",      "ability": "WIS", "total": "+2", "base": "+1", "abilityMod": "+0", "magic": "+0", "misc": "+1" }
+    { "name": "Fortitude", "ability": "CON", "total": "+4", "base": "+2", "abilityMod": "+2", "magic": "+0", "misc": "+0" },
+    { "name": "Reflex", "ability": "DEX", "total": "+3", "base": "+0", "abilityMod": "+2", "magic": "+0", "misc": "+1" },
+    { "name": "Will", "ability": "WIS", "total": "+6", "base": "+2", "abilityMod": "+4", "magic": "+0", "misc": "+0" }
   ],
   "skills": [
-    { "name": "Acrobatics",         "ability": "DEX", "total": 4,  "ranks": 0, "abilityMod": 2, "misc": 2 },
-    { "name": "Appraise",           "ability": "INT", "total": 5,  "ranks": 1, "abilityMod": 1, "misc": 3 },
-    { "name": "Bluff",              "ability": "CHA", "total": 5,  "ranks": 0, "abilityMod": 5, "misc": 0 },
-    { "name": "Diplomacy",          "ability": "CHA", "total": 6,  "ranks": 0, "abilityMod": 5, "misc": 1 },
-    { "name": "Disguise",           "ability": "CHA", "total": 5,  "ranks": 0, "abilityMod": 5, "misc": 0 },
-    { "name": "Intimidate",         "ability": "CHA", "total": 5,  "ranks": 0, "abilityMod": 5, "misc": 0 },
-    { "name": "Knowledge (Planes)", "ability": "CHA", "total": 5,  "ranks": 0, "abilityMod": 5, "misc": 0 },
-    { "name": "Perception",         "ability": "WIS", "total": 0,  "ranks": 0, "abilityMod": 0, "misc": 0 },
-    { "name": "Spellcraft",         "ability": "INT", "total": 5,  "ranks": 1, "abilityMod": 1, "misc": 3 },
-    { "name": "Use Magic Device",   "ability": "CHA", "total": 9,  "ranks": 1, "abilityMod": 5, "misc": 3 }
+    { "name": "Acrobatics", "ability": "DEX", "total": 2, "ranks": 0, "abilityMod": 2, "misc": 2 },
+    { "name": "Appraise", "ability": "INT", "total": 1, "ranks": 0, "abilityMod": 1, "misc": 3 },
+    { "name": "Bluff", "ability": "CHA", "total": -1, "ranks": 0, "abilityMod": -1, "misc": 0 },
+    { "name": "Climb", "ability": "STR", "total": 0, "ranks": 0, "abilityMod": 0, "misc": 0 },
+    { "name": "Diplomacy", "ability": "CHA", "total": -1, "ranks": 0, "abilityMod": -1, "misc": 1 },
+    { "name": "Disguise", "ability": "CHA", "total": -1, "ranks": 0, "abilityMod": -1, "misc": 0 },
+    { "name": "Escape Artist", "ability": "DEX", "total": 2, "ranks": 0, "abilityMod": 2, "misc": 0 },
+    { "name": "Fly", "ability": "DEX", "total": 2, "ranks": 0, "abilityMod": 2, "misc": 0 },
+    { "name": "Heal", "ability": "WIS", "total": 8, "ranks": 1, "abilityMod": 4, "misc": 0 },
+    { "name": "Intimidate", "ability": "CHA", "total": -1, "ranks": 0, "abilityMod": -1, "misc": 0 },
+    { "name": "Knowledge (Planes)", "ability": "INT", "total": 3, "ranks": 0, "abilityMod": 1, "misc": 2 },
+    { "name": "Perception", "ability": "WIS", "total": 8, "ranks": 1, "abilityMod": 4, "misc": 3 },
+    { "name": "Ride", "ability": "DEX", "total": 2, "ranks": 0, "abilityMod": 2, "misc": 0 },
+    { "name": "Sense Motive", "ability": "WIS", "total": 4, "ranks": 0, "abilityMod": 4, "misc": 0 },
+    { "name": "Spellcraft", "ability": "INT", "total": 3, "ranks": 0, "abilityMod": 1, "misc": 2 },
+    { "name": "Stealth", "ability": "DEX", "total": 6, "ranks": 1, "abilityMod": 2, "misc": 3 },
+    { "name": "Survival", "ability": "WIS", "total": 4, "ranks": 0, "abilityMod": 4, "misc": 0 },
+    { "name": "Swim", "ability": "STR", "total": 0, "ranks": 0, "abilityMod": 0, "misc": 0 }
   ],
   "feats": [
-    { "name": "Eschew Materials", "desc": "Cast any spell with a material component costing 1 gp or less without needing that component. The casting still provokes attacks of opportunity. More expensive components are still required." },
-    { "name": "Magical Tail",     "desc": "Gain Disguise Self 2/day as a spell-like ability. CL = Hit Dice. DC = 10 + ½ HD + CHA mod. May be taken up to 8 times for progressively stronger abilities: Disguise Self → Charm Person → Misdirection → Invisibility → Suggestion → Displacement → Confusion → Dominate Person." }
+    { "name": "Deft Dodger", "desc": "You gain a +1 trait bonus on Reflex saves." },
+    { "name": "Desert Child (desert)", "desc": "You were born and raised in rocky deserts. You gain a +4 trait bonus on saving throws against hot conditions and a +1 trait bonus on all saving throws against fire effects." }
+  ],
+  "traits": [
+    { "name": "Deft Dodger", "desc": "You gain a +1 trait bonus on Reflex saves." },
+    { "name": "Desert Child (desert)", "desc": "You were born and raised in rocky deserts. You gain a +4 trait bonus on saving throws against hot conditions and a +1 trait bonus on all saving throws against fire effects." }
+  ],
+  "racialFeatures": [
+    { "name": "Celestial Resistance", "desc": "Aasimars have acid resistance 5, cold resistance 5, and electricity resistance 5." },
+    { "name": "Skilled", "desc": "Emberkin have a +2 racial bonus on Knowledge (planes) and Spellcraft checks." },
+    { "name": "Spell-Like Ability", "desc": "Emberkin gain pyrotechnics as a spell-like ability." }
+ ],
+  "classFeatures": [
+    { "name": "AC Bonus (Su)", "desc": "A sacred fist adds Wisdom to AC and CMD while unarmored and unencumbered. These bonuses apply against touch attacks and while flat-footed, but are lost when immobilized, helpless, armored, shielded, or heavily loaded." },
+    { "name": "Aura of Law (Ex)", "desc": "You project a faint lawful aura." },
+    { "name": "Blessings (Su)", "desc": "You can call upon the power of your blessings 3 times per day. The DC for these blessings is 14." },
+    { "name": "Powerful Healer (Su)", "desc": "As a swift action, you can treat any cure spell as if it were empowered, causing it to heal 50% more damage or deal 50% more damage to undead." },
+    { "name": "Strength Surge (Su)", "desc": "As a swift action you gain a +1 enhancement bonus on melee attack rolls, Strength-based combat maneuver checks, Strength-based skills, and Strength checks for 1 round." }
   ],
   "weapons": [
-    { "display": "Light Crossbow +2 (1d8)",    "name": "Light Crossbow",          "type": "Ranged", "atk": "+2", "dmg": "1d8",    "crit": "19–20/×2", "range": "80 ft.",  "dmgType": "Piercing",            "special": "",                                                                                                         "ammo": "Crossbow Bolts ×20" },
-    { "display": "Quarterstaff −1 (1d6−1)",    "name": "Quarterstaff (one-hand)", "type": "Melee",  "atk": "−1", "dmg": "1d6−1", "crit": "20/×2",    "range": "5 ft.",   "dmgType": "Bludgeoning",         "special": "Double, Monk",                                                                                             "ammo": "" },
-    { "display": "Dagger +2 (1d4−1)",          "name": "Dagger (thrown)",         "type": "Ranged", "atk": "+2", "dmg": "1d4−1", "crit": "19–20/×2", "range": "10 ft.",  "dmgType": "Piercing / Slashing", "special": "",                                                                                                         "ammo": "" },
-    { "display": "Bite −1 (1d4−1)",            "name": "Bite (vulpine form)",     "type": "Melee",  "atk": "−1", "dmg": "1d4−1", "crit": "20/×2",    "range": "5 ft.",   "dmgType": "B / P / S",           "special": "Natural weapon. Vulpine form only.",                                                                       "ammo": "" },
-    { "display": "Laughing Touch (8/day)",      "name": "Laughing Touch",          "type": "Touch",  "atk": "−1", "dmg": "—",    "crit": "—",        "range": "Touch",   "dmgType": "—",                   "special": "Target laughs 1 round (move only, can defend). Immune 24 hrs. Mind-affecting. 8/day.",                        "ammo": "" }
+    { "display": "Unarmed Attack +2 (1d6)", "name": "Unarmed Attack", "type": "Melee", "atk": "+2", "dmg": "1d6", "crit": "20/x2", "range": "5 ft.", "dmgType": "Bludgeoning", "special": "", "ammo": "20" },
+    { "display": "Quarterstaff (Two-Weapons) -9/-9 (1d6-1)", "name": "Quarterstaff (Two-Weapons)", "type": "Melee", "atk": "-9, -9", "dmg": "1d6-1", "crit": "20/2x, 20/2x", "range": "5 ft., 5 ft.", "dmgType": "Bludgeon, Bludgeon", "special": "double, monk", "ammo": "" },
+    { "display": "Quarterstaff (One Head) -1 (1d6-1)", "name": "Quarterstaff (One Head)", "type": "Melee", "atk": "-1", "dmg": "1d6-1", "crit": "20/2x", "range": "5 ft.", "dmgType": "Bludgeon", "special": "double, monk", "ammo": "" },
+    { "display": "Dagger -1 (1d4-1)", "name": "Dagger", "type": "Melee", "atk": "-1", "dmg": "1d4-1", "crit": "19-20/2x", "range": "5 ft.", "dmgType": "Piercing / Slashing", "special": "", "ammo": "" },
+    { "display": "Dagger +2 (1d4-1)", "name": "Dagger", "type": "Ranged", "atk": "+2", "dmg": "1d4-1", "crit": "19-20/2x", "range": "10 ft.", "dmgType": "Piercing / Slashing", "special": "", "ammo": "" },
+    { "display": "Crossbow, Heavy +2 (1d10)", "name": "Crossbow, Heavy", "type": "Ranged", "atk": "+2", "dmg": "1d10", "crit": "19-20/x2", "range": "120 ft.", "dmgType": "Piercing", "special": "Loading a heavy crossbow is a fullround action that provokes attacks of opportunity.", "ammo": "20" },
+    { "display": "Flurry of Blows +1/+1 (1d6, 1d6)", "name": "Flurry of Blows", "type": "Melee", "atk": "+1, +1", "dmg": "1d6, 1d6", "crit": "20/x2, 20/2x", "range": "5 ft.", "dmgType": "Bludgeoning", "special": "", "ammo": "" }
   ],
   "spells": {
-    "concentration": "+7",
+    "casterLevel": 1,
+    "concentration": "+5",
+    "summary": {
+      "class": "Warpriest",
+      "levels": [
+        { "level": 0, "known": 3, "slots": 0, "DC": 14 },
+        { "level": 1, "known": 0, "slots": 2, "DC": 15 }
+      ]
+    },
     "list": [
-      { "name": "Disguise Self",  "level": "Innate",            "perDay": "2/day",   "castTime": "1 standard action", "duration": "10 min.",            "range": "Personal",  "components": "V, S",    "school": "Illusion",          "target": "You",                            "cl": 1, "sr": "—",  "save": "—",    "effect": "Change your appearance — clothing, armor, weapons — to look different." },
-      { "name": "Dancing Lights", "level": "Racial",            "perDay": "3/day",   "castTime": "1 standard action", "duration": "1 min.",             "range": "10 ft.",    "components": "V, S",    "school": "Evocation",         "target": "Up to 4 lights in 10-ft. radius", "cl": 1, "sr": "—",  "save": "—",    "effect": "Create up to four lights resembling lanterns or torches." },
-      { "name": "Detect Magic",   "level": "Cantrip",           "perDay": "At will", "castTime": "1 standard action", "duration": "Conc. up to 1 min.", "range": "60 ft.",    "components": "V, S",    "school": "Divination",        "target": "Cone emanation",                 "cl": 1, "sr": "—",  "save": "—",    "effect": "Detect magical auras and determine school and strength." },
-      { "name": "Disrupt Undead", "level": "Cantrip",           "perDay": "At will", "castTime": "1 standard action", "duration": "Instantaneous",      "range": "25 ft.",    "components": "V, S",    "school": "Necromancy",        "target": "1 undead",                       "cl": 1, "sr": "Yes", "save": "None", "effect": "Deal 1d6 damage to one undead creature." },
-      { "name": "Message",        "level": "Cantrip",           "perDay": "At will", "castTime": "1 standard action", "duration": "10 min.",            "range": "110 ft.",   "components": "V, S, F", "school": "Transmutation",     "target": "1 creature / level",             "cl": 1, "sr": "—",  "save": "—",    "effect": "Whisper a message; target can whisper a reply only you hear." },
-      { "name": "Read Magic",     "level": "Cantrip",           "perDay": "At will", "castTime": "1 standard action", "duration": "10 min.",            "range": "Personal",  "components": "V, S, F", "school": "Divination",        "target": "You",                            "cl": 1, "sr": "—",  "save": "—",    "effect": "Decipher magical inscriptions on objects, scrolls, or spellbooks." },
-      { "name": "Magic Missile",  "level": "1st · 5 slots/day", "perDay": "5/day",  "castTime": "1 standard action", "duration": "Instantaneous",      "range": "110 ft.",   "components": "V, S",    "school": "Evocation [force]", "target": "Up to 5 creatures ≤15 ft. apart", "cl": 1, "sr": "Yes", "save": "None", "effect": "1 missile dealing 1d4+1 force damage. Never misses." },
-      { "name": "Shield",         "level": "1st · 5 slots/day", "perDay": "5/day",  "castTime": "1 standard action", "duration": "1 min.",             "range": "Personal",  "components": "V, S",    "school": "Abjuration",        "target": "You",                            "cl": 1, "sr": "—",  "save": "—",    "effect": "+4 shield bonus to AC. Negates magic missile. Dismissible." }
+      { "name": "Pyrotechnics", "level": "Racial", "perDay": "1 per day", "castTime": "1 Standard action", "duration": "1d4+1 rounds, or 1d4+1 rounds after creatures leave the smoke cloud; see text [D]", "range": "440 ft.", "components": "V, S, M", "school": "Transmutation", "target": "One fire source, up to a 20-ft. cube", "cl": 1, "sr": "Yes or No; see text", "save": "Will negates or Fortitude negates; see text; Spell", "effect": "Pyrotechnics turns a fire into a burst of blinding fireworks or a thick cloud of choking smoke, depending on your choice.", "source": "CR p.328" },
+      { "name": "Detect Poison", "level": "Cantrip", "perDay": "", "castTime": "1 Standard action", "duration": "Concentration, up to 1 minutes [D]", "range": "60 ft.", "components": "V, S", "school": "Divination", "target": "Or Area one creature, one object, or a 5-ft. cube", "cl": 1, "sr": "", "save": "", "effect": "You determine whether a creature, object, or area has been poisoned or is poisonous.", "source": "CR p.268" },
+      { "name": "Resistance", "level": "Cantrip", "perDay": "", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "Touch", "components": "V, S, M", "school": "Abjuration", "target": "You imbue the subject with magical energy that protects it from harm, granting it a +1 resistance bonus on saves.", "cl": 1, "sr": "", "save": "Will negates", "effect": "Creature touched", "source": "CR p.334" },
+      { "name": "Stabilize", "level": "Cantrip", "perDay": "", "castTime": "1 standard action", "duration": "Instantaneous", "range": "Close (25 ft.)", "components": "V, S", "school": "Conjuration", "target": "1 living creature", "cl": 1, "sr": "", "save": "Will negates", "effect": "Upon casting this spell, you target a living creature that has -1 or fewer hit points.", "source": "CR p.348" },
+      { "name": "Protection from Evil", "level": "Level 1", "perDay": "1 per day", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "Touch", "components": "V, S, M", "school": "Abjuration", "target": "Creature touched", "cl": 1, "sr": "", "save": "Will negates", "effect": "This spell wards a creature from attacks by evil creatures, from mental control, and from summoned creatures.", "source": "CR p.327" },
+      { "name": "Shield of Faith", "level": "Level 1", "perDay": "1 per day", "castTime": "1 Standard action", "duration": "1 minutes [D]", "range": "Touch", "components": "V, S, M", "school": "Abjuration", "target": "Touch", "cl": 1, "sr": "Yes", "save": "Will negates", "effect": "This spell creates a shimmering, magical field around the target that averts and deflects attacks.", "source": "CR p.342" }
     ]
   },
   "inventory": {
     "worn": [],
-    "weapons": ["Crossbow, Light", "Dagger", "Quarterstaff"],
-    "carried": ["Backpack, Common", "Bedroll", "Flint and Steel", "Teapot", "Waterskin", "Lamp (Common/Waterproof)", "Mirror", "Candle ×10", "Crossbow Bolt ×20"],
-    "wealth": { "pp": 0, "gp": 11, "sp": 0, "cp": 0 }
+    "weapons": ["Crossbow, Heavy", "Dagger", "Quarterstaff"],
+    "carried": ["Backpack, Common", "Belt Pouch", "Blanket", "Soap", "Torches (12)", "Trail Rations (5 days)", "Waterskin", "Bolt, Crossbow (20)", "Candles (2)", "Chalk", "Hammer", "Pitons (4)", "Lantern, hooded", "Oil flask (5)", "Sack (2)", "Tindertwigs (4)", "Acid Flask", "Potion of Enlarge Person", "Tent"],
+    "wealth": { "pp": 0, "gp": 28, "sp": 0, "cp": 0 }
+  },
+  "conditions": {
+    "active": [],
+    "ongoingSpellEffects": [],
+    "temporaryBonuses": [],
+    "diseases": [],
+    "curses": [],
+    "negativeLevels": []
   }
 }

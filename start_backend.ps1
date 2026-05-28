@@ -11,12 +11,28 @@ $root = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
 Set-Location "$root"
 
 # Kill anything already holding port 8000
-$listening = netstat -ano | Select-String ":8000\s.*LISTENING"
-if ($listening) {
-    $pid = ($listening -split '\s+')[-1]
-    Write-Host "Stopping existing process on port 8000 (PID $pid)..."
-    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
+$listeners = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+if ($listeners) {
+    $portProcessIds = $listeners | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($portProcessId in $portProcessIds) {
+        Write-Host "Stopping existing process on port 8000 (PID $portProcessId)..."
+        try {
+            Stop-Process -Id $portProcessId -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Host "Stop-Process failed for PID $portProcessId, trying taskkill..." -ForegroundColor Yellow
+            taskkill /PID $portProcessId /F | Out-Null
+        }
+    }
+}
+
+# Final guard: if 8000 is still in use, fail fast with owning process info.
+$remaining = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+if ($remaining) {
+    $remainingInfo = $remaining | Select-Object LocalAddress, LocalPort, OwningProcess
+    Write-Host "Port 8000 is still in use. Cannot start backend." -ForegroundColor Red
+    $remainingInfo | Format-Table -AutoSize
+    exit 1
 }
 
 python -m uvicorn api.main:app --host 127.0.0.1 --port 8000

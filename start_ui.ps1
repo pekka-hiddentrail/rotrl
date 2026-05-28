@@ -7,5 +7,4 @@
 # Then open http://localhost:5173
 
 $root = if ($PSScriptRoot) { $PSScriptRoot } else { $PWD.Path }
-Set-Location "$root\ui"
 npm run dev

@@ -37,6 +37,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  padding-bottom: 28px; /* reserve space for the fixed IntentBar */
 }
 
 /* ── Header ─────────────────────────────────────── */
@@ -248,6 +249,48 @@ body {
   box-shadow: 0 0 8px #b0404088;
 }
 
+/* ── Provider toggle ─────────────────────── */
+
+.provider-toggle {
+  display: flex;
+  border: 1px solid #4a3f2a;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.provider-btn {
+  padding: 5px 12px;
+  background: linear-gradient(180deg, #2e2618 0%, #1c1710 100%);
+  color: #7a6848;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.provider-btn + .provider-btn {
+  border-left: 1px solid #4a3f2a;
+}
+
+.provider-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3a2e1e 0%, #241c12 100%);
+  color: #c0a870;
+}
+
+.provider-btn.active {
+  background: linear-gradient(180deg, #5a4a28 0%, #3a3018 100%);
+  color: #d4aa50;
+  box-shadow: inset 0 1px 3px #00000044;
+}
+
+.provider-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .btn-send {
   background: linear-gradient(180deg, #d4aa50 0%, #9a7828 100%);
   color: #111;
@@ -453,6 +496,40 @@ body {
   gap: 20px;
 }
 
+/* ── Session intro card ─────────────────────────── */
+
+.intro-card {
+  align-self: stretch;
+  background: linear-gradient(160deg, #1a1008 0%, #130f08 100%);
+  border: 1px solid #5a4020;
+  border-radius: 6px;
+  padding: 22px 28px 16px;
+  margin-bottom: 8px;
+  box-shadow: 0 0 32px #c9a84c18;
+}
+
+.intro-card-body { color: #d8c89a; line-height: 1.7; }
+.intro-h1 { font-family: 'Cinzel Decorative', serif; font-size: 1.15rem; color: #c9a84c; margin-bottom: 4px; }
+.intro-h2 { font-family: 'Cinzel', serif; font-size: 0.9rem; color: #a08840; margin: 10px 0 4px; letter-spacing: .05em; }
+.intro-hr { border: none; border-top: 1px solid #5a4020; margin: 14px 0; }
+.intro-p  { margin-bottom: 10px; font-size: 0.95rem; }
+
+.intro-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #3a2a14;
+}
+.intro-footer-text {
+  font-size: 0.78rem;
+  color: #7a6a50;
+  margin-left: 6px;
+  font-style: italic;
+  letter-spacing: .03em;
+}
+
 .bubble-row {
   display: flex;
   flex-direction: column;
@@ -543,6 +620,38 @@ body {
   40%           { opacity: 0.9; transform: scale(1.15); }
 }
 
+/* ── Session ending card ─────────────────── */
+.ending-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+  margin: 12px auto;
+  padding: 12px 22px;
+  background: rgba(90, 40, 10, 0.45);
+  border: 1px solid #7a4820;
+  border-radius: 20px;
+  color: #c8a060;
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  backdrop-filter: blur(4px);
+}
+
+.ending-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c8a060;
+  opacity: 0.3;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.ending-text {
+  opacity: 0.9;
+}
+
 /* ── Input bar ───────────────────────────── */
 
 .input-bar {
@@ -594,6 +703,55 @@ body {
   padding: 10px 8px 16px;
   gap: 8px;
   overflow-y: auto;
+}
+
+.dice-panel-active {
+  border-left-color: #c9a84c;
+  box-shadow: inset -3px 0 12px #c9a84c18;
+}
+
+/* ── Roll request banner ─────────────────── */
+
+.roll-request-banner {
+  width: 100%;
+  background: linear-gradient(180deg, #2a2010 0%, #1a1408 100%);
+  border: 1px solid #c9a84c44;
+  border-radius: 5px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: roll-pulse 2s ease-in-out infinite;
+}
+
+@keyframes roll-pulse {
+  0%, 100% { border-color: #c9a84c44; box-shadow: none; }
+  50%       { border-color: #c9a84caa; box-shadow: 0 0 10px #c9a84c22; }
+}
+
+.roll-request-skill {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  color: #d4aa50;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.roll-request-dc {
+  font-family: 'Cinzel', serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #e8c870;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.roll-request-hint {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #7a6838;
 }
 
 .dice-panel-label {
@@ -1197,4 +1355,122 @@ body {
   color: var(--text-muted);
   padding: 1px 0;
   line-height: 1.5;
+}
+
+/* ── Intent debug bar ────────────────────────── */
+
+.intent-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  height: 28px;
+  background: #0e0b09;
+  border-top: 1px solid #3a2e1e;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.intent-bar-label {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: #6a5840;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.intent-idle {
+  color: #6a5c40;
+}
+
+.intent-input {
+  color: #c8aa70;
+  font-style: italic;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.intent-sep {
+  color: #b08840;
+  flex-shrink: 0;
+}
+
+.intent-detecting {
+  color: #c0a060;
+  font-style: italic;
+  animation: detecting-blink 1s ease-in-out infinite;
+}
+
+@keyframes detecting-blink {
+  0%, 100% { opacity: 0.35; }
+  50%       { opacity: 1; }
+}
+
+/* shown when no context event arrived (backend not running / not restarted) */
+.intent-no-event {
+  color: #885030;
+  font-style: italic;
+  font-size: 10px;
+}
+
+.intent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.intent-tag-kind {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.intent-tag-name {
+  font-weight: 600;
+}
+
+.intent-tag-trigger {
+  font-size: 10px;
+  opacity: 0.75;
+  font-style: italic;
+}
+
+.intent-npc {
+  background: #1c1a30;
+  color: #b8c4f8;
+  border: 1px solid #4a4880;
+}
+
+.intent-skill {
+  background: #141c10;
+  color: #90d060;
+  border: 1px solid #3a5828;
+}
+
+.intent-location {
+  background: #1a1810;
+  color: #d4a840;
+  border: 1px solid #5a4010;
+}
+
+.intent-none-tag {
+  background: transparent;
+  color: #887060;
+  border: 1px solid #504030;
+  font-style: italic;
 }

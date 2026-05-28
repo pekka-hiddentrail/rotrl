@@ -27,11 +27,10 @@ export default function ChatWindow({ messages, streaming }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streaming])
 
-  const lastIsPlayer =
-    messages.length === 0 ||
-    messages[messages.length - 1]?.role === 'player'
-
-  const showThinking = streaming && lastIsPlayer
+  const lastRole = messages[messages.length - 1]?.role
+  // Show the animated thinking dots only when a player message is last
+  // (not during the initial intro display — the intro card has its own indicator)
+  const showThinking = streaming && lastRole === 'player'
 
   return (
     <div className="chat-window">

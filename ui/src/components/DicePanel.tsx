@@ -7,8 +7,16 @@ interface RollRecord {
   total: number
 }
 
+interface PendingRoll {
+  skill: string
+  dc: number
+  success: string
+  failure: string
+}
+
 interface Props {
   sessionId: string | null
+  pendingRoll: PendingRoll | null
   onRoll: (expr: string, rolls: number[], total: number) => void
 }
 
@@ -49,7 +57,7 @@ function groupDice(dice: number[]): string {
 
 let nextId = 0
 
-export default function DicePanel({ onRoll }: Props) {
+export default function DicePanel({ pendingRoll, onRoll }: Props) {
   const [pending, setPending] = useState<number[]>([])
   const [history, setHistory] = useState<RollRecord[]>([])
 
@@ -68,8 +76,16 @@ export default function DicePanel({ onRoll }: Props) {
   }
 
   return (
-    <aside className="dice-panel">
-      <div className="dice-panel-label">Dice</div>
+    <aside className={`dice-panel${pendingRoll ? ' dice-panel-active' : ''}`}>
+      {pendingRoll ? (
+        <div className="roll-request-banner">
+          <div className="roll-request-skill">{pendingRoll.skill}</div>
+          <div className="roll-request-dc">DC {pendingRoll.dc}</div>
+          <div className="roll-request-hint">roll d20</div>
+        </div>
+      ) : (
+        <div className="dice-panel-label">Dice</div>
+      )}
 
       <div className="dice-grid">
         {DICE.map(sides => (

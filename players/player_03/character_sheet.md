@@ -9,13 +9,13 @@
 **Race:** Peri-Blooded (Emberkin) Aasimar
 **Class / Archetype:** Warpriest / Sacred Fist
 **Alignment:** Neutral Good
-**Deity:** Cayden Cailean
-**Homeland / Origin:** Shackles
+**Deity:** Irori
+**Homeland / Origin:** Osirion
 
-**Age:** 18
+**Age:** 20
 **Gender:** Male
-**Height / Weight:** 5 ft. 1 in. / 108 lbs.
-**Appearance Summary (2–3 sentences):** In her vulpine form, she is a compact, sharp-eyed kitsune with dark orange and white fur and two proud fox tails that sway with restless energy. In human guise, she wears her amber eyes beneath a bold orange mohawk, her dark skin and Tian Xia–shaped features giving her a striking, defiant presence. Whether cloaked in fur or flesh, there is a spark of mischief and freedom about her that seems perfectly in tune with Cayden Cailean’s irreverent spirit.
+**Height / Weight:** 6 ft. 1 in. / 178 lbs.
+**Appearance Summary (2–3 sentences):** Ani is a tall, muscular, tanned woman from Osirion, with facial features common to her homeland, vivid purple eyes, and white hair worn in long braids. She wears a flowing white puff-sleeved shirt over an off-white top that leaves her chest and abs visible, along with thigh-high shorts and sturdy sandals suited for long marches and combat. When excitement surges through her, her skin begins to glow as if fire burns just beneath it.
 
 
 # Core Statistics
@@ -24,62 +24,68 @@
 
 | Ability | Score | Modifier |
 | ------- | ----- | -------- |
-| STR     |   9   |   -1     |
+| STR     |  10   |    0     |
 | DEX     |  15   |   +2     |
-| CON     |  12   |   +1     |
+| CON     |  14   |   +2     |
 | INT     |  12   |   +1     |
-| WIS     |  10   |   +0     |
-| CHA     |  20   |   +6     |
+| WIS     |  18   |   +4     |
+| CHA     |   9   |   -1     |
 
 
 ## Combat Stats
 
-**HP (Max):** 7
-**HP (Current):** 7
+**HP (Max):** 11
+**HP (Current):** 11
 
-**AC (Total):** 12
+**AC (Total):** 17
 
-* Touch: 12
-* Flat-Footed: 10
+* Touch: 17
+* Flat-Footed: 14
+
+**Resistances and immunities:**
+* Resistance (5) to Acid damage
+* Resistance (5) to Cold damage
+* Resistance (5) to Electricity damage
 
 **Initiative:** +2
 
 **Speed:** 30 ft.
 
 **Base Attack Bonus:** +0
-**CMB:** -1
-**CMD:** 11
+**CMB:** 0
+**CMD:** 17
 
-**Proficiencies:** Battle Aspergillum, Bayonet, Blowgun, Boar Spear, Brass Knuckles, Cestus, Club, Heavy Crossbow, Light Crossbow, Dagger, Punching Dagger, Dart, Gauntlet, Spiked Gauntlet, Grapple, Hanbo, Javelin, Longspear, Heavy Mace, Light Mace, Mere Club, Morningstar, Quarterstaff, Rock, Shortspear, Sickle, Sling, Spear, Boar Spear, Ray Spells, Touch Spells, Splash Weapon, Stake, Stingchuck, Unarmed Strike, Underwater Heavy Crossbow, Underwater Light Crossbow
+**Proficiencies:** Sacred fists are proficient with the club, crossbow (light or heavy), dagger, handaxe, javelin, kama, nunchaku, quarterstaff, sai, shortspear, short sword, shuriken, siangham, sling, and spear. Sacred fists are not proficient with any armor or shields. When wearing armor, using shield, or carrying a medium or heavy load, a sacred fist loses his AC bonus and flurry of blows
+
 
 
 ## Senses and Languages
 
-**Perception:** +0
-**Senses:** Low-Light Vision
-**Languages:** Common, Sylvan, Tengu 
+**Perception:** +8
+**Senses:** Darkvision 60ft
+**Languages:** Common, Celestial, Osiriani 
 
 
 ## Saving Throws
 
 | Save      | Total | Base | Ability | Magic | Misc |
 | --------- | ----- | ---- | ------- | ----- | ---- |
-| Fortitude |  +1   |  +0  |   +1    |  +0   |  +0  |
-| Reflex    |  +2   |  +0  |   +2    |  +0   |  +0  |
-| Will      |  +2   |  +1  |   +2    |  +0   |  +0  |
+| Fortitude |  +4   |  +2  |   +2    |  +0   |  +0  |
+| Reflex    |  +3   |  +0  |   +2    |  +0   |  +1  |
+| Will      |  +6   |  +2  |   +4    |  +0   |  +0  |
 
 
 # Attacks
 
 ## Primary Weapon
 
-* Name: Crossbow, Light
+* Name: Unarmed Attack
 * Type: Melee
-* Reach / Range increments (fts.): 80
+* Reach / Range increments (fts.): 5
 * Attack Bonus: +2
-* Damage: 1d8
-* Critical: 19-20 / x2
-* Damage Type: Piercing
+* Damage: 1d6
+* Critical: 20 / x2
+* Damage Type: Bludgeoning
 * Special:
 * Ammo type / Amount (Empty if none): 20
 
@@ -125,31 +131,28 @@
 * Special:
 * Ammo type / Amount (Empty if none):
 
-* Name: Bite
-* Type: Melee
-* Reach / Range increments (fts.): 5
-* Attack Bonus: -1
-* Damage: 1d4-1
-* Critical: 20 / 2x
-* Damage Type: Bludgeoning / Piercing / Slashing
-* Special:
-* Ammo type / Amount (Empty if none):
+* Name: Crossbow, Heavy
+* Type: Ranged
+* Reach / Range increments (fts.): 120
+* Attack Bonus: +2
+* Damage: 1d10
+* Critical: 19-20 / x2
+* Damage Type: Piercing
+* Special: Loading a heavy crossbow is a fullround action that provokes attacks of opportunity.
+* Ammo type / Amount (Empty if none): 20
 
 ## Special Attacks
 
-* Name: Laughing Touch (Sp)
+* Name: Flurry of Blows
 * Type: Melee
-* Reach / Range increments (fts.): Touch
-* Attack Bonus: -1
-* Damage:
-* Critical:
-* Damage Type: 
-* Special: You can cause a creature to burst out laughing for 1 round as a melee touch attack.
+* Reach / Range increments (fts.): 5
+* Attack Bonus: +1, +1
+* Damage: 1d6, 1d6
+* Critical: 20 / x2, 20 / 2x
+* Damage Type: Bludgeoning
+* Special:
 * Ammo type / Amount (Empty if none):
 
-Laughing Touch (Sp)  
-[Paizo Inc. - Core Rulebook, p.76] 
-     You can cause a creature to burst out laughing for 1 round as a melee touch attack. A laughing creature can only take a move action but can defend itself normally. Once a creature has been affected by laughing touch, it is immune to its effects for 24 hours. You can use this ability 8 times per day. This is a mind-affecting effect. 
 
 # Skills
 
@@ -157,201 +160,168 @@ List trained skills (or usable untrained).
 
 | Skill              | Ability | Total | Ranks | Ability Mod | Misc Mod |
 | ------------------ | ------- | ----- | ------| ----------- | -------- |
-| Acrobatics         | DEX     | 4     | 0     | 2           | 2        |
-| Appraise           | INT     | 5     | 1     | 1           | 3        |
-| Bluff              | CHA     | 5     | 0     | 2           | 0        |
-| Climb              | STR     | -1    | 0     | -1          | 0        |
-| Diplomacy          | CHA     | 6     | 0     | 5           | 1        |
-| Disguise           | CHA     | 5     | 0     | 5           | 0        |
+| Acrobatics         | DEX     | 2     | 0     | 2           | 2        |
+| Appraise           | INT     | 1     | 0     | 1           | 3        |
+| Bluff              | CHA     | -1    | 0     | -1          | 0        |
+| Climb              | STR     | 0     | 0     | 0           | 0        |
+| Diplomacy          | CHA     | -1    | 0     | -1          | 1        |
+| Disguise           | CHA     | -1    | 0     | -1          | 0        |
 | Escape Artist      | DEX     | 2     | 0     | 2           | 0        |
 | Fly                | DEX     | 2     | 0     | 2           | 0        |
-| Heal               | WIS     | 0     | 0     | 0           | 0        |
-| Intimidate         | CHA     | 5     | 0     | 5           | 0        |
-| Knowledge (Planes) | CHA     | 5     | 0     | 5           | 0        |
-| Perception         | WIS     | 0     | 0     | 0           | 0        |
+| Heal               | WIS     | 8     | 1     | 4           | 0        |
+| Intimidate         | CHA     | -1    | 0     | -1          | 0        |
+| Knowledge (Planes) | INT     | 3     | 0     | 1           | 2        |
+| Perception         | WIS     | 8     | 1     | 4           | 3        |
 | Ride               | DEX     | 2     | 0     | 2           | 0        |
-| Sense Motive       | WIS     | 0     | 0     | 0           | 0        |
-| Spellcraft         | INT     | 5     | 1     | 1           | 3        |
-| Stealth            | DEX     | 2     | 0     | 2           | 0        |
-| Survival           | WIS     | 0     | 0     | 0           | 0        |
-| Swim               | STR     | -1    | 0     | -1          | 0        |
-| Use Magic Device   | CHA     | 9     | 1     | 5           | 3        |
+| Sense Motive       | WIS     | 4     | 0     | 4           | 0        |
+| Spellcraft         | INT     | 3     | 0     | 1           | 2        |
+| Stealth            | DEX     | 6     | 1     | 2           | 3        |
+| Survival           | WIS     | 4     | 0     | 4           | 0        |
+| Swim               | STR     | 0     | 0     | 0           | 0        |
 
 
 # Feats
 
-1. **Eschew Materials:** "You can cast many spells without needing to utilize minor material components. You can cast any spell with a material component costing 1 gp or less without needing that component. The casting of the spell still provokes attacks of opportunity as normal. If the spell requires a material component that costs more than 1 gp, you must have the material component on hand to cast the spell, as normal."
-2. **Magical Tail:** (Advanced Race Guide) "You grow an extra tail that represents your growing magical powers. You gain a new spell-like ability, each usable twice per day, from the following list, in order: Disguise Self, Charm Person, Misdirection, Invisibility, Suggestion, Displacement, Confusion, Dominate Person. For example, the first time you select this feat, you gain disguise self 2/day; the second time you select this feat, you gain charm person 2/day. Your caster level for these spells is equal to your Hit Dice. The DCs for these abilities are Charisma-based. Special: You may select this feat up to eight times. Each time you take it, you gain an additional ability as described above."
+1. **Deft Dodger:** (Advanced Player Guide) " Growing up in a rough neighborhood or a dangerous environment has honed your senses. You gain a +1 trait bonus on Reflex saves"
+2. **Desert Child (desert):** (Advanced Player Guide) "You were born and raised in rocky deserts. You are accustomed to high temperatures, and gain a +4 trait bonus on any saving throws made to resist the effects of being in hot conditions and a +1 trait bonus on all saving throws against fire effects. "
 
 
 # Traits
 
-1. Adopted (Advanced Player's Guide): "You were adopted and raised by someone not of your actual race, and raised in a society not your own. You may immediately select a race trait from your adoptive parent's race."
-2. Planar Savant  (Ultimate Campaign): "You have always had an innate sense of the workings of the planes and their denizens. You may use your Charisma modifier when making Knowledge (planes) checks instead of your Intelligence modifier."
-3. World Traveler (Diplomacy) (Advanced Player's Guide): "Your family has taken the love of travel to an extreme, roaming the world extensively. You've seen dozens of cultures and have learned to appreciate the diversity of what the world has to offer. You gain a +1 trait bonus on Diplomacy, and it is always a class skill for you. "
+1. **Deft Dodger:** (Advanced Player Guide) " Growing up in a rough neighborhood or a dangerous environment has honed your senses. You gain a +1 trait bonus on Reflex saves"
+2. **Desert Child (desert):** (Advanced Player Guide) "You were born and raised in rocky deserts. You are accustomed to high temperatures, and gain a +4 trait bonus on any saving throws made to resist the effects of being in hot conditions and a +1 trait bonus on all saving throws against fire effects. "
 
 
 # Racial Features
 
-* **Agile**: (Advanced Race Guide) "Kitsune receive a +2 racial bonus on Acrobatics checks."
+* **Celestial Resistance**: (Blood of Angels) "Aasimars have acid resistance 5, cold resistance 5, and electricity resistance 5"
 
-* **Change Shape (Su):** (Advanced Race Guide) "A kitsune can assume the appearance of a specific single human form of the same sex. The kitsune always takes this specific form when she uses this ability. A kitsune in human form cannot use her bite attack, but gains a +10 racial bonus on Disguise checks made to appear human. Changing shape is a standard action. This ability otherwise functions as alter self, except that the kitsune does not adjust her ability scores."
+* **Skilled:** (Blood of Angels) "Emberkin have a +2 racial bonus on Knowledge (planes) and Spellcraft checks."
 
-* **Kitsune Magic (Ex) (Sp):** (Advanced Race Guide) "Kitsune add 1 to the DCs of any saving throws to resist enchantment spells that they cast. Kitsune with a Charisma score of 11 or higher gain the following spell-like ability: **3/day--dancing lights.**"
-
-* **Natural Weapons:** (Advanced Race Guide) "In her natural form, a kitsune has a bite attack that deals 1d4 points of damage."
+* **Spell-Like Ability:** (Blood of Angels) "Emberkin gain pyrotechnics as a spell-like ability."
 
 
 # Class Features
 
-* **Laughing Touch (Sp):** "You can cause a creature to burst out laughing for 1 round as a melee touch attack. A laughing creature can only take a move action but can defend itself normally. Once a creature has been affected by laughing touch, it is immune to its effects for 24 hours. You can use this ability 8 times per day. This is a mind-affecting effect."
+* **AC Bonus (Su)**: (Advanced Class Guide) "A deity protects her sacred fist as long as he is unarmored and unencumbered. A sacred fist adds his Wisdom modifier (minimum 0) to his AC and his CMD. In addition, a sacred fist gains a +1 dodge bonus to AC and CMD at 4th level. This bonus increases by 1 for every 4 levels thereafter (to a maximum of +5 at 20th level). These bonuses to AC apply even against touch attacks or when the sacred fist is flat-footed. He loses these bonuses when he is immobilized or helpless, when he wears any armor, when he carries a shield, or when he carries a medium or heavy load. This counts as monk ability of the same name, and the sacred fist's warpriest level stack with monk levels for determining the benefit."
 
-* **Bloodline Arcana:**: "Whenever you cast a spell of the compulsion subschool, increase the spell's DC by +2."
+* **Aura of Law (Ex):** (Advanced Class Guide) "You project a faint lawful aura."
 
-* **Fey Bloodline:** "The capricious nature of the fey runs in your family due to some intermingling of fey blood or magic. You are more emotional than most, prone to bouts of joy and rage."
+* **Blessings (Su):** (Advanced Class Guide) "You can call upon the power of your blessings 3 times per day. The DC for these blessings is 14."
 
-* **Bonus Magical Tail:** (Blood of the Beast) "Gain 1/6 of a new Magical Tail feat."
+* **Powerful Healer (Su):** (Advanced Class Guide) "You can add power to a cure spell as you cast it. As a swift action, you can treat any cure spell as if it were empowered (as the Empower Spell feat), causing it to heal 50% more damage (or deal 50% more damage if used against undead). This ability doesn't stack with itself or the Empower Spell feat."
+
+* **Strength Surge (Su):** (Advanced Class Guide) "As a swift action you can focus your own strength. You gain an enhancement bonus equal to 1 on melee attack rolls, combat maneuver checks that rely on Strength, Strength-based skills, and Strength checks for 1 round."
 
 # Spells
 
 ## Spellcasting Summary
 
 * Caster Level: 1
-* Concentration: +7
-
-## Innate Spell-like Abilities
-
-Name: Disguise Self
-* Save:
-* Time: 1 Standard action
-* Amount: 2 per day
-* Duration: 10 minutes [D]
-* Range: Personal
-* Components: V, S
-* SR: 
-* School: Illusion
-* Target / Area: You
-* Caster level: 1
-* Effect: You make yourself --including clothing, armor, weapons, and equipment-- look different.
-* Source: CR p.271
+* Concentration: +5
 
 ## Racial Spell-like Abilities 
 
-Name: Dancing Lights
-* Save:
+Name: Pyrotechnics
+* Save: Will negates or Fortitude negates; see text; Spell
 * Time: 1 Standard action
-* Amount: 3 per day
-* Duration: 1 minutes [D]
-* Range: 10 ft.
-* Components: V, S
-* SR: 
-* School: Evocation
-* Target / Area: Up to four lights, all within a 10-ft.-radius area
+* Amount: 1 per day
+* Duration: 1d4+1 rounds, or 1d4+1 rounds after creatures leave the smoke cloud; see text [D]
+* Range: 440 ft.
+* Components: V, S, M
+* SR: Yes or No; see text
+* School: Transmutation
+* Target / Area: One fire source, up to a 20-ft. cube
 * Caster level: 1
-* Effect: You create up to four lights that resemble lanterns or torches.
-* Source:  CR p.263
+* Effect: Pyrotechnics turns a fire into a burst of blinding fireworks or a thick cloud of choking smoke, depending on your choice.
+* Source:  CR p.328
 
 
-## Sorcerer Spells
+## Warpriest Spells
 
-| Level | Known | Slots |
-| ----- | ----- | ----- |
-| 0     | 4     | 0     |
-| 1     | 2     | 5     |
+| Level | Known | Slots | DC |
+| ----- | ----- | ----- | -- |
+| 0     | 3     | 0     | 14 |
+| 1     | 0     | 2     | 15 |
 
 ## Spells Known / Prepared
 
 **Cantrips:**
 
-Name: Detect Magic 
+Name: Detect Poison 
 * Save:
 * Time: 1 Standard action
-* Amount: 3 per day
+* Amount:
 * Duration: Concentration, up to 1 minutes [D]
 * Range: 60 ft.
 * Components: V, S
 * SR: 
 * School: Divination
-* Target / Area:  Cone-shaped emanation
+* Target / Area:  Or Area one creature, one object, or a 5-ft. cube
 * Caster level: 1
-* Effect: You detect magical auras.
-* Source:  CR p.267
+* Effect: You determine whether a creature, object, or area has been poisoned or is poisonous.
+* Source:  CR p.268
 
 
-Name: Disrupt Undead 
-* Save:
+Name: Resistance 
+* Save: Will negates 
 * Time: 1 Standard action
-* Amount: 3 per day
+* Amount:
 * Duration: 1 minutes [D]
-* Range: 110 ft.
-* Components: V, S
+* Range: Touch
+* Components: V, S, M
 * SR: 
-* School: Evocation
-* Target / Area: Up to four lights, all within a 10-ft.-radius area
+* School: Abjuration
+* Target / Area: You imbue the subject with magical energy that protects it from harm, granting it a +1 resistance bonus on saves.
 * Caster level: 1
-* Effect: You create up to four lights that resemble lanterns or torches.
-* Source:  CR p.263
+* Effect: Creature touched
+* Source:  CR p.334
 
 
-Name: Message
-* Save:
+Name: Stabilize
+* Save: Will negates 
 * Time: 1 standard action
 * Amount: 
-* Duration: 10 minutes
-* Range: Medium (110 ft.)
-* Components: V, S, F
+* Duration: Instantaneous
+* Range: Close (25 ft.)
+* Components: V, S
 * SR: 
-* School: Transmutation, AirSchool
-* Target / Area: 1 creatures
+* School: Conjuration
+* Target / Area: 1 living creature
 * Caster level: 1
-* Effect: You can whisper messages and receive whispered replies.
-* Source:  CR p.313
+* Effect: Upon casting this spell, you target a living creature that has -1 or fewer hit points.
+* Source:  CR p.348
 
-
-Name: Read Magic
-* Save:
-* Time: 1 Standard action
-* Amount: 3 per day
-* Duration: 10 minutes
-* Range: Personal
-* Components: V, S, F
-* SR: 
-* School: Divination
-* Target / Area: You
-* Caster level: 1
-* Effect: You can decipher magical inscriptions on objects--books, scrolls, weapons, and the like--that would otherwise be unintelligible.
-* Source:  CR p.330
- 
 
  **Level 1:**
 
-Name: Magic Missile
-* Save:
+Name: Protection from Evil
+* Save: Will negates 
 * Time: 1 Standard action
-* Amount: 3 per day
-* Duration: Instantaneous
-* Range: Medium (110 ft.)
-* Components: V, S
-* SR: SR
-* School: Evocation
-* Target / Area: Up to five creatures, no two of which can be more than 15 ft. apart
-* Caster level: 1
-* Effect: 1 missiles that do 1d4+1 damage each.
-* Source:  CR p.309
- 
-
-Name: Shield
-* Save:
-* Time: 1 Standard action
-* Amount: 3 per day
+* Amount: 1 per day
 * Duration: 1 minutes [D]
-* Range: Personal
-* Components: V, S
+* Range: Touch
+* Components: V, S, M
 * SR: 
 * School: Abjuration
-* Target / Area: You
+* Target / Area: Creature touched
 * Caster level: 1
-* Effect: Shield creates an invisible shield of force that hovers in front of you.
+* Effect: This spell wards a creature from attacks by evil creatures, from mental control, and from summoned creatures.
+* Source:  CR p.327
+ 
+
+Name: Shield of Faith
+* Save: Will negates 
+* Time: 1 Standard action
+* Amount: 1 per day
+* Duration: 1 minutes [D]
+* Range: Touch
+* Components: V, S, M
+* SR: Yes
+* School: Abjuration
+* Target / Area: Touch
+* Caster level: 1
+* Effect: This spell creates a shimmering, magical field around the target that averts and deflects attacks.
 * Source:  CR p.342
  
 
