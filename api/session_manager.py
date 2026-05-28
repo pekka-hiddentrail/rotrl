@@ -22,8 +22,9 @@ except ImportError:
 
 from api.context.npc_lookup import NpcIndex
 from api.context.skill_lookup import SkillIndex
+from api.context.location_lookup import LocationIndex
 from api.api_logger import write_api_log
-from api.npc_generator import generate_base_md, slugify as _slugify
+from api.npc_generator import generate_base_md, generate_location_base_md, slugify as _slugify
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _OUTPUTS_DIR = _REPO_ROOT / "outputs"
@@ -31,6 +32,7 @@ _OUTPUTS_DIR = _REPO_ROOT / "outputs"
 # Context indexes — built lazily on first use, shared across all sessions
 _npc_index: Optional[NpcIndex] = None
 _skill_index: Optional[SkillIndex] = None
+_location_index: Optional[LocationIndex] = None
 
 
 def _get_npc_index() -> NpcIndex:
@@ -47,6 +49,13 @@ def _get_skill_index() -> SkillIndex:
     return _skill_index
 
 
+def _get_location_index() -> LocationIndex:
+    global _location_index
+    if _location_index is None:
+        _location_index = LocationIndex(_repo_root=_REPO_ROOT)
+    return _location_index
+
+
 def _invalidate_npc_index() -> None:
     """Force the NPC index to reload on next use.
 
@@ -55,6 +64,16 @@ def _invalidate_npc_index() -> None:
     """
     global _npc_index
     _npc_index = None
+
+
+def _invalidate_location_index() -> None:
+    """Force the location index to reload on next use.
+
+    Called after a new location stub is created mid-session so that
+    subsequent turns can detect the new location immediately.
+    """
+    global _location_index
+    _location_index = None
 
 _GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 _GROQ_MAX_RETRIES = 4
@@ -386,6 +405,9 @@ class GameSession:
     # Used to keep injecting the %%DELTAS%% instruction even when the player
     # doesn't name an NPC explicitly on a later turn.
     scene_npcs: list = field(default_factory=list)
+    # Canonical location names visited in the current session, accumulated across turns.
+    # Full location profiles are re-injected as ambient context on subsequent turns.
+    scene_locations: list = field(default_factory=list)
 
 
 _sessions: dict[str, GameSession] = {}
@@ -809,34 +831,51 @@ def _build_turn_directive(npc_match, skill_match, location_matches=None, scene_n
             + _delta_instruction
         )
 
-    # Fallback — should not normally be reached
-    return "Respond to the player's action using the reference context above."
+    # Fallback — location-only context, or location re-injection with scene NPCs
+    return "Respond to the player's action using the reference context above." + _delta_instruction
 
 
 def _process_generate_block(body: str, session: GameSession) -> None:
-    """Create a new NPC stub from a %%GENERATE%% block body.
+    """Create a new NPC or location stub from a %%GENERATE%% block body.
 
-    Silently skipped if the NPC is already in the index or if the name field
-    is missing.  Resets the NPC index after creation so the new entry is
-    findable immediately on the same turn's %%DELTAS%% write.
+    For type: location — creates a stub in adventure_path/07_locations/ and
+    invalidates the location index so the new entry is detectable immediately.
+    For NPC entries — creates a dot-prefixed stub in adventure_path/05_npcs/.
+    Silently skipped if the entry already exists or the name field is missing.
     """
-    fields   = _parse_delta_fields(body)
+    fields = _parse_delta_fields(body)
 
-    # Skip location blocks — no stub created for locations.
-    if fields.get("type", "").lower() == "location":
-        _log(session, f"\n> *[Location block skipped: {fields.get('name', '?')}]*\n")
+    block_type = fields.get("type", "").lower()
+    block_name = (fields.get("name") or fields.get("npc", "")).strip()
+    if not block_name:
         return
 
+    if block_type == "location":
+        loc_slug = _slugify(block_name)
+        loc_dir  = _REPO_ROOT / "adventure_path" / "07_locations" / loc_slug
+        if loc_dir.exists():
+            _log(session, f"\n> *[Location already exists, skipping: {block_name}]*\n")
+            return
+        loc_dir.mkdir(parents=True, exist_ok=True)
+        base_md = generate_location_base_md(
+            block_name,
+            role         = fields.get("role", ""),
+            appearance   = fields.get("appearance", ""),
+            location_area= fields.get("location", ""),
+            summary      = fields.get("summary", ""),
+            session_number = session.session_number,
+        )
+        (loc_dir / "base.md").write_text(base_md, encoding="utf-8")
+        _invalidate_location_index()
+        _log(session, f"\n> *[New location stub created: {block_name} → {loc_dir.name}/base.md]*\n")
+        return
+
+    # NPC block (default when type is absent or not "location")
     # New format uses name:, old format used npc: — accept both.
-    npc_name = (fields.get("name") or fields.get("npc", "")).strip()
-    if not npc_name:
+    if _get_npc_index().npc_dir_for(block_name) is not None:
         return
 
-    # Already known — nothing to do.
-    if _get_npc_index().npc_dir_for(npc_name) is not None:
-        return
-
-    npc_slug = _slugify(npc_name)
+    npc_slug = _slugify(block_name)
     # Dot-prefix marks this as a session NPC (temporary, purgeable from the UI).
     npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / f".{npc_slug}"
     npc_dir.mkdir(parents=True, exist_ok=True)
@@ -845,7 +884,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
     locations = [l.strip() for l in loc_str.split(",") if l.strip()] if loc_str else []
 
     base_md = generate_base_md(
-        npc_name,
+        block_name,
         role        = fields.get("role", ""),
         appearance  = fields.get("appearance", ""),
         personality = fields.get("personality", ""),
@@ -855,7 +894,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
     (npc_dir / "base.md").write_text(base_md, encoding="utf-8")
     _invalidate_npc_index()
 
-    _log(session, f"\n> *[New NPC stub created: {npc_name} → {npc_dir.name}/base.md]*\n")
+    _log(session, f"\n> *[New NPC stub created: {block_name} → {npc_dir.name}/base.md]*\n")
 
 
 def list_session_npcs() -> list[str]:
@@ -1062,6 +1101,28 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         injected.append(_get_npc_index().format_context(loc_match))
         _log(session, f"\n> *[Location context injected: {loc_match.canonical_name} at \"{loc_match.matched_location}\"]*\n")
 
+    # Location profile detection (LocationIndex — separate from NPC-at-location)
+    loc_match = _get_location_index().detect(last_user)
+    loc_canonical: Optional[str] = None
+    loc_trigger: Optional[str] = None
+
+    if loc_match:
+        injected.append(_get_location_index().format_context(loc_match))
+        loc_canonical = loc_match.canonical_name
+        loc_trigger = loc_match.matched_alias
+        if loc_canonical not in session.scene_locations:
+            session.scene_locations.append(loc_canonical)
+        _log(session, f"\n> *[Location profile injected: {loc_canonical} (alias: \"{loc_trigger}\")]*\n")
+    elif session.scene_locations:
+        # Re-inject all active location profiles as ambient context (AC-007)
+        loc_idx = _get_location_index()
+        for _loc_name in session.scene_locations:
+            _ambient = loc_idx.lookup(_loc_name)
+            if _ambient:
+                injected.append(loc_idx.format_context(_ambient))
+        loc_canonical = session.scene_locations[-1]
+        _log(session, f"\n> *[Location profile re-injected: {', '.join(session.scene_locations)}]*\n")
+
     if npc_match and npc_match.canonical_name not in session.scene_npcs:
         session.scene_npcs.append(npc_match.canonical_name)
     for _loc in location_matches:
@@ -1094,6 +1155,8 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         "skill_trigger": skill_match.matched_trigger if skill_match else None,
         "location":      location_matches[0].matched_location if location_matches else None,
         "location_npcs": [m.canonical_name for m in location_matches] if location_matches else [],
+        "loc":           loc_canonical,
+        "loc_trigger":   loc_trigger,
         "history":       history,
     }
 
@@ -1115,6 +1178,8 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         "skill_trigger": context_info["skill_trigger"],
         "location":      context_info["location"],
         "location_npcs": context_info["location_npcs"],
+        "loc":           context_info["loc"],
+        "loc_trigger":   context_info["loc_trigger"],
     }) + "\n\n"
 
     messages = [{"role": "system", "content": system_content}] + history

@@ -78,6 +78,17 @@ adventure_path/
 │       ├── perception.md
 │       └── sense_motive.md
 │
+├── 07_locations/                  — Location profiles (read by LocationIndex at runtime)
+│   ├── _LOCATION_TEMPLATE.md       Template for new location directories
+│   ├── festival_grounds/           base.md
+│   ├── rusty_dragon/               base.md
+│   ├── sage_stage/                 base.md
+│   ├── sandpoint_boneyard/         base.md
+│   ├── sandpoint_cathedral/        base.md
+│   ├── sandpoint_garrison/         base.md
+│   ├── sandpoint_glassworks/       base.md
+│   └── white_deer/                 base.md
+│
 └── npc_library/                   — Text pools for auto-generated NPC descriptions
     ├── appearances.txt
     ├── narrative_functions.txt
@@ -126,10 +137,14 @@ The assembled prompt is static for the entire session — it is never mutated af
 
 ### Per-turn context injection
 
-`_stream_chat()` detects NPC names and skill keywords in the player's input and injects:
+`_inject_context()` detects keywords in the player's last message and injects (in order):
 
 - **NPC profiles** — `05_npcs/{slug}/base.md` + `knowledge.md` + latest `session_NNN.md`
 - **Skill rules** — `06_rules/skills/{skill}.md` (content above the `<!-- REFERENCE -->` marker only)
+- **NPC-at-location** — NPCs whose `**Locations:**` field matches a location keyword
+- **Location profiles** — `07_locations/{slug}/base.md` (content above `<!-- REFERENCE -->` only)
+
+Location profiles persist across turns via `session.scene_locations` — once the party enters a location it is re-injected as ambient context on every subsequent turn until the session ends.
 
 ### NPC lifecycle (`05_npcs/`)
 
@@ -147,14 +162,21 @@ Each NPC has a directory with up to three file types:
 
 Each file has a payload section (above `<!-- REFERENCE -->`) injected into the system prompt when the skill is triggered, and a reader-reference section (below the marker) that is never loaded. This keeps injection size small while preserving full documentation for humans.
 
+### Location files (`07_locations/`)
+
+One directory per canonical location. Each `base.md` starts with `# Canonical Name` and `**Aliases:**` (comma-separated detection keywords). Content above `<!-- REFERENCE -->` is injected as a `## Location Reference — {name}` block. Content below the marker (district, type, author notes) is never injected.
+
+Session-generated locations (from `%%GENERATE%%` blocks with `type: location`) are created in `07_locations/{slug}/` immediately and the `LocationIndex` is invalidated so they are detectable on the very next turn. Unlike session NPCs, location stubs are not dot-prefixed and are not purged between sessions.
+
 ---
 
 ## Key Files for Reference
 
 | File | Purpose |
 |------|---------|
-| [api/session_manager.py](api/session_manager.py) | `_build_slim_system_prompt`, `_stream_chat`, NPC/delta writes |
+| [api/session_manager.py](api/session_manager.py) | `_build_slim_system_prompt`, `_inject_context`, `_stream_chat`, NPC/delta writes |
 | [api/main.py](api/main.py) | All FastAPI routes |
 | [api/context/npc_lookup.py](api/context/npc_lookup.py) | `NpcIndex` singleton, alias detection |
 | [api/context/skill_lookup.py](api/context/skill_lookup.py) | `SkillIndex`, trigger detection |
+| [api/context/location_lookup.py](api/context/location_lookup.py) | `LocationIndex` singleton, location alias detection and profile injection |
 | [README.md](README.md) | Setup, startup, and usage guide |

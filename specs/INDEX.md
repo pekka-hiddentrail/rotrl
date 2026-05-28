@@ -13,6 +13,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [session-end-recap.feature](session-end-recap.feature) | Backend \| Frontend | `@session` `@recap` `@end` `@llm` | 4 | `stream_end_session()`, `recap.md`, `boot.md`, `notes.json` |
 | [llm-providers.feature](llm-providers.feature) | Backend \| Frontend | `@llm` `@groq` `@ollama` `@provider` | 6 | Groq API, Ollama API, rate-limit headers, `stream_options` fallback, `Header.tsx` model dropdown |
 | [context-detection.feature](context-detection.feature) | Backend | `@context` `@npc` `@skill` `@location` | 5 | `NpcIndex`, `SkillIndex`, `context` SSE event |
+| [location-system.feature](location-system.feature) | Backend | `@location` `@index` `@generator` `@context` `@injection` | 9 | `LocationIndex`, `location_lookup.py`, `07_locations/`, `scene_locations`, `%%GENERATE%%` stub |
 | [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 5 | Streaming filter, holdback buffer, `patch_last` event |
 | [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `06_rules/skills/` |
@@ -25,7 +26,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 
-**Total: 100 acceptance criteria across 16 feature files**
+**Total: 109 acceptance criteria across 17 feature files**
 
 ---
 
@@ -59,6 +60,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@logging` | Session and API call logs | `api/api_logger.py`, `outputs/` |
 | `@narrative` | Narrative streaming filter | `stream_turn()` holdback buffer, `patch_last` SSE event |
 | `@npc` | NPC database and index | `api/context/npc_lookup.py`, `adventure_path/05_npcs/` |
+| `@location` | Location profile database and index | `api/context/location_lookup.py`, `adventure_path/07_locations/` |
 | `@ollama` | Ollama provider behaviour | `api/session_manager.py` Ollama branch, `num_ctx`/`num_gpu` |
 | `@parsing` | `%%SECTION%%` response parsing | `stream_turn()` section parser, `%%ROLL%%` / `%%GENERATE%%` / `%%DELTAS%%` |
 | `@prompt` | System prompt assembly | `_build_slim_system_prompt()`, `sessions/` boot files |

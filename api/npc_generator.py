@@ -230,3 +230,53 @@ def generate_base_md(
         f"- **If Distrustful:** {_STATE_DISTRUSTFUL}\n"
         f"- **If Killed:** {_STATE_KILLED}\n"
     )
+
+
+def generate_location_base_md(
+    name: str,
+    *,
+    role: str = "",
+    appearance: str = "",
+    location_area: str = "",
+    summary: str = "",
+    session_number: int = 1,
+) -> str:
+    """Return a base.md string for a new session-generated location stub.
+
+    Called when a %%GENERATE%% block with type: location fires mid-session.
+    Fields map directly from the block: role→type, appearance→description,
+    location→district, summary→typical occupants / notes.
+    """
+    aliases = auto_aliases(name)
+    slug = slugify(name)
+    if slug not in aliases:
+        aliases.insert(0, slug.replace("_", " "))
+    aliases_str = ", ".join(aliases) if aliases else slug.replace("_", " ")
+
+    description = appearance or "A location encountered during the session."
+    occupants = summary or "Occupants vary."
+    role_str = role or "Location"
+    district = location_area or "Sandpoint"
+
+    return (
+        f"# {name}\n"
+        f"**Aliases:** {aliases_str}\n"
+        f"**Flags:** SESSION LOCATION — auto-generated session_{session_number:03d}\n"
+        f"\n"
+        f"## Description\n"
+        f"\n"
+        f"{description}\n"
+        f"\n"
+        f"## Typical Occupants\n"
+        f"\n"
+        f"{occupants}\n"
+        f"\n"
+        f"## Current State\n"
+        f"\n"
+        f"Encountered during session {session_number:03d}. Current state unknown — update as events develop.\n"
+        f"\n"
+        f"<!-- REFERENCE -->\n"
+        f"**District:** {district}\n"
+        f"**Type:** {role_str}\n"
+        f"**Flags:** SESSION LOCATION — auto-generated session_{session_number:03d}\n"
+    )
