@@ -1,0 +1,52 @@
+# NPC Personality Library
+# One entry per block, separated by lines containing only "---".
+# Each entry is injected verbatim into the NPC's ## Personality section.
+# Entries should give the GM enough to portray the NPC for 2-3 exchanges.
+---
+Warm and garrulous — prone to gossip and hard to get away from once talking. Means well in everything they do and is generally liked for it, even when they are an obstacle.
+---
+Reserved but fair-minded. Speaks only when certain; responds well to patience and genuine interest. Does not thaw quickly, but does not hold grudges either.
+---
+Proud of their craft and easily drawn out by specific, knowledgeable questions about it. A well-placed compliment on their work will buy more goodwill than any amount of charm.
+---
+Cheerful on the surface, with an unspoken worry behind the eyes that surfaces only in unguarded moments. If pressed on it directly, they deflect smoothly and change the subject.
+---
+Gruff exterior masking genuine willingness to help — but only if approached directly rather than with flattery. Flattery makes them suspicious. Plain requests work better.
+---
+Fussy about details and easily sidetracked by minor corrections. Reliable once their help is secured, but testing to deal with; will loop back to a perceived inaccuracy mid-conversation.
+---
+Mercantile in outlook — all conversations feel faintly like transactions. Fair and consistent, but not charitable; always aware of what they are giving and what they are getting.
+---
+Devout and sincere. Desna or another Varisian deity surfaces in conversation without prompting. Finds genuine comfort in ritual and does not understand why others would not.
+---
+Cautious with strangers and slow to warm, but remembers every kindness and repays them quietly, often without comment. Trust, once earned, is durable.
+---
+Quick-witted and sardonic, using humour to deflect uncomfortable questions. Not unkind — just private. Gets serious when something matters to them, which is rare and obvious.
+---
+Even-tempered almost to a fault. Takes very little personally and rarely raises their voice. This can be reassuring or unsettling depending on the situation.
+---
+Eager to be helpful, sometimes beyond their actual knowledge. Confident guesses are offered freely; the trick is working out which answers are certain and which are optimistic.
+---
+Speaks in short, considered sentences. Not unfriendly, but economical. Gives the impression that they have a lot going on internally that they see no reason to share with strangers.
+---
+Fond of stories and tangents. Any question risks triggering a relevant-but-lengthy anecdote before the actual answer arrives. The anecdotes are almost always accurate.
+---
+Loyal to their community above all else. Polite to outsiders but their first instinct is to protect Sandpoint's interests, which colours every interaction with strangers.
+---
+Habitually honest in a way that occasionally causes social friction. They do not lie to be kind, but they are not cruel about it either — just accurate.
+---
+Easily charmed by anyone who treats them with basic respect, which they are slightly too accustomed to not receiving. A little warmth goes a long way.
+---
+Stoic about hardship in the Varisian tradition. Does not complain, does not expect sympathy, and is slightly baffled by those who do. Still capable of compassion when it matters.
+---
+Competitive in a low-key way — always seems slightly aware of how they are doing relative to their peers. Not aggressive about it, just attentive.
+---
+Generous with time but not with opinions. Will help willingly but will not advise unless asked twice and clearly. Has learned that unsolicited wisdom rarely lands.
+---
+Talks to fill silence in a way that seems reflexive rather than nervous. Once noticed, it becomes apparent that very little of the filler is accidental — there is information in the habits.
+---
+Quietly ambitious, but measured about it. Long-term goals are not discussed but are visible in the choices they make and the company they keep.
+---
+Carries some specific, unnamed grief that surfaces occasionally in pauses or in what they do not say. Not incapacitated by it — just shaped. Does not invite questions.
+---
+Has a settled, contented quality that some find pleasant and others find slightly suspicious, as if no one has the right to be this at ease with things as they are.

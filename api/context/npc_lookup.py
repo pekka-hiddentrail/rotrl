@@ -1,19 +1,20 @@
 """NPC lookup — detects NPC mentions in player input and returns the relevant
-profile + any session delta context to inject into the current turn's system prompt.
+profile + per-turn status + cumulative knowledge to inject into the current
+turn's system prompt.
 
 Design:
 - Zero extra LLM calls: pure text matching, runs in <1 ms
 - Per-turn injection only: never modifies session.system_prompt permanently
 - Data-driven: all NPC data and aliases live in adventure_path/05_npcs/
-- Delta files are read FRESH on every detection so mid-session writes are visible
+- Status and knowledge files are read FRESH on every detection call
 
 Folder structure (relative to repo root):
   adventure_path/05_npcs/
     <npc_slug>/
       base.md          ← canonical profile (git-tracked)
-      session_001.md   ← delta: what happened in session 1 (git-ignored)
-      session_002.md   ← delta: what happened in session 2 (git-ignored)
-      ...
+      knowledge.md     ← tagged knowledge list (git-ignored, grows each session)
+      session_001.md   ← per-turn status log: disposition / location / summary
+      session_002.md   ← (one file per session number, deleted on session boot)
 
 base.md format:
   # Canonical Name
@@ -21,8 +22,23 @@ base.md format:
   **Locations:** place one, place two
   ...rest is the profile text injected verbatim...
 
-Delta files are loaded fresh each detect() call so in-session writes are
-immediately visible on the next turn.
+knowledge.md format (append-only, tags determine injection priority):
+  - [persistent] Always-relevant fact about this NPC.
+  - [pcs] Yanyeeku is interested in fireworks.        ← what NPC knows about the party
+  - [quest] The fireworks merchant is south of town.
+  - [world] Sandpoint was rebuilt after the Late Unpleasantness.
+  - [npcs] Father Zantus is performing the ceremony.
+  - [trivia] She collects pressed flowers.
+
+  Tags: persistent | pcs | quest | world | npcs | trivia
+
+session_NNN.md format (per-turn status, append-only within a session):
+  ## Turn N — HH:MM:SS
+  **Disposition:** <change or current state>
+  **Location:** <current location>
+  **Summary:** <one sentence — what happened this turn>
+
+  (knowledge lines are intentionally excluded — those go to knowledge.md)
 """
 
 from __future__ import annotations
@@ -36,11 +52,12 @@ from typing import Optional
 @dataclass
 class NpcMatch:
     canonical_name: str
-    profile_text: str            # contents of base.md (minus the header/alias/location lines)
-    recent_delta: str            # contents of the most recent session_NNN.md, or ""
-    npc_dir: Path = field(default_factory=Path)  # path to the NPC folder (for fresh delta reads)
-    matched_alias: str = ""      # the alias string that triggered the match
-    matched_location: str = ""   # the location keyword that triggered the match, if any
+    profile_text: str        # contents of base.md (minus header/alias/location lines)
+    status: str = ""         # most recent turn's status block (disposition/location/summary)
+    knowledge_text: str = "" # tagged knowledge list from knowledge.md
+    npc_dir: Path = field(default_factory=Path)
+    matched_alias: str = ""
+    matched_location: str = ""
 
 
 @dataclass
@@ -49,7 +66,7 @@ class NpcIndex:
 
     Instantiate once per process (module-level singleton in session_manager).
     Re-instantiate if NPC files change (backend restart required).
-    Delta files are re-read on every detect() call — no restart needed for those.
+    Status and knowledge files are re-read on every detect() call — no restart needed.
     """
     _repo_root: Path
     _entries: dict[str, NpcMatch] = field(default_factory=dict, init=False)
@@ -79,11 +96,12 @@ class NpcIndex:
             if not canonical:
                 continue
 
-            # Store entry WITHOUT delta — deltas are read fresh on every detect()
+            # Store entry without live data — status/knowledge are read fresh on detect()
             self._entries[canonical] = NpcMatch(
                 canonical_name=canonical,
                 profile_text=profile,
-                recent_delta="",   # populated fresh on each detect
+                status="",
+                knowledge_text="",
                 npc_dir=npc_dir,
             )
 
@@ -106,22 +124,48 @@ class NpcIndex:
 
         self._loaded = True
 
-    def _fresh_delta(self, npc_dir: Path) -> str:
-        """Read the most recent delta file for this NPC fresh from disk."""
+    # ── Fresh data readers ────────────────────────────────────────────────────
+
+    def _fresh_status(self, npc_dir: Path) -> str:
+        """Return only the most recent turn block from the latest session delta.
+
+        Looks for the most recent session_NNN.md and extracts the last
+        '## Turn N' block, so only current state is injected (not full history).
+        """
         deltas = sorted(npc_dir.glob("session_*.md"))
         if not deltas:
             return ""
         try:
-            return deltas[-1].read_text(encoding="utf-8").strip()
+            content = deltas[-1].read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+        if not content:
+            return ""
+        # Split on ## Turn headers and return the last block
+        blocks = re.split(r"(?=^## Turn \d)", content, flags=re.MULTILINE)
+        last = blocks[-1].strip() if blocks else ""
+        return last
+
+    def _fresh_knowledge(self, npc_dir: Path) -> str:
+        """Read the cumulative knowledge.md for this NPC.
+
+        Returns the full content (all tags), ready to inject verbatim.
+        Returns "" if the file does not exist yet.
+        """
+        path = npc_dir / "knowledge.md"
+        if not path.exists():
+            return ""
+        try:
+            return path.read_text(encoding="utf-8").strip()
         except OSError:
             return ""
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def detect(self, text: str) -> Optional[NpcMatch]:
-        """Scan *text* (player input) for any known NPC reference.
+        """Scan *text* for any known NPC reference.
 
-        Returns the best match (longest alias wins), with a fresh delta read.
+        Returns the best match (longest alias wins), with fresh status + knowledge.
         """
         self._ensure_loaded()
         lower = text.lower()
@@ -139,7 +183,8 @@ class NpcIndex:
             entry = self._entries[best_canonical]
             return replace(
                 entry,
-                recent_delta=self._fresh_delta(entry.npc_dir),
+                status=self._fresh_status(entry.npc_dir),
+                knowledge_text=self._fresh_knowledge(entry.npc_dir),
                 matched_alias=best_alias,
             )
         return None
@@ -147,10 +192,7 @@ class NpcIndex:
     def detect_all(self, text: str) -> list[NpcMatch]:
         """Return ALL NPCs mentioned in *text* (not just the longest match).
 
-        Used to scan the GM response so every referenced NPC gets a delta update,
-        even if the player didn't name them explicitly.
-        Returns one NpcMatch per canonical NPC, with the longest matched alias
-        recorded and a fresh delta read.
+        Returns one NpcMatch per canonical NPC, with fresh status + knowledge.
         """
         self._ensure_loaded()
         lower = text.lower()
@@ -169,7 +211,8 @@ class NpcIndex:
             entry = self._entries[canonical]
             results.append(replace(
                 entry,
-                recent_delta=self._fresh_delta(entry.npc_dir),
+                status=self._fresh_status(entry.npc_dir),
+                knowledge_text=self._fresh_knowledge(entry.npc_dir),
                 matched_alias=alias,
             ))
         return results
@@ -178,7 +221,7 @@ class NpcIndex:
         """Return all NPCs whose location keywords appear in *text*.
 
         Uses longest-match per location keyword. Returns at most one match per
-        canonical NPC. Each match has a fresh delta read.
+        canonical NPC. Each match has fresh status + knowledge.
         """
         self._ensure_loaded()
         lower = text.lower()
@@ -196,22 +239,27 @@ class NpcIndex:
             entry = self._entries[canonical]
             results.append(replace(
                 entry,
-                recent_delta=self._fresh_delta(entry.npc_dir),
+                status=self._fresh_status(entry.npc_dir),
+                knowledge_text=self._fresh_knowledge(entry.npc_dir),
                 matched_location=keyword,
             ))
         return results
 
     def lookup(self, canonical_name: str) -> Optional[NpcMatch]:
-        """Direct lookup by canonical name (case-insensitive), with fresh delta."""
+        """Direct lookup by canonical name (case-insensitive), with fresh data."""
         self._ensure_loaded()
         lower = canonical_name.lower()
         for name, entry in self._entries.items():
             if name.lower() == lower:
-                return replace(entry, recent_delta=self._fresh_delta(entry.npc_dir))
+                return replace(
+                    entry,
+                    status=self._fresh_status(entry.npc_dir),
+                    knowledge_text=self._fresh_knowledge(entry.npc_dir),
+                )
         return None
 
     def npc_dir_for(self, canonical_name: str) -> Optional[Path]:
-        """Return the NPC folder path for writing delta files."""
+        """Return the NPC folder path for writing delta/knowledge files."""
         self._ensure_loaded()
         lower = canonical_name.lower()
         for name, entry in self._entries.items():
@@ -220,10 +268,23 @@ class NpcIndex:
         return None
 
     def format_context(self, match: NpcMatch) -> str:
-        """Return a context block ready for injection into a system prompt."""
+        """Return a context block ready for injection into a system prompt.
+
+        Sections:
+          ## NPC Reference — <name>
+          <profile>
+
+          ### Current Status        ← most recent turn (disposition/location/summary)
+          <status block>
+
+          ### What <name> Knows     ← tagged knowledge list
+          <knowledge entries>
+        """
         parts = [f"## NPC Reference — {match.canonical_name}", "", match.profile_text.strip()]
-        if match.recent_delta:
-            parts += ["", "### Session History (current state)", "", match.recent_delta]
+        if match.status:
+            parts += ["", "### Current Status", "", match.status]
+        if match.knowledge_text:
+            parts += ["", f"### What {match.canonical_name} Knows", "", match.knowledge_text]
         return "\n".join(parts)
 
     # ── Introspection ─────────────────────────────────────────────────────────

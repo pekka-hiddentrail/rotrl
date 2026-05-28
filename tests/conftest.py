@@ -55,7 +55,7 @@ def make_blocking_response(content: str) -> MagicMock:
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     """TestClient with outputs redirected to tmp_path.
-    Starts fresh — no leftover sessions between tests.
+    Starts fresh — no leftover sessions or cached indexes between tests.
     """
     import api.session_manager as sm
 
@@ -63,6 +63,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     # Clear in-memory session registry between tests
     monkeypatch.setattr(sm, "_sessions", {})
+    # Reset lazy-loaded NPC/skill indexes so tests that monkeypatch _REPO_ROOT
+    # don't get the real repo's index from a previous test run.
+    monkeypatch.setattr(sm, "_npc_index", None)
+    monkeypatch.setattr(sm, "_skill_index", None)
 
     from api.main import app
     with TestClient(app, raise_server_exceptions=True) as c:

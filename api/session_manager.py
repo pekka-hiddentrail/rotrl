@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import sys
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -23,6 +23,7 @@ except ImportError:
 from api.context.npc_lookup import NpcIndex
 from api.context.skill_lookup import SkillIndex
 from api.api_logger import write_api_log
+from api.npc_generator import generate_base_md, slugify as _slugify
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _OUTPUTS_DIR = _REPO_ROOT / "outputs"
@@ -44,6 +45,16 @@ def _get_skill_index() -> SkillIndex:
     if _skill_index is None:
         _skill_index = SkillIndex(_repo_root=_REPO_ROOT)
     return _skill_index
+
+
+def _invalidate_npc_index() -> None:
+    """Force the NPC index to reload on next use.
+
+    Called after a new NPC stub is created mid-session so that subsequent
+    %%DELTA%% writes and keyword detection find the new entry immediately.
+    """
+    global _npc_index
+    _npc_index = None
 
 _GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 _GROQ_MAX_RETRIES = 4
@@ -134,40 +145,215 @@ _GROQ_MAX_SYSTEM_CHARS = 30_000
 #   (?P<skill>[^\n:]+?) — skill name (stops at colon or newline, lazy)
 #   (?:\s*:\s*\d+)? — optional ": <number>" suffix (swallowed, not captured)
 # Regex that matches a %%DELTA%% … %%END%% block in GM output.
-# All fields except npc: and summary: are optional.
-# findall is used — there can be multiple delta blocks per response (one per NPC).
-#
-# Format:
-#   %%DELTA%%
-#   npc: Kendra Deverin
-#   disposition: neutral → suspicious   (optional)
-#   location: Festival Square           (optional)
-#   knowledge: Ani tried to deceive her (optional)
-#   summary: One sentence of what happened.
-#   %%END%%
+# Matches the entire %%DELTA%%…%%END%% block and captures the body.
+# Deliberately loose: DOTALL so the body can span multiple lines in any order,
+# and \s* on both ends so leading/trailing blank lines don't break the match.
+# Field extraction is handled by _parse_delta_fields() below.
 _DELTA_BLOCK_RE = re.compile(
-    r'\s*%%DELTA%%\s*\n'
-    r'npc:\s*(?P<npc>[^\n]+)\n'
-    r'(?:disposition:\s*(?P<disposition>[^\n]+)\n)?'
-    r'(?:location:\s*(?P<location>[^\n]+)\n)?'
-    r'(?:knowledge:\s*(?P<knowledge>[^\n]+)\n)?'
-    r'summary:\s*(?P<summary>[^\n]+)\n'
-    r'%%END%%',
-    re.IGNORECASE,
+    r'\s*%%DELTA%%[ \t]*\n(.*?)(?:%%END%%[ \t]*|(?=\s*%%DELTA%%|\Z))',
+    re.IGNORECASE | re.DOTALL,
 )
+
+# Matches a %%GENERATE%% block emitted by the LLM when it introduces a NEW NPC.
+# Processed before %%DELTA%% so that stub folders exist by the time delta writes run.
+_GENERATE_BLOCK_RE = re.compile(
+    r'\s*%%GENERATE%%[ \t]*\n(.*?)(?:%%END%%[ \t]*|(?=\s*%%GENERATE%%|\Z))',
+    re.IGNORECASE | re.DOTALL,
+)
+
+# ── Section-based response parser ─────────────────────────────────────────────
+# Primary format: the LLM structures output using %%SECTION%% markers.
+# Old flat-block format (%%DELTA%%…%%END%%) is retained as a fallback.
+#
+# A section marker is a line containing only %%WORD%%.
+# Each section's content runs from that marker to the next (or end of text).
+_SECTION_MARKER_RE = re.compile(r'^%%([A-Z]+)%%[ \t]*$', re.MULTILINE)
+
+# A bracket block is [ on its own line … ] on its own line.
+# Used inside %%DELTAS%% and %%GENERATE%% sections.
+# The pattern is non-greedy so consecutive blocks are split correctly.
+_BRACKET_BLOCK_RE = re.compile(
+    r'^\[[ \t]*\n(.*?)\n[ \t]*\]',
+    re.MULTILINE | re.DOTALL,
+)
+
+# Detect whether the response uses section markers at all (vs old flat format).
+_HAS_SECTION_MARKERS_RE = re.compile(r'^%%(?:NARRATIVE|ROLL|DELTAS|GENERATE)%%', re.MULTILINE)
+
+# ── Narrative name detection ──────────────────────────────────────────────────
+# Used to catch NPCs the LLM introduces in prose without any structured block.
+# Detected names are added to session.scene_npcs so the NEXT turn's directive
+# asks for a %%DELTA%% on them — stub creation happens via Layer 2 at that point.
+#
+# Requires ≥3 chars per word so sentence-starting words like "As", "He", "In"
+# never produce a match.
+_NARRATIVE_NAME_RE = re.compile(r'\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b')
+
+# Words that appear capitalised in prose but are NOT person names.
+# If EITHER word of a candidate pair is in this set, the pair is skipped.
+_NAME_EXCLUDE_WORDS: frozenset[str] = frozenset({
+    # Titles / honorifics
+    "mayor", "sheriff", "father", "mother", "brother", "sister",
+    "lord", "lady", "master", "captain", "sergeant", "doctor",
+    "mister", "mistress", "dame", "sir",
+    "baron", "duke", "earl", "count", "prince", "princess", "king", "queen",
+    # Place-type words
+    "square", "hall", "street", "road", "lane", "alley", "avenue",
+    "cathedral", "temple", "church", "shrine",
+    "inn", "tavern", "lodge",
+    "gate", "bridge", "market", "district", "quarter",
+    "tower", "keep", "castle", "fort",
+    # Campaign / setting proper nouns that are not NPC names
+    "rise", "runelords", "varisia", "sandpoint", "desna",
+    "festival", "swallowtail", "lost", "coast",
+    "burnt", "offerings", "pathfinder",
+    # Common sentence-start words
+    "what", "who", "where", "when", "why", "how",
+    "this", "that", "these", "those",
+})
+
+
+def _parse_delta_fields(body: str) -> dict[str, str]:
+    """Extract key: value pairs from a %%DELTA%% block body.
+
+    Order-independent and tolerant of extra fields the LLM may add.
+    Returns a plain dict with lower-cased keys and stripped values.
+    """
+    fields: dict[str, str] = {}
+    for line in body.splitlines():
+        m = re.match(r'(\w+):\s*(.+)', line.strip())
+        if m:
+            fields[m.group(1).lower()] = m.group(2).strip()
+    return fields
+
+def _extract_knowledge_items(body: str) -> list[str]:
+    """Return all knowledge: lines from a %%DELTA%% block body.
+
+    Each item is a single string such as "[pcs] Yanyeeku is interested in fireworks."
+    A response may have multiple knowledge: lines — all are returned.
+    """
+    items: list[str] = []
+    for line in body.splitlines():
+        m = re.match(r"knowledge:\s*(.+)", line.strip(), re.IGNORECASE)
+        if m:
+            items.append(m.group(1).strip())
+    return items
+
+
+def _parse_response_sections(text: str) -> dict[str, str]:
+    """Split a section-formatted LLM response into named sections.
+
+    Returns a dict mapping uppercase section name → stripped content string.
+    Graceful fallback: if no %%SECTION%% markers are found, returns
+    ``{"NARRATIVE": text}`` so the full response is treated as narrative.
+    """
+    parts = _SECTION_MARKER_RE.split(text)
+    # split() with a capturing group gives:
+    #   [pre_marker_text, NAME, content, NAME, content, …]
+    if len(parts) < 3:
+        return {"NARRATIVE": text.strip()}
+    sections: dict[str, str] = {}
+    i = 1
+    while i + 1 < len(parts):
+        sections[parts[i].strip()] = parts[i + 1].strip()
+        i += 2
+    if "NARRATIVE" not in sections:
+        sections["NARRATIVE"] = text.strip()
+    return sections
+
+
+def _parse_bracket_blocks(text: str) -> list[dict]:
+    """Extract [ … ] blocks from section text and parse each as key:value fields.
+
+    Opening ``[`` and closing ``]`` must each appear on their own line.
+    Multiple ``knowledge:`` lines within a block are collected into a list so
+    that all knowledge items are preserved (the field dict maps "knowledge" →
+    list[str] rather than a single string).
+    """
+    blocks: list[dict] = []
+    for m in _BRACKET_BLOCK_RE.finditer(text):
+        fields: dict = {}
+        for line in m.group(1).splitlines():
+            lm = re.match(r'(\w+):\s*(.+)', line.strip())
+            if lm:
+                key = lm.group(1).lower()
+                val = lm.group(2).strip()
+                if key == "knowledge":
+                    fields.setdefault("knowledge", []).append(val)
+                else:
+                    fields[key] = val
+        if fields:
+            blocks.append(fields)
+    return blocks
+
+
+def _write_npc_delta(fields: dict, session: GameSession) -> None:
+    """Write one NPC delta — session status file and cumulative knowledge log.
+
+    ``fields`` is a parsed bracket-block dict where ``fields["knowledge"]``
+    is either absent, a single string, or a list[str].
+
+    Applies Layer 2 (auto-stub creation) when the NPC is not yet in the index.
+    """
+    npc_name = fields.get("npc", "").strip()
+    if not npc_name:
+        return
+
+    npc_dir = _get_npc_index().npc_dir_for(npc_name)
+    if npc_dir is None:
+        # Layer 2: create a minimal stub so the delta write can proceed.
+        stub_parts = [f"npc: {npc_name}"]
+        if fields.get("location"):
+            stub_parts.append(f"location: {fields['location']}")
+        _process_generate_block("\n".join(stub_parts), session)
+        npc_dir = _get_npc_index().npc_dir_for(npc_name)
+        if npc_dir is None:
+            return  # stub creation failed
+
+    ts_now = datetime.now().strftime("%H:%M:%S")
+
+    # ── Session delta file (turn-by-turn status) ───────────────────────────────
+    status_lines = [f"## Turn {session.turn_number} — {ts_now}"]
+    if fields.get("disposition"):
+        status_lines.append(f"**Disposition:** {fields['disposition']}")
+    if fields.get("location"):
+        status_lines.append(f"**Location:** {fields['location']}")
+    if fields.get("summary"):
+        status_lines.append(f"**Summary:** {fields['summary']}")
+    status_lines.append("")
+    delta_path = npc_dir / f"session_{session.session_number:03d}.md"
+    with delta_path.open("a", encoding="utf-8") as df:
+        df.write("\n".join(status_lines) + "\n")
+    _log(session, f"\n> *[Status written: {npc_name} → {delta_path.name}]*\n")
+
+    # ── Knowledge log (cumulative across sessions) ─────────────────────────────
+    k_items = fields.get("knowledge", [])
+    if isinstance(k_items, str):
+        k_items = [k_items]
+    if k_items:
+        knowledge_path = npc_dir / "knowledge.md"
+        k_lines = [
+            f"- {item} — S{session.session_number:03d} T{session.turn_number:03d}"
+            for item in k_items
+        ]
+        with knowledge_path.open("a", encoding="utf-8") as kf:
+            kf.write("\n".join(k_lines) + "\n")
+        _log(session, f"\n> *[Knowledge written: {npc_name} ({len(k_items)} item(s))]*\n")
+
 
 _ROLL_BLOCK_RE = re.compile(
     r'\s*%%ROLL%%\s*\n'
     r'(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n'
     r'dc:\s*(?P<dc>\d+)\s*\n'
     r'success:\s*(?P<success>[^\n]+)\n'
-    r'failure:\s*(?P<failure>[^\n]+)\n'
-    r'%%END%%\s*',
+    r'failure:\s*(?P<failure>[^\n]+)\n?'   # trailing newline optional (last line)
+    r'(?:%%END%%\s*)?',                    # %%END%% optional — LLMs often omit it
     re.IGNORECASE,
 )
 
-# context_queue removed — system prompt is fixed at boot.
-# All dynamic context is injected per-turn via keyword detection (NPC, skill, location).
+# The system prompt is fixed at boot.
+# Dynamic context (NPC profiles, skill rules, location NPCs) is injected per-turn
+# via keyword detection in _stream_chat — never appended permanently.
 
 
 @dataclass
@@ -187,6 +373,10 @@ class GameSession:
     turn_number: int = 0  # incremented at the start of each player turn
     # Set when GM requests a dice roll; cleared after resolve_roll() is called.
     pending_roll: Optional[dict] = None  # {skill, dc, success, failure}
+    # Canonical NPC names active in the current scene, accumulated across turns.
+    # Used to keep injecting the %%DELTA%% instruction even when the player
+    # doesn't name an NPC explicitly on a later turn.
+    scene_npcs: list = field(default_factory=list)
 
 
 _sessions: dict[str, GameSession] = {}
@@ -204,10 +394,12 @@ def _log(session: GameSession, text: str) -> None:
 
 
 def _build_slim_system_prompt(session_number: int) -> str:
-    """Minimal system prompt for boot — just enough to open the scene and handle
-    the first few player prompts.  Detailed rules are injected via context_queue."""
+    """Build the fixed base system prompt for this session.
+
+    Loaded once at boot and never modified.  Per-turn context (NPC profiles,
+    skill rules, location NPCs) is injected dynamically inside _stream_chat.
+    """
     repo_root = _REPO_ROOT
-    adv_root  = repo_root / "adventure_path"
 
     # Party names from player character sheets (best-effort)
     party_lines: list[str] = []
@@ -241,15 +433,6 @@ CORE BEHAVIOR (always active)
 - Never suggest actions, hint at correct choices, or guide the players.
 - Never invent lore, NPCs, or mechanics outside what you have been given. If unsure, say so.
 - Resolve what the player declares before narrating its outcome.
-- End every response with: What do you do?
-
-OUTPUT FORMAT (strictly enforced)
-- Write in natural prose only. No markdown headers, no bullet points, no numbered lists.
-- Do not use ##, ###, **, *, or any other markdown formatting in your responses.
-- Do not reproduce or summarise your instructions, constraints, or internal notes.
-- Describe the scene, NPC reactions, and sensory details as flowing narrative.
-- Address the whole party — narrate what each character experiences where relevant.
-- Keep responses focused: 2–4 paragraphs unless the scene demands more.
 
 PARTY
 {party_block}
@@ -257,10 +440,49 @@ PARTY
 CURRENT SITUATION
 {situation}
 
-DICE ROLLS
-- Do NOT request rolls on your own. Rolls are requested only when the system explicitly instructs you to via a GM DIRECTIVE section below.
-- When no GM DIRECTIVE is present: narrate outcomes directly. Do not append any %%ROLL%% block.
-- When a GM DIRECTIVE orders a roll: follow its instructions exactly."""
+RESPONSE STRUCTURE (strictly enforced)
+Every response must use these sections in this exact order.
+Each section begins with its %%MARKER%% on a line by itself.
+Omit sections that are not needed for this turn.
+
+%%NARRATIVE%%
+Your narration — 2 to 4 paragraphs of natural prose.
+No markdown. No bullet points. No bold or italic formatting.
+End with: What do you do?
+Omit "What do you do?" only if you also write a %%ROLL%% section.
+
+%%ROLL%%
+Include only when a dice roll is needed. One block, opened by [ on its own line and closed by ] on its own line:
+[
+skill: [skill name only — no numbers or modifiers]
+dc: [integer]
+success: [one sentence — what happens if the roll meets or exceeds DC]
+failure: [one sentence — what happens if the roll falls below DC]
+]
+
+%%DELTAS%%
+Include when any named NPCs are active in the scene. One block per NPC:
+[
+npc: [canonical NPC name]
+disposition: [change e.g. neutral → curious]  ← omit if unchanged
+location: [where they are now]                ← omit if unchanged
+knowledge: [tag] [one fact this NPC learned]  ← repeat this line for each fact; omit if nothing new
+summary: [one sentence — what happened with this NPC this turn]
+]
+
+Knowledge tags: [persistent] [pcs] [quest] [world] [npcs] [trivia]
+
+%%GENERATE%%
+Include when you introduce any NEW named character not previously in this scene. One block per new NPC:
+[
+npc: [full name exactly as written in your narrative]
+role: [occupation — one short phrase]
+appearance: [one sentence] ← omit if unsure
+personality: [one sentence] ← omit if unsure
+location: [where they are usually found in Sandpoint]
+]
+
+Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
 
 def create_session(
@@ -296,16 +518,43 @@ def create_session(
         log_path=_OUTPUTS_DIR / log_name,
     )
 
-    # Delete any delta files left over from a previous run of this session number.
-    # Delta files are session-scoped: session_NNN.md lives next to each NPC's base.md.
+    # Boot cleanup — runs against adventure_path/05_npcs/ on every session start.
+    #
+    # 1. SESSION NPC folders: auto-created stubs are deleted unless the GM has
+    #    promoted the NPC by removing the "SESSION NPC" flag from base.md.
+    #    This keeps the index clean between sessions.
+    #
+    # 2. Session delta files (session_NNN.md): deleted for the current session
+    #    number so each re-run of a session starts from a clean state.
+    #
+    # 3. knowledge.md: reset only when booting session 1. For all other
+    #    session numbers, keep existing knowledge and continue append-only
+    #    writes during play.
     _npcs_root = _REPO_ROOT / "adventure_path" / "05_npcs"
     if _npcs_root.exists():
         _delta_filename = f"session_{session_number:03d}.md"
-        for _npc_dir in _npcs_root.iterdir():
-            if _npc_dir.is_dir():
-                _old_delta = _npc_dir / _delta_filename
-                if _old_delta.exists():
-                    _old_delta.unlink()
+        for _npc_dir in list(_npcs_root.iterdir()):
+            if not _npc_dir.is_dir() or _npc_dir.name.startswith("_"):
+                continue
+            # Session NPC? Delete the whole folder.
+            _base_path = _npc_dir / "base.md"
+            if _base_path.exists():
+                try:
+                    if "SESSION NPC" in _base_path.read_text(encoding="utf-8"):
+                        shutil.rmtree(_npc_dir, ignore_errors=True)
+                        continue  # folder gone — skip delta cleanup
+                except OSError:
+                    pass
+            # Not a session NPC — just delete this session's delta file.
+            _old_delta = _npc_dir / _delta_filename
+            if _old_delta.exists():
+                _old_delta.unlink()
+
+            # Session 1 boot defines a fresh campaign-memory baseline.
+            if session_number == 1:
+                _knowledge_path = _npc_dir / "knowledge.md"
+                if _knowledge_path.exists():
+                    _knowledge_path.write_text("", encoding="utf-8")
 
     _sessions[session.id] = session
 
@@ -425,7 +674,7 @@ def save_session(session: GameSession) -> Path:
     return out
 
 
-def _build_turn_directive(npc_match, skill_match, location_matches=None) -> str:
+def _build_turn_directive(npc_match, skill_match, location_matches=None, scene_npcs=None) -> str:
     """Return an explicit GM instruction for the current turn based on what was detected.
 
     This is injected as the last section of the system prompt so the model
@@ -436,85 +685,65 @@ def _build_turn_directive(npc_match, skill_match, location_matches=None) -> str:
     has_skill = skill_match is not None
     loc_npc_names = [m.canonical_name for m in (location_matches or [])]
 
-    # All NPCs active this turn (for delta block instruction)
-    active_npc_names: list[str] = []
+    # NPCs detected this turn
+    current_turn_npcs: list[str] = []
     if has_npc:
-        active_npc_names.append(npc_match.canonical_name)
+        current_turn_npcs.append(npc_match.canonical_name)
     for n in loc_npc_names:
-        if n not in active_npc_names:
-            active_npc_names.append(n)
+        if n not in current_turn_npcs:
+            current_turn_npcs.append(n)
 
-    roll_template = (
-        "%%ROLL%%\n"
-        "skill: {skill}\n"
-        "dc: [DC as a plain integer — nothing else on this line]\n"
-        "success: [one sentence — what happens if the roll meets or exceeds DC]\n"
-        "failure: [one sentence — what happens if the roll falls below DC]\n"
-        "%%END%%\n"
-        "IMPORTANT: 'skill:' must be exactly the skill name only — no numbers, no modifiers."
-    )
+    # For delta instructions use the full scene NPC list when available —
+    # this ensures NPCs that were introduced on earlier turns are still tracked.
+    active_npc_names = list(scene_npcs) if scene_npcs else current_turn_npcs
 
-    # Delta block instruction — appended to every directive that involves NPCs.
-    # The GM must write one %%DELTA%% block per NPC after the narrative.
-    # The backend strips these blocks before display and writes them to delta files.
-    _delta_block_instructions = ""
+    roll_skill_hint = "{skill}"
+
+    # %%DELTAS%% instruction — just names the NPCs; format is in the system prompt.
+    _delta_instruction = ""
     if active_npc_names:
         npc_list_str = ", ".join(active_npc_names)
-        _delta_block_instructions = (
-            f"\n\nNPC STATE TRACKING (MANDATORY)\n"
-            f"After your narrative (and after any %%ROLL%% block), append one %%DELTA%% block "
-            f"for EACH of these NPCs: {npc_list_str}.\n"
-            "Use this exact format — include only fields that changed or are relevant:\n\n"
-            "%%DELTA%%\n"
-            "npc: [exact canonical NPC name]\n"
-            "disposition: [change description, e.g. 'neutral → suspicious']  ← omit if unchanged\n"
-            "location: [current location]  ← omit if not mentioned\n"
-            "knowledge: [what the NPC learned about the party]  ← omit if nothing\n"
-            "summary: [one sentence — what happened with this NPC this turn]\n"
-            "%%END%%\n\n"
-            "These blocks are stripped by the system before display. The player never sees them."
+        _delta_instruction = (
+            f"\n\nWrite a %%DELTAS%% section covering: {npc_list_str}."
+            "\nIf you introduce any new named character not in that list, "
+            "also write a %%GENERATE%% section for them."
         )
 
     if has_skill and has_npc:
         npc_name   = npc_match.canonical_name
         skill_name = skill_match.skill_name
-        template   = roll_template.format(skill=skill_name)
         return (
             f"THIS TURN: the player is attempting a {skill_name} check against {npc_name}.\n\n"
-            "STEP 1 — Write 1–2 sentences of scene setup (what the character attempts). Do not reveal the outcome.\n\n"
-            f"STEP 2 — Decide: is the outcome genuinely uncertain?\n"
-            f"  YES → Stop the narrative. Copy the block below EXACTLY as the final lines of your response, replacing only the bracketed values:\n\n"
-            f"{template}\n\n"
-            f"  NO (auto-fail / impossible) → Narrate the immediate failure. No roll block.\n\n"
-            "Do NOT write 'What do you do?' if you output the roll block — the roll IS the next action."
-            + _delta_block_instructions
+            "STEP 1 — Write 1–2 sentences of scene setup in %%NARRATIVE%%. Do not reveal the outcome.\n\n"
+            "STEP 2 — Decide: is the outcome genuinely uncertain?\n"
+            f"  YES → Write a %%ROLL%% section with skill: {skill_name}\n"
+            "  NO (auto-fail / impossible) → Narrate the failure in %%NARRATIVE%%. No %%ROLL%% section.\n\n"
+            "Omit 'What do you do?' from %%NARRATIVE%% if you write %%ROLL%%."
+            + _delta_instruction
         )
 
     elif has_skill:
         skill_name = skill_match.skill_name
-        template   = roll_template.format(skill=skill_name)
         return (
             f"THIS TURN: the player is attempting a {skill_name} check.\n\n"
-            "STEP 1 — Write 1–2 sentences of scene setup. Do not reveal the outcome.\n\n"
-            f"STEP 2 — Decide: is the outcome genuinely uncertain?\n"
-            f"  YES → Stop the narrative. Copy the block below EXACTLY as the final lines of your response, replacing only the bracketed values:\n\n"
-            f"{template}\n\n"
-            f"  NO (auto-succeed / impossible) → Narrate the result directly. No roll block.\n\n"
-            "Do NOT write 'What do you do?' if you output the roll block."
-            + _delta_block_instructions
+            "STEP 1 — Write 1–2 sentences of scene setup in %%NARRATIVE%%.\n\n"
+            "STEP 2 — Decide: is the outcome genuinely uncertain?\n"
+            f"  YES → Write a %%ROLL%% section with skill: {skill_name}\n"
+            "  NO → Narrate the result directly in %%NARRATIVE%%. No %%ROLL%% section.\n\n"
+            "Omit 'What do you do?' from %%NARRATIVE%% if you write %%ROLL%%."
+            + _delta_instruction
         )
 
     elif has_npc:
         npc_name = npc_match.canonical_name
-        # NPC only: softer but still instructive — social checks handled by keyword detection above;
-        # this catches edge cases like "talk to / approach / ask" without a skill keyword.
         return (
             f"THIS TURN: the player is interacting with {npc_name}.\n"
             f"Use the {npc_name} profile above.\n"
-            "If this interaction requires a skill check (Diplomacy, Bluff, Intimidate, Sense Motive):\n"
-            "  → Write a 1–2 sentence setup, then output the %%ROLL%% block as described in the SYSTEM ROLL PROTOCOL.\n"
-            "If no check is needed: narrate the NPC's reaction based on their profile and current state.\n"
-            + _delta_block_instructions
+            "If a skill check is needed (Diplomacy, Bluff, Intimidate, Sense Motive): "
+            "write scene setup in %%NARRATIVE%% then add a %%ROLL%% section.\n"
+            "If no check is needed: narrate the NPC's reaction in %%NARRATIVE%%.\n"
+            "Omit 'What do you do?' from %%NARRATIVE%% if you write %%ROLL%%."
+            + _delta_instruction
         )
 
     elif location_matches:
@@ -522,14 +751,167 @@ def _build_turn_directive(npc_match, skill_match, location_matches=None) -> str:
         npc_names = ", ".join(m.canonical_name for m in location_matches)
         return (
             f"THIS TURN: the player is at or heading to '{loc_keyword}'.\n"
-            f"NPCs present at this location: {npc_names}.\n"
-            "Use the NPC profiles above to describe who the party finds there and how they react.\n"
-            "If the player interacts with an NPC in a way that requires a skill check, output the %%ROLL%% block.\n"
-            + _delta_block_instructions
+            f"NPCs present: {npc_names}. Use the profiles above.\n"
+            "If the player interacts with an NPC and a check is needed, write a %%ROLL%% section."
+            + _delta_instruction
         )
 
     # Fallback — should not normally be reached
     return "Respond to the player's action using the reference context above."
+
+
+def _process_generate_block(body: str, session: GameSession) -> None:
+    """Create a new NPC stub from a %%GENERATE%% block body.
+
+    Silently skipped if the NPC is already in the index or if the name field
+    is missing.  Resets the NPC index after creation so the new entry is
+    findable immediately on the same turn's %%DELTA%% write.
+    """
+    fields   = _parse_delta_fields(body)
+    npc_name = fields.get("npc", "").strip()
+    if not npc_name:
+        return
+
+    # Already known — nothing to do.
+    if _get_npc_index().npc_dir_for(npc_name) is not None:
+        return
+
+    npc_slug = _slugify(npc_name)
+    npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / npc_slug
+    npc_dir.mkdir(parents=True, exist_ok=True)
+
+    loc_str   = fields.get("location", "")
+    locations = [l.strip() for l in loc_str.split(",") if l.strip()] if loc_str else []
+
+    base_md = generate_base_md(
+        npc_name,
+        role        = fields.get("role", ""),
+        appearance  = fields.get("appearance", ""),
+        personality = fields.get("personality", ""),
+        locations   = locations or None,
+        session_number = session.session_number,
+    )
+    (npc_dir / "base.md").write_text(base_md, encoding="utf-8")
+    _invalidate_npc_index()
+
+    _log(session, f"\n> *[New NPC stub created: {npc_name} → {npc_dir.name}/base.md]*\n")
+
+
+
+def _stream_with_narrative_filter(
+    raw_gen: Generator[str, None, None],
+    dev_mode: bool,
+) -> Generator[str, None, None]:
+    """Wrap a raw SSE token stream to hide section markers from players.
+
+    Dev mode  — all events pass through unchanged (markers visible for debugging).
+    Non-dev   — only the %%NARRATIVE%% section content is forwarded as tokens.
+                Non-token events (context, roll_request, done …) always pass through.
+
+    Detection rules
+    ───────────────
+    • A response starting with ``%%NARRATIVE%%\\n`` uses the new section format.
+      Tokens before the marker are suppressed; tokens from a subsequent section
+      marker (``\\n%%ROLL%%``, ``\\n%%DELTAS%%``, ``\\n%%GENERATE%%``) onwards are
+      suppressed.
+    • If no ``%%NARRATIVE%%`` marker is found within the first 200 accumulated
+      characters, the response is assumed to use the old flat-block format.
+      Tokens are streamed as normal and the existing ``patch_last`` removes any
+      trailing blocks.
+
+    Cross-boundary detection
+    ────────────────────────
+    Section markers can span token boundaries (e.g. one token ends ``\\n%%`` and
+    the next starts ``DELTAS%%\\n``).  A 16-character holdback buffer prevents
+    premature emission — the last 16 chars are held and only released once the
+    following token confirms they are not the start of a marker.
+    """
+    if dev_mode:
+        yield from raw_gen
+        return
+
+    _NARRATIVE_START = "%%NARRATIVE%%\n"
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%")
+    _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14
+
+    buf           = ""      # not-yet-emitted accumulation
+    in_narrative  = False
+    done          = False
+
+    def _emit(text: str) -> Generator[str, None, None]:
+        if text:
+            yield f"data: {json.dumps({'type': 'token', 'content': text})}\n\n"
+
+    for _raw_event in raw_gen:
+        # Non-token events always pass through
+        try:
+            _ev = json.loads(_raw_event[6:])
+        except Exception:
+            yield _raw_event
+            continue
+        if _ev.get("type") != "token":
+            yield _raw_event
+            continue
+
+        if done:
+            continue
+
+        buf += _ev.get("content", "")
+
+        if not in_narrative:
+            if _NARRATIVE_START in buf:
+                buf = buf.split(_NARRATIVE_START, 1)[1]
+                in_narrative = True
+            elif len(buf) > 200:
+                # Old format — no %%NARRATIVE%% found; stream everything
+                in_narrative = True
+            else:
+                continue
+
+        # In narrative: watch for end markers; hold back _HOLDBACK chars
+        for _em in _END_MARKERS:
+            _pos = buf.find(_em)
+            if _pos >= 0:
+                yield from _emit(buf[:_pos])
+                done = True
+                buf  = ""
+                break
+        else:
+            # No end marker — emit up to the safe boundary
+            _safe = max(0, len(buf) - _HOLDBACK)
+            yield from _emit(buf[:_safe])
+            buf = buf[_safe:]
+
+    # Flush any remaining buffered narrative content
+    if not done and in_narrative and buf:
+        for _em in _END_MARKERS:
+            _pos = buf.find(_em)
+            if _pos >= 0:
+                buf = buf[:_pos]
+                break
+        yield from _emit(buf)
+
+
+def _detect_narrative_npcs(text: str, session: GameSession) -> None:
+    """Scan completed narrative text for unrecognised proper names.
+
+    Adds candidates to session.scene_npcs so the NEXT turn's directive requests
+    a %%DELTA%% for them.  Layer 2 then creates the stub when the model writes
+    that delta block.  No stub is created here — detection and creation are
+    intentionally separated to avoid false-positive junk folders.
+    """
+    for _m in _NARRATIVE_NAME_RE.finditer(text):
+        _first, _last = _m.group(1), _m.group(2)
+        if _first.lower() in _NAME_EXCLUDE_WORDS or _last.lower() in _NAME_EXCLUDE_WORDS:
+            continue
+        _full_name = f"{_first} {_last}"
+        # Already tracked or already in the index — nothing to add
+        if _full_name in session.scene_npcs:
+            continue
+        if _get_npc_index().npc_dir_for(_full_name) is not None:
+            continue
+        session.scene_npcs.append(_full_name)
+        _log(session, f"\n> *[Suspected NPC detected in narrative: {_full_name} — added to scene tracking]*\n")
 
 
 def _stream_chat(session: GameSession) -> Generator[str, None, None]:
@@ -573,17 +955,38 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     location_matches = [m for m in location_matches if m.canonical_name not in already_injected]
     for loc_match in location_matches:
         injected.append(_get_npc_index().format_context(loc_match))
-        _log(session, f"\n> *[Location context injected: {loc_match.canonical_name} at \"{loc_match.matched_location}\")]*\n")
+        _log(session, f"\n> *[Location context injected: {loc_match.canonical_name} at \"{loc_match.matched_location}\"]*\n")
 
+    # ── Track scene NPCs across turns ─────────────────────────────────────────
+    # Accumulate any NPC detected this turn into the session-level scene list.
+    # This ensures the %%DELTA%% instruction keeps firing on later turns even
+    # when the player doesn't name the NPC explicitly.
+    if npc_match and npc_match.canonical_name not in session.scene_npcs:
+        session.scene_npcs.append(npc_match.canonical_name)
+    for _loc in location_matches:
+        if _loc.canonical_name not in session.scene_npcs:
+            session.scene_npcs.append(_loc.canonical_name)
 
     if injected:
         block = "\n\n---\n".join(injected)
-        directive = _build_turn_directive(npc_match, skill_match, location_matches)
+        directive = _build_turn_directive(npc_match, skill_match, location_matches, session.scene_npcs)
         system_content = (
             system_content
             + f"\n\n---\n[CONTEXT FOR THIS TURN]\n{block}"
             + f"\n\n---\n[GM DIRECTIVE FOR THIS TURN — follow exactly]\n{directive}"
         )
+    elif session.scene_npcs:
+        # No new context detected this turn, but NPCs remain active in the scene.
+        # Append a lightweight delta reminder so the GM keeps writing state blocks.
+        _npc_list = ", ".join(session.scene_npcs)
+        system_content += (
+            f"\n\n---\n[GM DIRECTIVE FOR THIS TURN — follow exactly]\n"
+            f"Continue the scene naturally.\n\n"
+            f"Write a %%DELTAS%% section covering: {_npc_list}.\n"
+            "If you introduce any new named character not in that list, "
+            "also write a %%GENERATE%% section for them."
+        )
+        _log(session, f"\n> *[Delta reminder injected for scene NPCs: {_npc_list}]*\n")
 
     # ── Context detection event (dev tooling) ─────────────────────────────────
     yield "data: " + json.dumps({
@@ -636,10 +1039,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     _llm_start = _time.monotonic()
     _llm_error: Optional[str] = None
     try:
-        if session.provider == "groq":
-            yield from _stream_groq(session, messages, accumulated)
-        else:
-            yield from _stream_ollama(session, messages, options, accumulated)
+        _raw = (
+            _stream_groq(session, messages, accumulated)
+            if session.provider == "groq"
+            else _stream_ollama(session, messages, options, accumulated)
+        )
+        yield from _stream_with_narrative_filter(_raw, session.dev_mode)
     except Exception as _llm_exc:
         _llm_error = str(_llm_exc)
         raise
@@ -658,66 +1063,122 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         )
 
     response_text = "".join(accumulated)
+    roll_data: Optional[dict] = None
 
-    # ── Roll block detection ───────────────────────────────────────────────────
-    roll_m = _ROLL_BLOCK_RE.search(response_text)
-    if roll_m:
-        clean_text = _ROLL_BLOCK_RE.sub("", response_text).rstrip()
-        roll_data = {
-            "skill":   roll_m.group("skill").strip(),
-            "dc":      int(roll_m.group("dc")),
-            "success": roll_m.group("success").strip(),
-            "failure": roll_m.group("failure").strip(),
-        }
-        session.pending_roll = roll_data
-        # Patch the already-streamed message to remove the raw block tokens
-        yield f"data: {json.dumps({'type': 'patch_last', 'content': clean_text})}\n\n"
-        yield f"data: {json.dumps({'type': 'roll_request', **roll_data})}\n\n"
-        _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
-        history_text = clean_text  # store without block in LLM history
+    # ── Parse response sections ───────────────────────────────────────────────
+    # Primary path: section-based format (%%NARRATIVE%% / %%ROLL%% / %%DELTAS%% / %%GENERATE%%)
+    # Fallback path: old flat-block format (%%DELTA%%…%%END%% etc.) for small models
+    # that ignore the template instruction.
+    _use_sections = bool(_HAS_SECTION_MARKERS_RE.search(response_text))
+
+    if _use_sections:
+        _sections = _parse_response_sections(response_text)
+        display_text = _sections.get("NARRATIVE", "").strip() or response_text.strip()
+
+        # ── %%ROLL%% ──────────────────────────────────────────────────────────
+        _roll_section = _sections.get("ROLL", "")
+        if _roll_section:
+            _roll_blocks = _parse_bracket_blocks(_roll_section)
+            if _roll_blocks:
+                _rf = _roll_blocks[0]
+                try:
+                    roll_data = {
+                        "skill":   _rf.get("skill", "").strip(),
+                        "dc":      int(_rf.get("dc", 0)),
+                        "success": _rf.get("success", "").strip(),
+                        "failure": _rf.get("failure", "").strip(),
+                    }
+                    session.pending_roll = roll_data
+                    _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
+                except (ValueError, KeyError):
+                    pass
+
+        # ── %%GENERATE%% ──────────────────────────────────────────────────────
+        # Processed before %%DELTAS%% so new stubs are in the index immediately.
+        _gen_section = _sections.get("GENERATE", "")
+        if _gen_section:
+            for _gf in _parse_bracket_blocks(_gen_section):
+                try:
+                    _body = "\n".join(f"{k}: {v}" for k, v in _gf.items())
+                    _process_generate_block(_body, session)
+                except Exception:
+                    pass
+
+        # ── %%DELTAS%% ────────────────────────────────────────────────────────
+        _deltas_section = _sections.get("DELTAS", "")
+        if _deltas_section:
+            for _df in _parse_bracket_blocks(_deltas_section):
+                try:
+                    _write_npc_delta(_df, session)
+                except Exception:
+                    pass
+
     else:
-        history_text = response_text
+        # ── Fallback: old flat-block format ───────────────────────────────────
+        display_text = response_text
 
-    # ── Delta block extraction ────────────────────────────────────────────────
-    # The GM is instructed to append %%DELTA%%…%%END%% blocks for every NPC
-    # involved in the turn.  Parse them all, strip from display text, write to
-    # per-NPC delta files.  Errors are silently swallowed — delta writes are
-    # best-effort and must never crash the main flow.
-    _delta_matches = list(_DELTA_BLOCK_RE.finditer(history_text))
-    if _delta_matches:
-        # Strip ALL delta blocks from the text shown to the player and
-        # always send a patch_last so the already-streamed text is updated.
-        history_text = _DELTA_BLOCK_RE.sub("", history_text).strip()
+        # %%ROLL%%
+        _roll_m = _ROLL_BLOCK_RE.search(display_text)
+        if _roll_m:
+            try:
+                roll_data = {
+                    "skill":   _roll_m.group("skill").strip(),
+                    "dc":      int(_roll_m.group("dc")),
+                    "success": _roll_m.group("success").strip(),
+                    "failure": _roll_m.group("failure").strip(),
+                }
+                session.pending_roll = roll_data
+                display_text = _ROLL_BLOCK_RE.sub("", display_text).rstrip()
+                _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
+            except (ValueError, AttributeError):
+                pass
+
+        # %%GENERATE%%
+        _gen_matches = list(_GENERATE_BLOCK_RE.finditer(display_text))
+        if _gen_matches:
+            display_text = _GENERATE_BLOCK_RE.sub("", display_text).strip()
+            for _gm in _gen_matches:
+                try:
+                    _process_generate_block(_gm.group(1), session)
+                except Exception:
+                    pass
+
+        # %%DELTA%%
+        _delta_matches = list(_DELTA_BLOCK_RE.finditer(display_text))
+        if _delta_matches:
+            display_text = _DELTA_BLOCK_RE.sub("", display_text).strip()
+            for _dm in _delta_matches:
+                try:
+                    _fields = _parse_delta_fields(_dm.group(1))
+                    # Promote knowledge to list so _write_npc_delta handles it uniformly
+                    _fields["knowledge"] = _extract_knowledge_items(_dm.group(1))
+                    _write_npc_delta(_fields, session)
+                except Exception:
+                    pass
+
+    # ── Single patch_last if anything was stripped ────────────────────────────
+    # Emitting one event after all stripping avoids the UI briefly flashing
+    # intermediate states (e.g. showing delta markup while the roll block is gone).
+    history_text = display_text
+    if history_text != response_text:
         yield f"data: {json.dumps({'type': 'patch_last', 'content': history_text})}\n\n"
 
-        for _dm in _delta_matches:
-            try:
-                _npc_name  = (_dm.group("npc") or "").strip()
-                _npc_dir   = _get_npc_index().npc_dir_for(_npc_name)
-                if _npc_dir is None:
-                    continue
-                _delta_path = _npc_dir / f"session_{session.session_number:03d}.md"
-                _ts_now     = datetime.now().strftime("%H:%M:%S")
-                _lines      = [f"## Turn {session.turn_number} — {_ts_now}"]
-                if _dm.group("disposition"):
-                    _lines.append(f"**Disposition:** {_dm.group('disposition').strip()}")
-                if _dm.group("location"):
-                    _lines.append(f"**Location:** {_dm.group('location').strip()}")
-                if _dm.group("knowledge"):
-                    _lines.append(f"**Knowledge:** {_dm.group('knowledge').strip()}")
-                if _dm.group("summary"):
-                    _lines.append(f"**Summary:** {_dm.group('summary').strip()}")
-                _lines.append("")  # trailing blank line between entries
-                with _delta_path.open("a", encoding="utf-8") as _df:
-                    _df.write("\n".join(_lines) + "\n")
-                _log(session, f"\n> *[Delta written: {_npc_name} → {_delta_path.name}]*\n")
-            except Exception:
-                pass  # delta writes are best-effort
+    # Roll request comes after the clean text is in place
+    if roll_data:
+        yield f"data: {json.dumps({'type': 'roll_request', **roll_data})}\n\n"
 
     session.messages.append({"role": "assistant", "content": history_text})
     _log(session, f"\n### [{_ts()}] GM")
     _log(session, f"{history_text}\n")
     _log(session, "---\n")
+
+    # Scan the finalised narrative for NPC names the model introduced without
+    # any structured block.  Adds suspects to scene_npcs so the next turn's
+    # directive requests deltas for them; Layer 2 creates stubs at that point.
+    try:
+        _detect_narrative_npcs(history_text, session)
+    except Exception:
+        pass
 
 
 def _stream_ollama(

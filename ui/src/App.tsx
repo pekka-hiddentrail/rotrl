@@ -25,6 +25,7 @@ export default function App() {
   const [rollInjection, setRollInjection] = useState<{ id: number; value: string } | null>(null)
   const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null } | null>(null)
   const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
+  const [diceKey, setDiceKey] = useState(0)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
   const appendToken = useCallback((token: string) => {
@@ -42,6 +43,7 @@ export default function App() {
     setMessages([])
     setSession(null)
     setStreaming(true)
+    setDiceKey(k => k + 1)
 
     // 1. Fetch and show the intro card immediately
     try {
@@ -206,6 +208,7 @@ export default function App() {
         </div>
 
         <DicePanel
+          key={diceKey}
           sessionId={session?.id ?? null}
           pendingRoll={pendingRoll}
           onRoll={async (expr: string, rolls: number[], total: number) => {

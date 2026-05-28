@@ -5,7 +5,8 @@ Covers:
   - _build_slim_system_prompt structure and required sections
   - Situation block: boot.md > previous recap.md > fallback notice
   - Party block extracted from character_sheet.md files
-  - Deferred context queue: correct files loaded, correct turn numbers
+  - Boot delta cleanup: session_NNN.md files deleted for current session only
+  - _DELTA_BLOCK_RE: parsing full and minimal %%DELTA%% blocks, stripping from text
   - validate_turn_input
   - validate_generated_text
 """
@@ -51,12 +52,14 @@ def test_prompt_contains_core_behavior(tmp_path, monkeypatch):
     assert "CORE BEHAVIOR" in prompt
 
 
-def test_prompt_contains_output_format(tmp_path, monkeypatch):
+def test_prompt_contains_response_structure(tmp_path, monkeypatch):
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
     prompt = _build_slim_system_prompt(1)
-    assert "OUTPUT FORMAT" in prompt
-    assert "No markdown headers" in prompt
+    assert "RESPONSE STRUCTURE" in prompt
+    assert "%%NARRATIVE%%" in prompt
+    assert "%%DELTAS%%" in prompt
+    assert "%%GENERATE%%" in prompt
 
 
 def test_prompt_contains_party_section(tmp_path, monkeypatch):
@@ -73,11 +76,13 @@ def test_prompt_contains_situation_section(tmp_path, monkeypatch):
     assert "CURRENT SITUATION" in prompt
 
 
-def test_prompt_ends_with_context_notice(tmp_path, monkeypatch):
+def test_prompt_contains_roll_section_format(tmp_path, monkeypatch):
+    """Prompt must describe the %%ROLL%% section format."""
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
     prompt = _build_slim_system_prompt(1)
-    assert "Additional rules" in prompt
+    assert "%%ROLL%%" in prompt
+    assert "dc:" in prompt
 
 
 # ── Situation block resolution ────────────────────────────────────────────────
@@ -181,62 +186,395 @@ def test_party_sorted_by_slot(tmp_path, monkeypatch):
     assert alice_pos < bob_pos < charlie_pos
 
 
-# ── Deferred context queue ────────────────────────────────────────────────────
+# ── Boot delta cleanup ────────────────────────────────────────────────────────
 
-def test_context_queue_loads_existing_files(tmp_path, monkeypatch):
+def test_boot_deletes_session_delta_files(tmp_path, monkeypatch):
+    """create_session() must delete the session's own delta files on boot."""
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    # Create one of the deferred files
-    adv = tmp_path / "adventure_path" / "00_system_authority"
-    adv.mkdir(parents=True)
-    (adv / "GM_OPERATING_RULES_01_CRITICAL.md").write_text("Critical rules here.", encoding="utf-8")
+    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir.mkdir(parents=True)
+    delta = npc_dir / "session_001.md"
+    delta.write_text("## Turn 1 — 12:00:00\n**Summary:** old data\n", encoding="utf-8")
+    assert delta.exists()
 
-    session = sm.create_session(1, "qwen3:4b", dev_mode=False)
-    labels = [entry[1] for entry in session.context_queue]
-    assert "GM Operating Rules — Critical" in labels
+    sm.create_session(1, "qwen3:4b", dev_mode=True)
+
+    assert not delta.exists(), "session_001.md should be deleted when booting session 1"
 
 
-def test_context_queue_skips_missing_files(tmp_path, monkeypatch):
-    """Files that don't exist on disk must be silently skipped."""
+def test_boot_does_not_delete_other_session_deltas(tmp_path, monkeypatch):
+    """Boot for session 1 must not touch delta files from other sessions."""
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    # No adventure_path at all
-    session = sm.create_session(1, "qwen3:4b", dev_mode=False)
-    assert session.context_queue == []
+    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir.mkdir(parents=True)
+    other = npc_dir / "session_002.md"
+    other.write_text("## Turn 1 — 12:00:00\n**Summary:** session 2 data\n", encoding="utf-8")
+
+    sm.create_session(1, "qwen3:4b", dev_mode=True)
+
+    assert other.exists(), "session_002.md must not be touched when booting session 1"
 
 
-def test_context_queue_empty_in_dev_mode(tmp_path, monkeypatch):
+def test_boot_session_1_resets_knowledge_file(tmp_path, monkeypatch):
+    """Booting session 1 should clear existing NPC knowledge.md content."""
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    session = sm.create_session(1, "qwen3:4b", dev_mode=True)
-    assert session.context_queue == []
+    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir.mkdir(parents=True)
+    (npc_dir / "knowledge.md").write_text(
+        "- [pcs] Old campaign memory — S005 T010\n",
+        encoding="utf-8",
+    )
+
+    sm.create_session(1, "qwen3:4b", dev_mode=True)
+
+    assert (npc_dir / "knowledge.md").read_text(encoding="utf-8") == ""
 
 
-def test_context_queue_turn_numbers_are_increasing(tmp_path, monkeypatch):
-    """Each successive entry's inject_after_turn must be >= the previous."""
+def test_boot_non_session_1_keeps_knowledge_file(tmp_path, monkeypatch):
+    """Booting sessions other than 1 must preserve knowledge.md content."""
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    # Create all deferred files
-    for _, label, rel in sm._DEFERRED_CONTEXT_FILES:
-        p = tmp_path / "adventure_path" / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(f"Content for {label}.", encoding="utf-8")
+    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir.mkdir(parents=True)
+    original = "- [pcs] Keep this memory — S001 T003\n"
+    (npc_dir / "knowledge.md").write_text(original, encoding="utf-8")
 
-    session = sm.create_session(1, "qwen3:4b", dev_mode=False)
-    turns = [entry[0] for entry in session.context_queue]
-    assert turns == sorted(turns)
+    sm.create_session(2, "qwen3:4b", dev_mode=True)
+
+    assert (npc_dir / "knowledge.md").read_text(encoding="utf-8") == original
+
+
+# ── Delta block regex ─────────────────────────────────────────────────────────
+
+def test_delta_block_re_parses_full_block():
+    """_DELTA_BLOCK_RE + _parse_delta_fields extracts status fields; knowledge extracted separately."""
+    import api.session_manager as sm
+    text = (
+        "Some GM narrative.\n\n"
+        "%%DELTA%%\n"
+        "npc: Kendra Deverin\n"
+        "disposition: neutral → suspicious\n"
+        "location: Festival Square\n"
+        "knowledge: [pcs] Ani tried to deceive her\n"
+        "knowledge: [quest] The party is investigating the fireworks\n"
+        "summary: Kendra grew wary after the failed Bluff attempt.\n"
+        "%%END%%\n"
+    )
+    m = sm._DELTA_BLOCK_RE.search(text)
+    assert m is not None
+    # Status fields
+    fields = sm._parse_delta_fields(m.group(1))
+    assert fields["npc"] == "Kendra Deverin"
+    assert "suspicious" in fields["disposition"]
+    assert "Festival Square" in fields["location"]
+    assert "wary" in fields["summary"]
+    # Knowledge extracted separately (multiple lines)
+    items = sm._extract_knowledge_items(m.group(1))
+    assert len(items) == 2
+    assert any("deceive" in i for i in items)
+    assert any("fireworks" in i for i in items)
+
+
+def test_delta_block_re_parses_minimal_block():
+    """_DELTA_BLOCK_RE matches a block with only npc + summary."""
+    import api.session_manager as sm
+    text = (
+        "%%DELTA%%\n"
+        "npc: Ameiko Kaijitsu\n"
+        "summary: Ameiko offered the party a free room at the Rusty Dragon.\n"
+        "%%END%%\n"
+    )
+    m = sm._DELTA_BLOCK_RE.search(text)
+    assert m is not None
+    fields = sm._parse_delta_fields(m.group(1))
+    assert fields["npc"] == "Ameiko Kaijitsu"
+    assert "disposition" not in fields
+    assert "location" not in fields
+    assert "knowledge" not in fields
+    assert "free room" in fields["summary"]
+
+
+def test_delta_block_re_tolerates_extra_fields_and_reordered_fields():
+    """_DELTA_BLOCK_RE matches even when the LLM adds extra fields or reorders them."""
+    import api.session_manager as sm
+    text = (
+        "%%DELTA%%\n"
+        "npc: Abstalar Zantus\n"
+        "location: Cathedral\n"          # location before disposition
+        "goals: Wants to bless the festival\n"   # extra field
+        "disposition: warm\n"
+        "summary: Zantus welcomed the party.\n"
+        "%%END%%\n"
+    )
+    m = sm._DELTA_BLOCK_RE.search(text)
+    assert m is not None
+    fields = sm._parse_delta_fields(m.group(1))
+    assert fields["npc"] == "Abstalar Zantus"
+    assert fields["location"] == "Cathedral"
+    assert fields["disposition"] == "warm"
+    assert fields["summary"] == "Zantus welcomed the party."
+
+
+def test_delta_block_re_strips_from_text():
+    """Substituting out the delta block leaves only the narrative."""
+    import api.session_manager as sm
+    text = (
+        "Father Zantus smiled warmly.\n\n"
+        "%%DELTA%%\n"
+        "npc: Abstalar Zantus\n"
+        "summary: Zantus answered Ani's question about Desna.\n"
+        "%%END%%\n"
+    )
+    clean = sm._DELTA_BLOCK_RE.sub("", text).strip()
+    assert "%%DELTA%%" not in clean
+    assert "%%END%%" not in clean
+    assert "Father Zantus smiled warmly." in clean
+
+
+# ── Missing %%END%% tolerance ─────────────────────────────────────────────────
+
+def test_delta_block_re_tolerates_missing_end_marker():
+    """%%DELTA%% block with no %%END%% is still parsed and stripped."""
+    import api.session_manager as sm
+    text = (
+        "Kendra turned to greet him.\n\n"
+        "%%DELTA%%\n"
+        "npc: Kendra Deverin\n"
+        "disposition: neutral\n"
+        "location: cathedral steps\n"
+        "summary: Kendra greeted Yanyeeku warmly.\n"
+        # no %%END%%
+    )
+    m = sm._DELTA_BLOCK_RE.search(text)
+    assert m is not None
+    fields = sm._parse_delta_fields(m.group(1))
+    assert fields["npc"] == "Kendra Deverin"
+    assert fields["disposition"] == "neutral"
+    assert "warmly" in fields["summary"]
+
+    clean = sm._DELTA_BLOCK_RE.sub("", text).strip()
+    assert "%%DELTA%%" not in clean
+    assert "Kendra turned to greet him." in clean
+
+
+def test_delta_block_re_two_blocks_without_end_markers():
+    """Two consecutive %%DELTA%% blocks with no %%END%% are both found."""
+    import api.session_manager as sm
+    text = (
+        "The scene unfolds.\n\n"
+        "%%DELTA%%\n"
+        "npc: Kendra Deverin\n"
+        "summary: Kendra greeted the party.\n"
+        "\n"
+        "%%DELTA%%\n"
+        "npc: Abstalar Zantus\n"
+        "summary: Zantus offered a blessing.\n"
+    )
+    matches = list(sm._DELTA_BLOCK_RE.finditer(text))
+    assert len(matches) == 2
+    f1 = sm._parse_delta_fields(matches[0].group(1))
+    f2 = sm._parse_delta_fields(matches[1].group(1))
+    assert f1["npc"] == "Kendra Deverin"
+    assert f2["npc"] == "Abstalar Zantus"
+
+    clean = sm._DELTA_BLOCK_RE.sub("", text).strip()
+    assert "%%DELTA%%" not in clean
+    assert "The scene unfolds." in clean
+
+
+def test_roll_block_re_tolerates_missing_end_marker():
+    """%%ROLL%% block with no %%END%% is still parsed and stripped."""
+    import api.session_manager as sm
+    text = (
+        "Yanyeeku steps forward to speak with the mayor.\n\n"
+        "%%ROLL%%\n"
+        "skill: Diplomacy\n"
+        "dc: 12\n"
+        "success: The mayor smiles warmly.\n"
+        "failure: The mayor looks distracted.\n"
+        # no %%END%%
+    )
+    m = sm._ROLL_BLOCK_RE.search(text)
+    assert m is not None
+    assert m.group("skill").strip() == "Diplomacy"
+    assert int(m.group("dc")) == 12
+    assert "warmly" in m.group("success")
+    assert "distracted" in m.group("failure")
+
+    clean = sm._ROLL_BLOCK_RE.sub("", text).strip()
+    assert "%%ROLL%%" not in clean
+    assert "Yanyeeku steps forward" in clean
+
+
+def test_roll_then_delta_both_without_end_markers():
+    """%%ROLL%% followed by %%DELTA%%, neither has %%END%% — both stripped cleanly."""
+    import api.session_manager as sm
+    text = (
+        "Yanyeeku approaches the mayor on the cathedral steps.\n\n"
+        "%%ROLL%%\n"
+        "skill: Diplomacy\n"
+        "dc: 12\n"
+        "success: Kendra's expression turns genuinely interested.\n"
+        "failure: Kendra's smile falters for a moment.\n"
+        "\n"
+        "%%DELTA%%\n"
+        "npc: Kendra Deverin\n"
+        "disposition: neutral\n"
+        "location: cathedral steps\n"
+        "knowledge: [pcs] Yanyeeku is a visitor interested in local citizens\n"
+        "summary: Yanyeeku approaches the mayor and she greets him warmly.\n"
+    )
+    # Roll stripped first
+    after_roll = sm._ROLL_BLOCK_RE.sub("", text).rstrip()
+    assert "%%ROLL%%" not in after_roll
+    assert "Yanyeeku approaches the mayor" in after_roll
+    assert "%%DELTA%%" in after_roll  # delta still present
+
+    # Delta stripped second
+    after_delta = sm._DELTA_BLOCK_RE.sub("", after_roll).strip()
+    assert "%%DELTA%%" not in after_delta
+    assert "Yanyeeku approaches the mayor" in after_delta
+
+    # Roll was parseable
+    roll_m = sm._ROLL_BLOCK_RE.search(text)
+    assert roll_m is not None
+    assert roll_m.group("skill").strip() == "Diplomacy"
+    assert int(roll_m.group("dc")) == 12
+
+    # Delta was parseable (from intermediate text)
+    delta_m = sm._DELTA_BLOCK_RE.search(after_roll)
+    assert delta_m is not None
+    fields = sm._parse_delta_fields(delta_m.group(1))
+    assert fields["npc"] == "Kendra Deverin"
+    items = sm._extract_knowledge_items(delta_m.group(1))
+    assert len(items) == 1
+    assert "visitor" in items[0]
+
+
+# ── Section-based response parser ────────────────────────────────────────────
+
+def test_parse_response_sections_all_sections():
+    """_parse_response_sections splits a full templated response into named sections."""
+    import api.session_manager as sm
+    text = (
+        "%%NARRATIVE%%\n"
+        "Hannah smiles at Revemox.\n\n"
+        "%%ROLL%%\n"
+        "[\n"
+        "skill: Diplomacy\n"
+        "dc: 12\n"
+        "success: She opens up warmly.\n"
+        "failure: She stays guarded.\n"
+        "]\n\n"
+        "%%DELTAS%%\n"
+        "[\n"
+        "npc: Hannah\n"
+        "summary: Greeted Revemox.\n"
+        "]\n\n"
+        "%%GENERATE%%\n"
+        "[\n"
+        "npc: Hannah\n"
+        "role: fruit shop owner\n"
+        "]\n"
+    )
+    sections = sm._parse_response_sections(text)
+    assert "NARRATIVE" in sections
+    assert "ROLL" in sections
+    assert "DELTAS" in sections
+    assert "GENERATE" in sections
+    assert "Hannah smiles" in sections["NARRATIVE"]
+    assert "Diplomacy" in sections["ROLL"]
+    assert "fruit shop owner" in sections["GENERATE"]
+
+
+def test_parse_response_sections_fallback_no_markers():
+    """Without section markers the whole text is returned as NARRATIVE."""
+    import api.session_manager as sm
+    text = "Kendra smiles at you warmly. What do you do?"
+    sections = sm._parse_response_sections(text)
+    assert sections == {"NARRATIVE": text.strip()}
+
+
+def test_parse_response_sections_narrative_only():
+    """A response with only %%NARRATIVE%% returns just that section."""
+    import api.session_manager as sm
+    text = "%%NARRATIVE%%\nThe festival continues.\n"
+    sections = sm._parse_response_sections(text)
+    assert sections.get("NARRATIVE") == "The festival continues."
+    assert "DELTAS" not in sections
+
+
+def test_parse_bracket_blocks_single():
+    """A single bracket block is parsed into one field dict."""
+    import api.session_manager as sm
+    text = "[\nnpc: Kendra Deverin\nlocation: steps\nsummary: She waved.\n]"
+    blocks = sm._parse_bracket_blocks(text)
+    assert len(blocks) == 1
+    assert blocks[0]["npc"] == "Kendra Deverin"
+    assert blocks[0]["location"] == "steps"
+
+
+def test_parse_bracket_blocks_multiple():
+    """Multiple bracket blocks in one section are all returned."""
+    import api.session_manager as sm
+    text = (
+        "[\nnpc: Kendra Deverin\nsummary: Greeted party.\n]\n\n"
+        "[\nnpc: Garridan Vashin\nsummary: Showed fireworks.\n]\n"
+    )
+    blocks = sm._parse_bracket_blocks(text)
+    assert len(blocks) == 2
+    assert blocks[0]["npc"] == "Kendra Deverin"
+    assert blocks[1]["npc"] == "Garridan Vashin"
+
+
+def test_parse_bracket_blocks_multiple_knowledge_lines():
+    """Multiple knowledge: lines in one block are collected into a list."""
+    import api.session_manager as sm
+    text = (
+        "[\n"
+        "npc: Kendra Deverin\n"
+        "knowledge: [pcs] Yanyeeku asked about fireworks\n"
+        "knowledge: [world] The festival is going well\n"
+        "summary: Spoke with Yanyeeku.\n"
+        "]\n"
+    )
+    blocks = sm._parse_bracket_blocks(text)
+    assert len(blocks) == 1
+    k = blocks[0]["knowledge"]
+    assert isinstance(k, list)
+    assert len(k) == 2
+    assert any("fireworks" in item for item in k)
+    assert any("festival" in item for item in k)
+
+
+def test_parse_bracket_blocks_knowledge_tag_not_confused_with_delimiter():
+    """[pcs] tags inside knowledge lines do not confuse the bracket parser."""
+    import api.session_manager as sm
+    text = (
+        "[\n"
+        "npc: Kendra Deverin\n"
+        "knowledge: [persistent] Always friendly to newcomers\n"
+        "summary: Welcomed the party.\n"
+        "]\n"
+    )
+    blocks = sm._parse_bracket_blocks(text)
+    assert len(blocks) == 1
+    assert blocks[0]["npc"] == "Kendra Deverin"
 
 
 # ── Input validation ──────────────────────────────────────────────────────────

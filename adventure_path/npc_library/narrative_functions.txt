@@ -1,0 +1,27 @@
+# NPC Narrative Function Library
+# One entry per block, separated by lines containing only "---".
+# Each entry describes the GM-facing purpose of this NPC in the scene.
+---
+Background local who provides colour and overheard rumour when engaged. Not a driver of plot, but a useful texture NPC. Knows things they do not know are important.
+---
+Information source about Sandpoint's trades, recent arrivals, and neighbourhood events. Not plugged into the main plot but knows the town's rhythms well.
+---
+Potential minor quest-giver if the party engages with genuine interest. Has a problem that falls below the town guard's threshold but matters to them personally.
+---
+Gatekeeper or minor obstacle — controls access to a place, person, or resource the party may need. Requires diplomacy or credentials, not combat.
+---
+Witness to recent events who may know something relevant without realising its importance. The trick is asking the right question.
+---
+Social conduit — knows everyone in their circle and can introduce the party to harder-to-reach figures if they invest in the relationship first.
+---
+Rumour vector: they repeat what they hear without filtering. Talking to them is a way to seed information into the town as well as extract it.
+---
+Economic gatekeeper: controls a supply, service, or facility the party needs. Can be cooperative, slow, or obstructive depending on their impression of the party.
+---
+Moral anchor: represents the ordinary people the party's actions affect. Their wellbeing or distress can function as a consequence indicator.
+---
+Local expert on a narrow subject — a craft, a place, a piece of history — that may become relevant. Entirely ignorable until that moment.
+---
+Face of a local institution (guild, temple, market authority). Their cooperation or opposition has procedural consequences beyond their personal feelings.
+---
+Old-timer with long memory. The town has changed around them; they remember things others have forgotten and may surface that knowledge unprompted.

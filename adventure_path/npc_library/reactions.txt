@@ -1,0 +1,27 @@
+# NPC Reaction to PCs Library
+# One entry per block, separated by lines containing only "---".
+# Each entry describes how this NPC responds on first contact with the party.
+---
+Politely helpful on first meeting. Responds well to courtesy and direct questions. No hostility; assumes good intent unless given reason not to.
+---
+Guarded at first but warms quickly to anyone who shows genuine respect for their work or knowledge. The first impression matters; the second is much easier.
+---
+Neutral and businesslike — will assist if it costs them nothing, expects some form of reciprocity otherwise. Not unfriendly, just transactional.
+---
+Friendly and easy to engage, but needs the party to distinguish themselves from the general flow of strangers before they are taken seriously.
+---
+Sceptical of adventurers specifically. Has seen too many pass through town and leave problems behind them. Needs a credible reason to engage beyond pleasantries.
+---
+Openly curious about the party — strangers are interesting to them, and they will ask as many questions as they answer. Not suspicious; just interested.
+---
+Reflexively deferential, which can mask how little they are actually saying. Will agree readily but needs specific, direct questions to produce useful information.
+---
+Wary without being hostile. Has had bad experiences with outsiders in the past; will cooperate but keeps one foot toward the exit for the first few exchanges.
+---
+Enthusiastically cooperative — perhaps too much so. Will try to help with things beyond their knowledge and needs to be steered toward what they actually know.
+---
+Calm and measured, neither warm nor cold. Gives the impression of having had this conversation before and knowing how it usually goes.
+---
+Protective of their time. Not rude, but clearly busy; help is offered in the margins of something else. Responsiveness improves if the party demonstrates patience.
+---
+Treats the party with a faint, unconscious condescension that is not malicious — they simply rank adventurers slightly below merchants in the social order. Can be disarmed by competence.

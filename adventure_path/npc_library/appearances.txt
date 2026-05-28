@@ -1,0 +1,94 @@
+# NPC Appearance Library
+# One entry per block, separated by lines containing only "---".
+# Each entry is injected verbatim into the NPC's ## Appearance section.
+# Add as many entries as you like — the generator picks one at random.
+---
+Lean and sun-weathered, with the calloused hands of someone who works outdoors most days. Hair kept short and practical, face lined from squinting against bright water or open sky.
+---
+Stocky and broad-shouldered, with a ready smile and observant eyes that miss very little. The kind of person who has been useful their whole life and knows it.
+---
+Slight and neat in appearance, with ink-stained fingers and a habit of fidgeting with whatever is nearest — a pen, a button, the edge of a sleeve.
+---
+Heavyset with a ruddy complexion, moving with the unhurried confidence of someone long-established in their place. Does not rush for anyone.
+---
+Wiry and quick, hair pulled back practically. Always seems slightly harried but never loses the thread of a conversation, even mid-task.
+---
+Grey-haired and deliberate in every movement. Carries themselves with the ease of long experience — not slow, just unhurried in the way of someone who has already made their worst mistakes.
+---
+Young-looking at first glance, but with an old wariness behind the eyes that tells a different story. The hands say they have worked for years.
+---
+Tall and angular, dressed simply and without vanity. Speaks with a precision that suggests every word has been weighed before being spent.
+---
+Middle-aged, with the kind of face that would be forgettable if not for an unusually direct gaze that makes people feel they are being appraised.
+---
+Short and compact, with quick hands and the faint but permanent smell of their trade — wood shavings, fish, tallow, or smoke depending on the wind.
+---
+Broad in the shoulders with deep-set eyes and a jaw that suggests stubbornness. The face is weathered past what age alone would explain.
+---
+Neatly dressed beyond what their station might suggest — someone who takes small prides seriously and keeps their boots clean even on market day.
+---
+Round-faced and pleasant, with laugh lines that look genuinely earned. Moves through a crowd with the ease of someone everyone recognises.
+---
+Angular features and a pointed chin framed by dark hair worn loose. There is something watchful in the stillness they hold when listening.
+---
+A broad, open face with a gap-toothed smile deployed freely and without calculation. Loud enough to be heard over ambient noise without seeming to try.
+---
+Pale and fine-boned, with the slightly absent look of someone whose thoughts are frequently somewhere else. Snaps back to attention quickly when addressed directly.
+---
+Dark-complexioned with close-cropped hair and an easy, rolling gait. Wears a single piece of jewellery — always the same one — that suggests a specific attachment.
+---
+A compact, muscular build gone slightly soft with age and good food. Still moves as if expecting to be needed. Eyes are quick, hands steadier than the rest suggests.
+---
+Tall enough to need to duck in low doorways, which they do with the practiced ease of someone who has misjudged it many times. Otherwise oddly graceful.
+---
+A face scarred faintly on one side — an old burn or blade, long healed — that they do not explain and apparently do not think about. The rest of the presentation is careful and considered.
+---
+Varisianfeatures: warm brown skin, dark curled hair, and a way of using their hands when they speak that suggests every sentence has a shape.
+---
+Chelaxian in bearing — upright, precise, with a faintly formal air that does not quite soften even in casual conversation. Dresses in darker colours.
+---
+Shoanti ancestry visible in their height and the geometric tattoo that runs from wrist to elbow. Wears Sandpoint clothes but keeps one traditional piece somewhere about them.
+---
+Elvish blood thinned to a slight delicacy of feature and a pointed quality to the ears. Otherwise indistinguishable from a Varisian local, which they clearly prefer.
+---
+Dwarven build without the full height — a dwarf by ancestry, raised here, and entirely at home in a human town. The beard is trimmed short for practical reasons.
+---
+Tall and narrow, with long fingers and a habit of folding them carefully when waiting. Their clothes are plain but impeccably mended, suggesting patience more than wealth.
+---
+Broad-faced and sharp-eyed, with hair going silver at the temples. Smiles often, but the smile rarely reaches the part of the face that is doing the thinking.
+---
+Small, quick, and birdlike in movement, always turning slightly toward the loudest sound in the room. Keeps their sleeves rolled no matter the weather.
+---
+Thick dark hair worn in a practical braid, skin marked by sun and old freckles. Carries a faint smell of salt, smoke, or damp wool depending on where they have been that morning.
+---
+A soft-spoken person with a heavy build and surprisingly delicate hands. Their posture is apologetic until work begins, at which point every movement becomes certain.
+---
+Long-nosed and narrow-shouldered, with spectacles that are constantly being adjusted. Looks fragile until they speak, then proves unexpectedly difficult to interrupt.
+---
+Square-jawed, clean-shaven, and dressed with soldierly neatness even when the clothes are civilian. Stands as if awaiting inspection, though no one has asked for one.
+---
+Round and comfortable-looking, with bright eyes and a talent for appearing harmless. Notices exits, purses, weapons, and moods with equal casualness.
+---
+A striking mass of greying hair frames a face full of strong opinions. Wears colour boldly, as if daring the street to object.
+---
+Thin and stooped, with ink-dark circles beneath the eyes. Looks as though sleep has been negotiated with rather than enjoyed.
+---
+Golden-brown skin, close-cropped curls, and a voice that carries warmth before the words are even clear. Dresses in layers full of pockets, most of them actually used.
+---
+Heavy brows and a permanent squint give them a suspicious look even when they are perfectly content. Their hands are scarred from small, repeated accidents.
+---
+Elegant in a slightly threadbare way, with old finery maintained past its proper season. Every gesture hints at someone raised around manners and later forced to improvise.
+---
+A powerful build softened by age, with one knee that troubles them in cold weather. Laughs with the whole chest, but rises from a chair with care.
+---
+Very young, very earnest, and trying hard to look older by keeping their expression serious. The effort fails whenever they become excited.
+---
+Dark-eyed and composed, with hair hidden beneath a scarf or cap. Their face gives away little, but their attention is intense enough to feel almost physical.
+---
+A weather-beaten face beneath an old hat, with a crooked nose that was probably broken more than once. Speaks from the side of the mouth as if sharing a secret with the air.
+---
+Tall, broad, and impeccably polite, creating the uneasy impression of a locked door that has learned etiquette. Their clothing is simple, clean, and carefully chosen.
+---
+Light-footed despite a sturdy frame, with a habit of humming under their breath while thinking. Stops humming immediately when they realise someone has noticed.
+---
+Fine-featured and tired-looking, with neat hair and hands that tremble only when idle. Keeps busy whenever possible, perhaps to avoid being seen too clearly.
