@@ -1224,13 +1224,14 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         }
 
     _llm_start = _time.monotonic()
+    _timing: dict = {"start": _llm_start}
     _llm_error: Optional[str] = None
     _usage: dict = {}
     try:
         _raw = (
-            _stream_groq(session, messages, accumulated, _usage)
+            _stream_groq(session, messages, accumulated, _usage, _timing)
             if session.provider == "groq"
-            else _stream_ollama(session, messages, options, accumulated)
+            else _stream_ollama(session, messages, options, accumulated, _timing)
         )
         yield from _stream_with_narrative_filter(_raw, session.dev_mode)
     except Exception as _llm_exc:
@@ -1238,14 +1239,21 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         raise
     finally:
         _llm_ms = int((_time.monotonic() - _llm_start) * 1000)
+        _response_text = "".join(accumulated)
+        # null when no content arrived (error before first token); bool otherwise.
+        _section_format_ok: Optional[bool] = (
+            bool(_HAS_SECTION_MARKERS_RE.search(_response_text)) if _response_text else None
+        )
         write_api_log(
             provider=session.provider,
             session_id=session.id,
             session_number=session.session_number,
             turn=session.turn_number,
             raw_request=_raw_request,
-            response_text="".join(accumulated),
+            response_text=_response_text,
             duration_ms=_llm_ms,
+            first_token_ms=_timing.get("first_token_ms"),
+            section_format_ok=_section_format_ok,
             status="error" if _llm_error else "ok",
             error=_llm_error,
             usage=_usage or None,
@@ -1382,6 +1390,7 @@ def _stream_ollama(
     messages: list,
     options: dict,
     accumulated: list[str],
+    timing_out: dict,
 ) -> Generator[str, None, None]:
     with _requests.post(
         f"{session.host}/api/chat",
@@ -1396,6 +1405,8 @@ def _stream_ollama(
             chunk = json.loads(line)
             content = (chunk.get("message") or {}).get("content", "")
             if content:
+                if "first_token_ms" not in timing_out:
+                    timing_out["first_token_ms"] = int((_time.monotonic() - timing_out["start"]) * 1000)
                 accumulated.append(content)
                 yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
             if chunk.get("done"):
@@ -1407,6 +1418,7 @@ def _stream_groq(
     messages: list,
     accumulated: list[str],
     usage_out: dict,
+    timing_out: dict,
 ) -> Generator[str, None, None]:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
@@ -1454,6 +1466,8 @@ def _stream_groq(
                 continue
             content = ((chunk.get("choices") or [{}])[0].get("delta") or {}).get("content", "")
             if content:
+                if "first_token_ms" not in timing_out:
+                    timing_out["first_token_ms"] = int((_time.monotonic() - timing_out["start"]) * 1000)
                 accumulated.append(content)
                 yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
 

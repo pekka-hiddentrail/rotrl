@@ -1,6 +1,6 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (352 pytest + 88 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (412 pytest + 88 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 
@@ -420,15 +420,25 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 
 ## 10. Log Sanity Check
 
-**Chain A — log structure**
+**Chain A — log structure + latency fields**
 After a session with at least 4 turns:
 
 1. Open `http://localhost:8000/api/log/api` in a new tab.
 2. Click the most recent log filename.
 3. ✔ `duration_ms` values are plausible: 800–20 000 ms for normal Groq turns.
-4. ✔ `usage.total_tokens` is present and non-zero (may be `null` for older Groq models).
-5. ✔ `messages[0].role` is `"system"` and `messages[0].content` is non-empty.
-6. ✔ `preview` field contains the first ~200 characters of the GM response with no garbled escaping.
+4. ✔ `first_token_ms` is a positive integer and less than `duration_ms` (e.g. 200–3 000 ms for Groq).
+5. ✔ `section_format_ok` is `true` (good model compliance) or `false` (flat-prose fallback). Never `null` on a successful turn.
+6. ✔ `usage.total_tokens` is present and non-zero (may be `null` for older Groq models).
+7. ✔ `messages[0].role` is `"system"` and `messages[0].content` is non-empty.
+8. ✔ `preview` field contains the first ~200 characters of the GM response with no garbled escaping.
+
+**Chain A2 — error-path null fields**
+1. Disconnect the internet (or unset `GROQ_API_KEY` in the `.env`).
+2. Boot a session and send a turn.
+3. Open the most recent log in `api_log/`.
+4. ✔ `status` is `"error"`.
+5. ✔ `first_token_ms` is `null`.
+6. ✔ `section_format_ok` is `null`.
 
 **Chain B — path traversal guard**
 In the browser address bar, try:

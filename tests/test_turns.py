@@ -78,3 +78,99 @@ def test_turn_ollama_error_returns_error_event(booted_session):
     error_events = [e for e in events if e["type"] == "error"]
     assert len(error_events) == 1
     assert "connection refused" in error_events[0]["message"]
+
+
+# ── AC-008: section_format_ok passed to write_api_log ────────────────────────
+
+def test_section_format_ok_true_when_response_has_markers(booted_session):
+    client, session_id = booted_session
+    tokens = ["%%NARRATIVE%%\n\n", "The festival begins."]
+    mock_resp = make_stream_response(tokens)
+
+    captured: list[dict] = []
+
+    def _capture(**kwargs):
+        captured.append(kwargs)
+        from pathlib import Path
+        import tempfile, json
+        p = Path(tempfile.mktemp(suffix=".json"))
+        p.write_text(json.dumps({}))
+        return p
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp), \
+         patch("api.session_manager.write_api_log", side_effect=_capture):
+        _send(client, session_id, "We look around.")
+
+    assert len(captured) == 1
+    assert captured[0]["section_format_ok"] is True
+
+
+def test_section_format_ok_false_when_response_has_no_markers(booted_session):
+    client, session_id = booted_session
+    mock_resp = make_stream_response(["Plain prose with no markers."])
+
+    captured: list[dict] = []
+
+    def _capture(**kwargs):
+        captured.append(kwargs)
+        from pathlib import Path
+        import tempfile, json
+        p = Path(tempfile.mktemp(suffix=".json"))
+        p.write_text(json.dumps({}))
+        return p
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp), \
+         patch("api.session_manager.write_api_log", side_effect=_capture):
+        _send(client, session_id, "We look around.")
+
+    assert len(captured) == 1
+    assert captured[0]["section_format_ok"] is False
+
+
+def test_section_format_ok_none_when_error_before_content(booted_session):
+    from unittest.mock import MagicMock
+    client, session_id = booted_session
+
+    broken = MagicMock()
+    broken.raise_for_status.side_effect = Exception("timeout")
+    broken.__enter__ = lambda s: s
+    broken.__exit__ = MagicMock(return_value=False)
+
+    captured: list[dict] = []
+
+    def _capture(**kwargs):
+        captured.append(kwargs)
+        from pathlib import Path
+        import tempfile, json
+        p = Path(tempfile.mktemp(suffix=".json"))
+        p.write_text(json.dumps({}))
+        return p
+
+    with patch("api.session_manager._requests.post", return_value=broken), \
+         patch("api.session_manager.write_api_log", side_effect=_capture):
+        _send(client, session_id, "Hello?")
+
+    assert len(captured) == 1
+    assert captured[0]["section_format_ok"] is None
+
+
+def test_section_format_ok_recognises_all_marker_types(booted_session):
+    client, session_id = booted_session
+
+    for marker in ["%%NARRATIVE%%", "%%ROLL%%", "%%DELTAS%%", "%%GENERATE%%"]:
+        captured: list[dict] = []
+
+        def _capture(**kwargs):
+            captured.append(kwargs)
+            from pathlib import Path
+            import tempfile, json
+            p = Path(tempfile.mktemp(suffix=".json"))
+            p.write_text(json.dumps({}))
+            return p
+
+        mock_resp = make_stream_response([f"{marker}\n\nContent."])
+        with patch("api.session_manager._requests.post", return_value=mock_resp), \
+             patch("api.session_manager.write_api_log", side_effect=_capture):
+            _send(client, session_id, "Test.")
+
+        assert captured[0]["section_format_ok"] is True, f"failed for {marker}"
