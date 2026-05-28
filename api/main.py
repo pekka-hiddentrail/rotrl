@@ -28,7 +28,7 @@ _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 class BootRequest(BaseModel):
     session_number: int = 1
-    model: str = "qwen3:4b"
+    model: str = "llama-3.3-70b-versatile"
     host: str = "http://localhost:11434"
     temperature: float = 0.3
     dev_mode: bool = False

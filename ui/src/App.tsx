@@ -15,7 +15,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [streaming, setStreaming] = useState(false)
   const [sessionNumber, setSessionNumber] = useState(1)
-  const [model, setModel] = useState('llama-3.1-8b-instant')
+  const [model, setModel] = useState('llama-3.3-70b-versatile')
   const [devMode, setDevMode] = useState(false)
   const [provider, setProvider] = useState<'ollama' | 'groq'>('groq')
   const [error, setError] = useState<string | null>(null)
@@ -165,7 +165,7 @@ export default function App() {
         onDevModeChange={setDevMode}
         onProviderChange={(p) => {
           setProvider(p)
-          setModel(p === 'groq' ? 'llama-3.1-8b-instant' : 'qwen3:4b')
+          setModel(p === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen3:4b')
         }}
         onBoot={handleBoot}
         onEnd={handleEnd}
