@@ -1,18 +1,11 @@
 # Lonjiku Kaijitsu
 
-**Tier:** IV — Functional
-**Role:** Owner of the Sandpoint Glassworks
-**Flags:** DISPOSABLE
 **Aliases:** lonjiku, kaijitsu, glassworks, glassworks owner, lonjiku kaijitsu
 **Locations:** glassworks, sandpoint glassworks
 
 ## Personality
 
 Gruff, businesslike, and emotionally closed off. Lonjiku built the Glassworks into a successful operation through discipline and demand — the same approach he applied to his family, with worse results. He is not cruel in a theatrical sense; he is simply indifferent to feelings, including his own. He is not unintelligent, but he has no patience for people who cannot keep up.
-
-## Narrative Function
-
-Demonstrates the mundane cruelty behind Sandpoint's prosperous surface. His fate — and what Tsuto does to him — reveals that the goblin threat is not external. It came from inside the family.
 
 ## Location & Availability — Act I
 
@@ -35,3 +28,13 @@ Businesslike and dismissive. Not hostile unless provoked or pressed on family ma
 
 - **If Killed:** Economic recovery in Sandpoint slows; Ameiko's emotional arc shifts significantly
 - **If Cooperative (reluctantly):** Provides Glassworks access and limited local business intelligence
+
+<!-- REFERENCE -->
+
+**Tier:** IV — Functional
+**Role:** Owner of the Sandpoint Glassworks
+**Flags:** DISPOSABLE
+
+## Narrative Function
+
+Demonstrates the mundane cruelty behind Sandpoint's prosperous surface. His fate — and what Tsuto does to him — reveals that the goblin threat is not external. It came from inside the family.

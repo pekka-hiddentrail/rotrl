@@ -1,18 +1,11 @@
 # Belor Hemlock
 
-**Tier:** I — Structural (Load-Bearing)
-**Role:** Sheriff of Sandpoint
-**Flags:** PLOT_CRITICAL, PERSISTENT
 **Aliases:** sheriff, hemlock, belor, sheriff hemlock
 **Locations:** sheriff's office, garrison, festival square, festival grounds, square
 
 ## Personality
 
 Disciplined, professional, and quietly burdened. Hemlock carries the weight of keeping order in a town that keeps generating disorder. He respects competence and despises grandstanding. Not cold — he simply has no patience for politics or posturing. If the PCs prove themselves in a crisis, he will treat them as partners rather than civilians.
-
-## Narrative Function
-
-Embodies law and order under strain. Acts as a professional counterpoint to the PCs — methodical where they may be impulsive, measured where they may be reckless. His cooperation is a meaningful resource: access to the garrison, intelligence, and institutional legitimacy.
 
 ## Location & Availability — Act I
 
@@ -36,3 +29,13 @@ Initially professional and guarded — assesses before trusting. If PCs act deci
 - **If Cooperative:** Shares intelligence, assigns militia support, backs PC authority in town
 - **If Distrustful:** Operates independently; withholds sensitive information; may investigate PCs
 - **If Killed:** Law enforcement collapses into ad-hoc militias; crime and paranoia increase sharply
+
+<!-- REFERENCE -->
+
+**Tier:** I — Structural (Load-Bearing)
+**Role:** Sheriff of Sandpoint
+**Flags:** PLOT_CRITICAL, PERSISTENT
+
+## Narrative Function
+
+Embodies law and order under strain. Acts as a professional counterpoint to the PCs — methodical where they may be impulsive, measured where they may be reckless. His cooperation is a meaningful resource: access to the garrison, intelligence, and institutional legitimacy.

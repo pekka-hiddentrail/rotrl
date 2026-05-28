@@ -1,17 +1,10 @@
 # Nualia Tobyn
 
-**Tier:** III — Transformational
-**Role:** Primary antagonist; fallen acolyte of Desna
-**Flags:** PLOT_CRITICAL, PERSISTENT
 **Aliases:** nualia, tobyn, nualia tobyn
 
 ## Personality
 
 Cold, purposeful, and convinced of her own righteousness. Nualia does not see herself as a villain — she sees herself as someone who survived a life of suffering and chose power over victimhood. She is methodical, patient, and utterly committed to her goal. She does not monologue. She acts.
-
-## Narrative Function
-
-Prototype of sin-fueled corruption. Her fall predates the goblin raids and was long in coming. She mirrors what the PCs could become if they let resentment override principle. Her arc also reveals the deeper Thassilonian threat beneath the surface of the adventure.
 
 ## Location & Availability — Act I
 
@@ -32,3 +25,13 @@ Do not introduce her directly. Do not have NPCs speculate about her unless PCs s
 - **If Escapes:** May reappear as rumour or indirect cult influence in later acts
 
 **Enforcement:** Nualia must never be treated as disposable. Her arc matters. Do not resolve her offscreen.
+
+<!-- REFERENCE -->
+
+**Tier:** III — Transformational
+**Role:** Primary antagonist; fallen acolyte of Desna
+**Flags:** PLOT_CRITICAL, PERSISTENT
+
+## Narrative Function
+
+Prototype of sin-fueled corruption. Her fall predates the goblin raids and was long in coming. She mirrors what the PCs could become if they let resentment override principle. Her arc also reveals the deeper Thassilonian threat beneath the surface of the adventure.

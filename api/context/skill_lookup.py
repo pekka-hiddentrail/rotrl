@@ -116,7 +116,9 @@ def _parse_skill_file(path: Path) -> tuple[str, list[str], str]:
     Returns (skill_name, triggers, rules_body).
     skill_name from first `# Heading`.
     triggers from `**Triggers:** ...` line.
-    rules_body is everything else.
+    rules_body is the GM payload — everything between the triggers line and the
+    optional ``<!-- REFERENCE -->`` separator.  Content after that separator is
+    reader documentation and is never injected into the system prompt.
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -136,6 +138,9 @@ def _parse_skill_file(path: Path) -> tuple[str, list[str], str]:
         if m:
             triggers = [t.strip() for t in m.group(1).split(",") if t.strip()]
             continue
+
+        if line.strip() == "<!-- REFERENCE -->":
+            break  # everything below this line is reader-only, never injected
 
         body_lines.append(line)
 

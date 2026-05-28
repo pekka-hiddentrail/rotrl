@@ -2,38 +2,66 @@
 
 This file is a working backlog for the RotRL automation project. Items are grouped by area and ordered roughly by impact.
 
+**Every time this file is updated, the open items should be at the top of the list, done should be middle and "obsolete" are at the bottom.**
+
+---
+
 ## High Priority
 
+
+- [ ] Refine the initial system prompt and the GM behavior. The message to the API needs to be a better structures.
+- [ ] Make sure the DCs for rolls are from NPC stats AND supplemented by the skill file.
+- [ ] Feed resolved roll outcome into the next GM turn directive — `resolve_roll()` returns pass/fail but this result is never injected into the next turn's `system_content`, so the GM is narrating blind. Store on session, inject via `_build_turn_directive`, clear after use.
+- [ ] Remove the functionality where the diceroll goes to the input field. Feed the roll directly to the stream as an input.
 - [ ] Update player character knowledge files after each session so each PC only retains facts they actually learned in play.
+- [x] Refine LLM output so GM responses are shorter, cleaner, and more mechanically grounded under pressure.
 - [x] Update NPC knowledge and memory state after each session, including attitude shifts, known facts, suspicions, and unresolved goals. *(per-turn `%%DELTA%%` blocks written to `session_NNN.md` per NPC; delta files cleared on session boot)*
-- [ ] Refine LLM output so GM responses are shorter, cleaner, and more mechanically grounded under pressure.
-- [ ] Evaluate whether Ollama should remain the serving layer by comparing latency, determinism, prompt adherence, operational cost, and recovery behavior against alternatives. *(Groq added as a second provider; full comparison not done)*
+- [x] Evaluate whether Ollama should remain the serving layer. *(Groq is now the primary provider — faster, no GPU overhead, better structured-output adherence. Ollama kept as offline fallback only; no further investment planned.)*
+
+---
 
 ## GM and Session Flow
 
+- [ ] Make player identity loading consistent across code paths; current boot logic still expects some optional files in different locations than the repo uses.
+- [ ] Route boot and recap generation to `llama-3.3-70b-versatile` and normal turns to `llama-3.1-8b-instant` — add a per-call-type model override in `_stream_groq`.
+- [ ] Facet injection — `facets/FACET_*.md` files (combat, travel, skill checks, conditions, saving throws, etc.) exist but are never referenced by any Python code. Inject relevant facets as system context based on scene type: if `%%ROLL%%` pending → inject matching `FACET_SKILL_CHECK.md`; if `in_combat` flag → inject `FACET_COMBAT.md`, `FACET_CONDITIONS.md`. Lightweight: inject body the same way `skill_lookup` injects rules text.
+- [x] Split skill files into GM payload and reader reference sections. *(`<!-- REFERENCE -->` separator added to all five skill files; `_parse_skill_file` stops at the marker — payload ~26–39% smaller per injection, reader docs preserved below the line.)*
+- [x] Set Groq as the default provider in the GUI; default model `llama-3.1-8b-instant`; dev mode off by default. *(dev mode with Groq only shows `%%` markers — the dev system prompt strips the full structured format, so leaving it on breaks `%%DELTAS%%` etc.)*
 - [x] Split boot-time context from active-play context so the first prompt loads only critical rules and immediate continuity. *(`context_queue` removed; per-turn keyword RAG injection replaces it)*
 - [x] Wire a true normal-session path instead of routing every start through the full boot pipeline. *(boot makes no LLM call; first GM response fires on the player's first turn)*
 - [x] Reduce duplicate verification work in boot, especially where a second LLM call can be replaced with deterministic checks. *(boot LLM call eliminated entirely; delta extraction moved from second Groq call to parsed `%%DELTA%%` block)*
-- [ ] Make player identity loading consistent across code paths; current boot logic still expects some optional files in different locations than the repo uses.
 - [x] Define a post-session pipeline that writes recap, continuity, PC knowledge, and NPC state in one consistent pass. *(`stream_end_session` writes recap + next-session boot file; NPC deltas written per-turn; PC knowledge update still pending)*
 - [x] Enforce a structured response template so the LLM writes `%%NARRATIVE%%`, `%%ROLL%%`, `%%DELTAS%%`, and `%%GENERATE%%` sections consistently. *(`_build_slim_system_prompt` now includes a `RESPONSE STRUCTURE` block with the full template; `_parse_response_sections` + `_parse_bracket_blocks` handle parsing)*
 - [x] Hide internal `%%`-section markers from the player in non-dev mode. *(`_stream_with_narrative_filter` wraps the raw SSE token stream; dev mode passes all tokens, non-dev streams only `%%NARRATIVE%%` content and stops at the next section marker)*
 
+---
+
 ## NPC Lifecycle and Knowledge
 
+- [ ] Promote auto-created session NPCs to permanent records via a lightweight review workflow (currently requires manual file edit to remove the `session_npc:` flag).
+- [ ] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` somewhere visible (log or UI) so the GM can verify the model caught them.
+- [ ] Write `%%GENERATE%%` summary field to NPC knowledge — the `summary:` field in `%%GENERATE%%` blocks is parsed but silently dropped. Write it as the first entry in the new NPC's `knowledge.md`: `- [world] {summary} — S{session:03d} T000`. Bootstraps the NPC's knowledge file immediately.
+- [ ] Single-word NPC name detection — `_detect_narrative_npcs` regex requires two Title Case words (`r'\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b'`). Known NPCs with single-word canonical names (e.g., "Aldern", "Lonjiku") are never auto-tracked. Fix: add an exact-match pass against `_get_npc_index().known_npcs` canonical names; keep the two-word heuristic for unknown-NPC suspicion only.
+- [ ] Location tracking — `%%GENERATE%%` blocks with `type: location` are logged and skipped. Create `adventure_path/07_locations/` with the same `base.md` stub pattern as `05_npcs`. Write location stubs and wire a `LocationIndex` to inject location profiles as scene context. *(Supersedes "Create a new location function" item below.)*
 - [x] Write structured NPC deltas per turn with multi-line knowledge support. *(`%%DELTAS%%` section uses bracket blocks, one per NPC; `knowledge:` lines collected as a list; `_write_npc_delta` helper extracted)*
 - [x] Auto-create NPC stub when a `%%DELTAS%%` block references an unknown NPC (Layer 2 fallback). *(if `npc_dir_for` returns `None`, `_process_generate_block` is called with stub data before writing the delta)*
 - [x] Detect NPCs introduced in narrative text without any structured block (deferred Layer 3). *(`_detect_narrative_npcs` scans completed narrative for Title Case name pairs, adds to `session.scene_npcs`; stub creation is deferred until the model writes a `%%DELTAS%%` block for that name)*
-- [ ] Promote auto-created session NPCs to permanent records via a lightweight review workflow (currently requires manual file edit to remove the `session_npc:` flag).
-- [ ] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` somewhere visible (log or UI) so the GM can verify the model caught them.
+- ~~[ ] Create a new location function when the LLM returns new generated locations.~~ *(superseded by "Location tracking" item above which is more complete)*
+
+---
 
 ## Knowledge and State Management
 
+- [ ] Smart context pruning instead of hard char cutoff — when `len(system_content) > _GROQ_MAX_SYSTEM_CHARS`, the prompt is currently truncated at character 30,000 which can split mid-block. Better: build context in priority order (base prompt → party → situation → skill → active NPC profiles → location NPCs) and drop whole blocks tail-first until under limit. Log which blocks were dropped.
+- [ ] NPC context injection ordering — when multiple NPCs are in scene, inject in recency order (most recently mentioned first) so the char-limit cutoff drops least-recently-seen NPCs, not the newest ones.
+- [ ] `knowledge.md` age-out across long campaigns — knowledge items grow unboundedly. When injecting, only include entries from the last N sessions; archive older entries to `knowledge_archive.md`. Prevents prompt bloat over a multi-session campaign.
 - [ ] Plan message history summarization to prevent the API payload from growing unbounded across long sessions.
 - [ ] Standardize the schema for character knowledge, NPC memory, session recap, and emergent canon so state can be updated automatically.
 - [ ] Create a clear source-of-truth rule for contradictions between session notes, recap files, NPC logs, and JSON outputs.
 - [ ] Add validation checks for continuity drift such as wrong deity, alignment, class, or duplicated features across player records.
 - [ ] Decide which state should live in markdown and which should live in structured JSON for UI and automation.
+
+---
 
 ## Character Data and UI Content
 
@@ -42,41 +70,75 @@ This file is a working backlog for the RotRL automation project. Items are group
 - [ ] Add a small sync tool or documented workflow for copying approved sheet changes into UI JSON files.
 - [ ] Review portraits, colors, runes, and labels so presentation data is consistent across all characters.
 
+---
+
+## Code Quality / Refactoring
+
+- [ ] **R1 — Split `_stream_chat` (~400 lines)** *(highest leverage)* — function handles history trimming, context injection, logging, LLM dispatch, section parsing, block processing, and narrative scanning. Extract: `_inject_context(session, system_content) -> str` and `_process_response(response_text, session) -> (display_text, roll_data)`. `_stream_chat` becomes an orchestrator. Unblocks isolated unit tests for each concern.
+- [ ] **R3 — Provider dispatch is duplicated** — Groq/Ollama branching in payload building, streaming, `_call_blocking`, and token options. Adding a third provider means touching all four. Propose per-provider modules with `build_payload` / `iter_stream` functions sharing a common signature.
+- [ ] **R4 — `_NAME_EXCLUDE_WORDS` maintenance burden** — 40+ hardcoded words. Load from `adventure_path/00_system_authority/name_exclude_words.txt` (one per line, `#` comments). Fall back to hardcoded set if file absent. GM-tunable without touching Python.
+- [ ] **R5 — Global lazy indexes** — `_npc_index` / `_skill_index` are module globals mutated by `_invalidate_npc_index()`. Encapsulate in an `IndexRegistry` with `get_npc()`, `get_skill()`, `invalidate_npc()`. Makes state explicit and tests easier to write.
+- [ ] **R6 — Timestamp formats scattered** — `%H:%M:%S`, `%Y%m%d_%H%M%S`, `%Y-%m-%d %H:%M:%S` appear in six-plus places. Add `_ts_file()` and `_ts_human()` helpers alongside the existing `_ts()`.
+- [ ] **R7 — `_write_npc_delta` mixes concerns** — does Layer 2 stub creation, status block append, knowledge append, scene_npcs update, and three log calls. Extract `_append_status_block()` and `_append_knowledge_items()`; keep `_write_npc_delta` as orchestrator.
+- [ ] **R8 — Duplicate `%%ROLL%%` parsing** — roll logic written once for the section path and once for the flat fallback path. Normalise the fallback to a section dict first, then run the same downstream parser.
+- [ ] **F6 — Configurable tunables via env vars** — `_GROQ_MAX_HISTORY`, `_GROQ_MAX_SYSTEM_CHARS`, `_GROQ_RETRY_BASE`, `_DEV_MAX_HISTORY`, `_FULL_MAX_HISTORY` are hardcoded. Read from env with fallback: `int(os.getenv("GROQ_MAX_HISTORY", "10"))` etc.
+- [x] **B1 — Silent exception swallows** — all `except Exception: pass` in section-processing loop replaced with `except Exception as _e: _log(session, ...)`.
+- [x] **B2 — UnboundLocalError in party extraction** — `name`/`cls` initialised per-file; only appended when both non-empty; `break` removed so field order no longer matters.
+- [x] **B3 — Stub creation failure silent** — covered by B1 fix; I/O errors in `_process_generate_block` now surface in session log.
+- [x] **B4 — `retry-after` stale wait** — explanatory comment added to `_groq_post`.
+- [x] **B5 — Path traversal in log endpoint** — `resolve()` + `is_relative_to()` guard added in `api/main.py`.
+- [x] **R2 — `except Exception: pass` helper** — resolved together with B1.
+
+---
+
 ## Runtime and Tooling
 
 - [ ] Harden backend startup further so orphaned Python child processes and stale listeners are detected and cleaned consistently on Windows.
+- [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
+- [ ] Session crash recovery — sessions are purely in-memory; a server restart during play loses `session.messages`, `scene_npcs`, `pending_roll`. After each turn, write a recovery snapshot to `outputs/sessions/{session_id}_snapshot.json`. On startup, detect orphaned snapshots and offer recovery.
+- [ ] Add `first_token_ms` to the API log so first-token latency is captured alongside total response time.
+- [ ] Add `section_format_ok` boolean to the API log (true if `_HAS_SECTION_MARKERS_RE` matched) to track structured-output adherence passively across real sessions.
 - [x] Fix the UI startup path and determine why `npm run dev` is currently failing. *(was a port conflict — pinned Vite to port 5173 with `strictPort: true`)*
 - [x] Add one command that boots backend and UI together for local development. *(`python dev.py` — runs tests, then starts API + UI; `--skip-tests` flag to bypass)*
-- [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
+
+---
 
 ## Quality and Testing
 
-- [x] Add validation for prompt inputs and generated outputs before they are written to session artifacts.
-- [x] Add focused tests for boot prompt assembly, file loading, and checklist verification.
-- [x] Add regression tests for session-start context resolution and previous-session note discovery.
-- [x] Add smoke tests for loading character JSON in the UI.
-- [x] Test `_parse_response_sections` and `_parse_bracket_blocks` against representative LLM output shapes, including fallback-to-no-markers and multi-knowledge-line cases.
-- [x] Test `_stream_with_narrative_filter` — dev passthrough, narrative extraction, all three stop markers, holdback buffer, old-format fallback, split-token marker detection, and non-token event passthrough.
-- [x] Test Layer 2 NPC auto-stub creation and index re-validation after stub write.
-- [x] Test `_detect_narrative_npcs` — unknown name added to `scene_npcs`, no stub created, exclude-word filtering, already-tracked and already-indexed names skipped, short sentence-starters skipped.
-- ~~[ ] Test deferred context injection timing — verify each chunk lands on the correct turn and that the system prompt grows in the expected order.~~ *(obsolete — `context_queue` and deferred injection removed)*
-- [ ] Test the full end-session SSE stream with mocked Ollama — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
+- [ ] Test the full end-session SSE stream with mocked Groq — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
 - [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high)*
-- ~~[ ] Test that dev mode uses the short system prompt and ignores all deferred context files regardless of what exists on disk.~~ *(obsolete — deferred context files no longer exist; dev mode is now about the stream filter, which is tested)*
 - [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(high)*
 - [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low)*
 - [ ] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
 - [ ] Add contract tests for the SSE event shape — assert that every event emitted by boot, turn, and end-session has a `type` field and matches the known union of types. *(low)*
+- [x] Add validation for prompt inputs and generated outputs before they are written to session artifacts.
+- [x] Add focused tests for boot prompt assembly, file loading, and checklist verification.
+- [x] Add regression tests for session-start context resolution and previous-session note discovery.
+- [x] Add smoke tests for loading character JSON in the UI.
+- [x] Test `_parse_response_sections` and `_parse_bracket_blocks` against representative LLM output shapes, including fallback-to-no-markers and multi-knowledge-line cases. *(`tests/test_response_sections.py` — 27 tests)*
+- [x] Test `_stream_with_narrative_filter` — dev passthrough, narrative extraction, all three stop markers, holdback buffer, old-format fallback, split-token marker detection, and non-token event passthrough.
+- [x] Test Layer 2 NPC auto-stub creation and index re-validation after stub write.
+- [x] Test `_detect_narrative_npcs` — unknown name added to `scene_npcs`, no stub created, exclude-word filtering, already-tracked and already-indexed names skipped, short sentence-starters skipped.
+- [x] `api/api_logger.py` — zero coverage. *(`tests/test_api_logger.py` — 10 tests: file creation, filename format, JSON structure, message summary, preview truncation)*
+- [x] Groq provider `_groq_post` and `_stream_groq` — minimal coverage. *(`tests/test_groq_provider.py` — 11 tests: 429 retry, header parsing, backoff, max-history, streaming)*
+- [x] Skill lookup `detect()` and `lookup()` — minimal coverage. *(`tests/test_skill_lookup.py` — 21 tests)*
+- [x] NPC lookup `detect_all()`, `npc_dir_for()`, `lookup()` — minimal coverage. *(`tests/test_npc_lookup_extended.py` — 26 tests)*
+- [x] `GET /api/log/api` and `GET /api/log/api/{filename}` endpoints — no tests. *(`tests/test_api_logs.py` — 10 tests including path traversal case)*
+- [x] `_parse_turns_from_log()` edge cases and `stream_end_session()` error paths — no tests. *(`tests/test_end_session.py` — 18 tests)*
+- ~~[ ] Test deferred context injection timing — verify each chunk lands on the correct turn and that the system prompt grows in the expected order.~~ *(obsolete — `context_queue` and deferred injection removed)*
+- ~~[ ] Test that dev mode uses the short system prompt and ignores all deferred context files regardless of what exists on disk.~~ *(obsolete — deferred context files no longer exist; dev mode is now about the stream filter, which is tested)*
 
-## Ollama Review Questions
+---
 
-- [ ] Measure first-token latency and total response time for boot and normal turns.
-- [ ] Measure prompt adherence across boot, rules adjudication, and recap generation.
-- [ ] Compare local Ollama against at least one hosted model path for reliability and maintenance overhead.
-- [ ] Decide whether different tasks should use different models rather than one model for all work.
+## Housekeeping
+
+- [x] Decide what to do with `facets/FACET_*.md` — absorbed the 7 non-empty facets into a `GM STYLE` section in `_build_slim_system_prompt()`; deleted all 13 facet files and the `facets/` directory. Empty facets were superseded by the `%%ROLL%%` format block already in the prompt.
+- [x] Review and clean `adventure_path/90_shared_references/temp.md` — almost certainly stale.
+- [x] Delete `AGENTS.md` — documents the old `src/agents/gm_boot_agent.py` architecture that no longer exists. Only referenced once in `ADVENTURE.md` as a link. Remove the file and the link.
+
+---
 
 ## Nice-to-Have
 
 - [ ] Build a small admin view for inspecting session state, NPC memory, and pending continuity updates.
 - [ ] Add diff-friendly generated outputs so session-to-session changes are easier to review.
-- [ ] Create a lightweight issue triage process for rules bugs, lore bugs, UI bugs, and prompt bugs.

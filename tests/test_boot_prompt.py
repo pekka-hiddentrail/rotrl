@@ -577,6 +577,56 @@ def test_parse_bracket_blocks_knowledge_tag_not_confused_with_delimiter():
     assert blocks[0]["npc"] == "Kendra Deverin"
 
 
+# ── B2: malformed character sheet robustness ─────────────────────────────────
+
+def test_party_name_without_class_does_not_crash(tmp_path, monkeypatch):
+    """Character sheet with Name but no Class line must not raise UnboundLocalError."""
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+
+    d = tmp_path / "players" / "player_01"
+    d.mkdir(parents=True)
+    (d / "character_sheet.md").write_text("**Name:** Ghostface\n", encoding="utf-8")
+
+    prompt = _build_slim_system_prompt(1)
+    assert isinstance(prompt, str)
+
+
+def test_party_class_before_name_does_not_crash(tmp_path, monkeypatch):
+    """Class line appearing before Name in character_sheet.md must not raise UnboundLocalError."""
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+
+    d = tmp_path / "players" / "player_01"
+    d.mkdir(parents=True)
+    (d / "character_sheet.md").write_text(
+        "**Class / Archetype:** Fighter\n**Name:** Brak\n",
+        encoding="utf-8",
+    )
+
+    prompt = _build_slim_system_prompt(1)
+    assert isinstance(prompt, str)
+
+
+def test_party_mixed_good_and_malformed_sheets(tmp_path, monkeypatch):
+    """One malformed sheet must not prevent valid sheets from appearing."""
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+
+    d1 = tmp_path / "players" / "player_01"
+    d1.mkdir(parents=True)
+    (d1 / "character_sheet.md").write_text("**Name:** Ghostface\n", encoding="utf-8")
+
+    d2 = tmp_path / "players" / "player_02"
+    d2.mkdir(parents=True)
+    (d2 / "character_sheet.md").write_text(
+        "**Name:** Aldric\n**Class / Archetype:** Paladin\n", encoding="utf-8"
+    )
+
+    prompt = _build_slim_system_prompt(1)
+    assert "Aldric" in prompt
+
+
 # ── Input validation ──────────────────────────────────────────────────────────
 
 def test_validate_empty_input():

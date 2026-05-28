@@ -6,9 +6,9 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
     { value: 'qwen2.5:1.5b', label: 'qwen2.5:1.5b — fast' },
   ],
   groq: [
+    { value: 'llama-3.3-70b-versatile', label: 'llama-3.3-70b — best quality' },
     { value: 'llama-3.1-8b-instant',    label: 'llama-3.1-8b-instant — fastest' },
     { value: 'llama3-8b-8192',          label: 'llama3-8b-8192' },
-    { value: 'llama-3.3-70b-versatile', label: 'llama-3.3-70b — best quality' },
     { value: 'mixtral-8x7b-32768',      label: 'mixtral-8x7b — long context' },
   ],
 }
@@ -117,7 +117,7 @@ export default function Header({
                 ))}
               </select>
             </label>
-            <label className="control-label dev-toggle" title="Dev mode uses a minimal prompt — fast but no rules">
+            <label className="control-label dev-toggle" title="Dev mode: shows raw %%section%% markers in the stream. With Ollama also caps tokens for speed.">
               <input
                 type="checkbox"
                 checked={devMode}
