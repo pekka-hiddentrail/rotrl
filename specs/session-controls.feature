@@ -13,7 +13,7 @@
 > I want clear pre-boot and post-boot controls in the header,
 > so that I can configure the session before starting and manage it while playing.
 
-The header has two states: pre-boot (configuration inputs visible) and post-boot (session badge and action buttons visible). Switching provider auto-updates the model dropdown.
+The header has two states: pre-boot (configuration inputs + Purge NPCs visible) and post-boot (session badge, View Log, and End Session visible). Switching provider auto-updates the model dropdown.
 
 ---
 
@@ -37,6 +37,7 @@ Then  the header shows the provider toggle (⚡ Groq / 🖥 Ollama)
 And   the header shows the session number input (integer, min 1)
 And   the header shows the model dropdown for the selected provider
 And   the header shows the dev mode checkbox
+And   the header shows the "Purge NPCs" button
 And   the header shows the Boot Session button
 And   the Boot Session button is enabled (not disabled)
 ```
@@ -88,8 +89,8 @@ And   no second boot request can be sent
 Given a session is active with session_number=2 and model="llama-3.3-70b-versatile"
 Then  the header shows a session badge: "Session 2 · llama-3.3-70b-versatile"
 And   the header shows a "View Log" button
-And   the header shows a "Purge NPCs" button
 And   the header shows an "End Session" button
+And   the header does NOT show a "Purge NPCs" button
 And   the pre-boot configuration inputs are hidden
 ```
 
@@ -111,21 +112,45 @@ And   the current session tab remains active
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-006 — Purge NPCs requires confirmation and calls the delete endpoint
+### AC-006 — Purge NPCs shows inline confirmation then calls the delete endpoint
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 **Scenario:** GM clicks Purge NPCs
 
 ```gherkin
-Given a session is active and session NPCs exist
+Given no session is active and session NPCs exist
 When  the GM clicks "Purge NPCs"
-Then  a confirmation prompt is shown
-When  the GM confirms
+Then  the button is replaced inline with "Purge session NPCs? [Yes] [No]"
+And   no browser confirm() dialog is shown
+
+When  the GM clicks "Yes"
 Then  DELETE /api/npcs/session is called
 And   session NPC stub directories are removed from 05_npcs/
+And   a toast notification confirms how many directories were removed
+And   the inline confirmation collapses back to the "Purge NPCs" button
 
-When  the GM cancels the confirmation
+When  the GM clicks "No"
 Then  no DELETE request is sent
+And   the inline confirmation collapses back to the "Purge NPCs" button
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-007 — Groq rate limit badge updates after each turn
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** A Groq turn completes and rate_limits SSE event is received
+
+```gherkin
+Given a session is active with provider=Groq
+When  a rate_limits SSE event is received with tpm_remaining, tpm_limit, rpm_remaining, rpm_limit
+Then  the header shows a badge between the session badge and "View Log" button
+And   the badge text is "⚡ {tpm_remaining}/{tpm_limit} TPM · {rpm_remaining}/{rpm_limit} RPM"
+And   hovering the badge shows a tooltip with reset times
+
+Given no rate_limits event has been received yet
+Then  no rate limit badge is shown
 ```
 
 ---
@@ -142,3 +167,4 @@ Then  no DELETE request is sent
 - See: [INDEX.md §10 — Frontend: Session Controls](INDEX.md)
 - Groq default model: `llama-3.3-70b-versatile`; Ollama default: `qwen3:4b`
 - End Session button also disabled while streaming or while `ending` state is true
+- Header layout: logo centered at top, controls row centered below (column flex layout)

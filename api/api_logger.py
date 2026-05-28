@@ -33,6 +33,7 @@ def write_api_log(
     duration_ms: int,
     status: str = "ok",
     error: Optional[str] = None,
+    usage: Optional[dict] = None,  # token counts from Groq (prompt/completion/total)
 ) -> Path:
     """Write a single API call log file.  Returns the path written."""
     _API_LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -62,6 +63,7 @@ def write_api_log(
         "turn":           turn,
         "status":         status,
         "duration_ms":    duration_ms,
+        "usage":          usage,  # None for Ollama; {prompt_tokens, completion_tokens, total_tokens} for Groq
 
         # ── Exact payload sent to the API ─────────────────────────────────────
         # This is identical to what Groq / Ollama received.  Nothing added.

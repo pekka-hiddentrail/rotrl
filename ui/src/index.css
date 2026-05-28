@@ -45,15 +45,14 @@ body {
 .header {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 24px 0 20px;
+  padding: 14px 24px 16px;
   background: var(--header-bg);
   border-bottom: 2px solid var(--header-red);
   flex-shrink: 0;
   overflow: hidden;
-  min-height: 88px;
-  gap: 16px;
+  gap: 10px;
 }
 
 .header::before {
@@ -104,7 +103,6 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  flex: 1;
   text-align: center;
 }
 
@@ -148,15 +146,15 @@ body {
   text-shadow: 0 1px 4px #00000088;
 }
 
-/* Controls (right side of header) */
+/* Controls row — centered below the logo */
 .header-controls {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   font-size: 13px;
   flex-wrap: wrap;
-  flex-shrink: 0;
 }
 
 .control-label {
@@ -189,6 +187,18 @@ body {
   color: var(--text-muted);
   font-size: 13px;
   font-family: monospace;
+}
+
+.rate-limits-badge {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  cursor: default;
 }
 
 .dev-toggle {
@@ -237,6 +247,45 @@ body {
 .btn-secondary:hover {
   box-shadow: 0 0 8px #5a504088;
   color: #c0a870;
+}
+
+.inline-confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.inline-confirm-label {
+  font-size: 0.8rem;
+  color: #a09070;
+  white-space: nowrap;
+}
+
+.btn-sm {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2a2418;
+  border: 1px solid #5a5040;
+  color: #c0a870;
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 16px #0008;
+  pointer-events: none;
+  animation: toast-in 0.2s ease;
+  z-index: 1000;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 .btn-danger {

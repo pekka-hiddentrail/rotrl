@@ -47,6 +47,12 @@ class RollRequest(BaseModel):
     total: int
 
 
+@app.get("/api/health")
+def get_health():
+    """Liveness check — the UI hits this before boot to confirm the backend is up."""
+    return {"status": "ok"}
+
+
 @app.get("/api/intro")
 def get_intro(session: int = 1):
     """Return the player-facing intro markdown for a given session number.

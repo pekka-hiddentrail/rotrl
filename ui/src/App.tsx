@@ -26,6 +26,8 @@ export default function App() {
   const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null } | null>(null)
   const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
   const [diceKey, setDiceKey] = useState(0)
+  const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
   const appendToken = useCallback((token: string) => {
@@ -91,6 +93,7 @@ export default function App() {
           })
         }
         if (event.type === 'roll_request') setPendingRoll(event)
+        if (event.type === 'rate_limits') setRateLimits(event)
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
@@ -144,11 +147,15 @@ export default function App() {
     if (session) window.open(`/api/sessions/${session.id}/log`, '_blank')
   }
 
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 5000)
+  }
+
   const handlePurgeNpcs = async () => {
-    if (!window.confirm('Delete all session NPCs (dot-prefixed directories)? This cannot be undone.')) return
     try {
       const { purged } = await purgeSessionNpcs()
-      setMessages(prev => [...prev, { role: 'gm', content: `Session NPCs purged: ${purged} ${purged === 1 ? 'directory' : 'directories'} removed.` }])
+      showToast(`${purged} session NPC ${purged === 1 ? 'directory' : 'directories'} removed.`)
     } catch (e) {
       setError(String(e))
     }
@@ -177,6 +184,7 @@ export default function App() {
           setProvider(p)
           setModel(p === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen3:4b')
         }}
+        rateLimits={rateLimits}
         onBoot={handleBoot}
         onEnd={handleEnd}
         onViewLog={handleViewLog}
@@ -244,6 +252,8 @@ export default function App() {
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />
+
+      {toast && <div className="toast">{toast}</div>}
     </div>
   )
 }

@@ -117,9 +117,9 @@ Navigate to **http://localhost:5173** in your browser.
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
 3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
 4. **Roll dice** when prompted; the UI shows a dice panel and feeds the result back automatically
-5. **View Log** — opens the live session log in a new browser tab
-6. **Purge NPCs** — deletes all auto-created session NPC directories (dot-prefixed); useful between sessions to clear temporaries before promoting any keepers
-7. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn
+5. **View Log** — opens the live session log in a new browser tab (shown during active session)
+6. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn
+7. **Purge NPCs** — shown on the pre-boot screen only; deletes all auto-created session NPC stub directories (dot-prefixed). Inline confirmation, then a toast shows how many were removed
 
 ### Response sections
 
@@ -213,7 +213,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 296 pytest tests
+├── tests/                         # 303 pytest tests
 │
 ├── dev.py                         # One-command dev startup (tests → API + UI)
 ├── start_backend.ps1              # Windows: start FastAPI backend
@@ -249,9 +249,10 @@ All streaming endpoints use Server-Sent Events. Each event is a JSON object with
 | `token` | Each streamed text chunk |
 | `patch_last` | After processing — replaces last message with cleaned text (non-dev only) |
 | `roll_request` | When a `%%ROLL%%` block is parsed (includes skill, dc, success, failure) |
+| `rate_limits` | After each Groq turn — per-minute RPM/TPM remaining + reset times (Groq only) |
 | `context` | Debug event for injected NPC/skill context |
 | `status` | Progress messages during end-session generation |
-| `error` | Any recoverable error |
+| `error` | Any recoverable error; 429 daily-limit errors include the Groq message verbatim |
 | `done` | End of stream; includes `session_id` on boot |
 
 ---
@@ -265,14 +266,14 @@ python -m pytest -q               # run all tests
 python -m pytest tests/test_groq_provider.py -q   # run one file
 ```
 
-**296 tests passing** across 16 test files:
+**303 tests passing** across 16 test files:
 
 | File | Covers |
 |------|--------|
 | `test_sessions.py` | Session lifecycle endpoints, boot, turn, delete |
 | `test_turns.py` | Turn streaming, Ollama mock, error cases |
 | `test_boot_prompt.py` | System prompt assembly, party extraction, situation loading, delta cleanup |
-| `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, streaming, max-history |
+| `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, streaming, max-history, rate-limit SSE event |
 | `test_api_logger.py` | LLM call log file format, summary truncation |
 | `test_api_logs.py` | Log list and fetch endpoints, path traversal rejection |
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
@@ -396,8 +397,9 @@ ollama list                            # confirm model is pulled
 | Dice roll request + resolution (UI panel + API) | ✅ Complete |
 | Dev mode (raw marker visibility, full pass-through) | ✅ Complete |
 | Session log (timestamped markdown, live view) | ✅ Complete |
-| API call logging (`outputs/api_log/`) | ✅ Complete |
-| Test suite — 296 tests | ✅ Complete |
+| API call logging (`outputs/api_log/`) with Groq token usage | ✅ Complete |
+| Groq rate limit display in header (RPM/TPM remaining) | ✅ Complete |
+| Test suite — 303 tests | ✅ Complete |
 | System Authority docs | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I (Swallowtail Festival + Goblin Raid) | ✅ Complete |

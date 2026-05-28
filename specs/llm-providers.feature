@@ -45,7 +45,7 @@ And   the selected model changes to llama-3.3-70b-versatile
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-002 — Groq rate limit is retried automatically
+### AC-002 — Groq rate limit is retried automatically with a human-readable error
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 **Scenario:** Groq API returns HTTP 429 (rate limited)
@@ -57,7 +57,12 @@ When  a turn is submitted
 Then  the backend waits the specified retry-after duration (max 60 seconds)
 And   retries the request up to 4 times
 And   on success the turn streams normally
-And   on exhausted retries an error event is emitted
+
+When  all 4 retries are exhausted
+Then  the backend parses the 429 response body
+And   the error SSE event contains the Groq error message verbatim
+     (e.g. "Groq rate limit: Rate limit reached for model … on tokens per day (TPD):
+            Limit 50000, Used 50000 … Please try again after 2026-05-29T00:00:00Z.")
 ```
 
 ---
@@ -93,6 +98,27 @@ Then  the Ollama API request includes options.num_ctx=4096 and options.num_gpu=9
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-005 — Groq per-minute rate limits are surfaced after each turn
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** A Groq turn completes successfully
+
+```gherkin
+Given the provider is Groq
+When  a turn completes and Groq returns x-ratelimit-* response headers
+Then  the backend reads: x-ratelimit-{limit,remaining,reset}-{requests,tokens}
+And   emits an SSE event: { type: "rate_limits", rpm_limit, rpm_remaining, rpm_reset,
+                                                  tpm_limit, tpm_remaining, tpm_reset }
+And   if none of those headers are present no rate_limits event is emitted
+
+Given the rate_limits event is received by the frontend
+Then  the header displays a compact badge (e.g. "⚡ 4,500/6,000 TPM · 28/30 RPM")
+And   hovering the badge shows a tooltip with reset times
+```
+
+---
+
 ## Out of Scope
 
 - Model quality comparison
@@ -105,3 +131,4 @@ Then  the Ollama API request includes options.num_ctx=4096 and options.num_gpu=9
 - See: [INDEX.md §3 — LLM Providers](INDEX.md)
 - Default model: `llama-3.3-70b-versatile` (Groq), `qwen3:4b` (Ollama)
 - History trimmed to 10 messages for Groq, 30 for Ollama
+- Per-day limits only appear in the 429 error body — per-minute limits surface via headers on every successful response

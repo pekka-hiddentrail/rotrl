@@ -117,8 +117,9 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## Runtime and Tooling
 
-- [ ] Add `GET /api/health` endpoint — returns `{"status": "ok"}`. The UI can hit this before attempting boot and surface a clear "backend not running" message instead of a generic network error.
-- [ ] Track Groq token usage per turn — Groq returns `usage.prompt_tokens` / `completion_tokens` in the response body. Log these in `write_api_log()` alongside duration. After a few sessions you'll know exactly how fast `session.system_prompt` is growing and when M4/M6 becomes urgent.
+- [x] Add `GET /api/health` endpoint — returns `{"status": "ok"}`. The UI can hit this before attempting boot and surface a clear "backend not running" message instead of a generic network error.
+- [x] Track Groq token usage per turn — `stream_options: {include_usage: true}` added to Groq payload; final usage chunk captured in `_stream_groq`; written to `write_api_log()` under `"usage"` key alongside duration.
+- [x] Surface Groq rate limits to the UI — per-minute `x-ratelimit-*` response headers captured in `_stream_groq` after each successful call; emitted as a `rate_limits` SSE event; `Header.tsx` shows a compact badge (e.g. `⚡ 4,500/6,000 TPM · 28/30 RPM`) with a tooltip showing reset times. 429 exhaustion now parses the error body to surface a human-readable daily-limit message instead of a bare HTTP error. 2 new tests (303 total).
 - [ ] Harden backend startup further so orphaned Python child processes and stale listeners are detected and cleaned consistently on Windows.
 - [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
 - [ ] Session crash recovery — sessions are purely in-memory; a server restart during play loses `session.messages`, `scene_npcs`, `pending_roll`. After each turn, write a recovery snapshot to `outputs/sessions/{session_id}_snapshot.json`. On startup, detect orphaned snapshots and offer recovery.
@@ -131,7 +132,7 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## Quality and Testing
 
-- [ ] **E2E — Playwright UI test suite** — add Playwright to `ui/` (`npm install -D @playwright/test`). Cover the six key flows with a mocked backend (MSW or a lightweight FastAPI fixture): (1) boot → session badge appears; (2) send turn → GM message streams in; (3) `roll_request` event → dice panel activates; (4) end session → chat clears; (5) Purge NPCs button → confirm dialog → success message; (6) character sidebar → sheet modal opens. These are the regression cases that break silently on UI refactors and are invisible to pytest.
+- [ ] **E2E — Playwright UI test suite** — add Playwright to `ui/` (`npm install -D @playwright/test`). Cover the six key flows with a mocked backend (MSW or a lightweight FastAPI fixture): (1) boot → session badge appears; (2) send turn → GM message streams in; (3) `roll_request` event → dice panel activates; (4) end session → chat clears; (5) Purge NPCs button → inline confirm → toast notification; (6) character sidebar → sheet modal opens. These are the regression cases that break silently on UI refactors and are invisible to pytest.
 - [ ] Test the full end-session SSE stream with mocked Groq — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
 - [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high)*
 - [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(high)*
@@ -146,8 +147,8 @@ Do these in order — each step is independently shippable and leaves the system
 - [x] Test `_stream_with_narrative_filter` — dev passthrough, narrative extraction, all three stop markers, holdback buffer, old-format fallback, split-token marker detection, and non-token event passthrough.
 - [x] Test Layer 2 NPC auto-stub creation and index re-validation after stub write.
 - [x] Test `_detect_narrative_npcs` — unknown name added to `scene_npcs`, no stub created, exclude-word filtering, already-tracked and already-indexed names skipped, short sentence-starters skipped.
-- [x] `api/api_logger.py` — zero coverage. *(`tests/test_api_logger.py` — 10 tests: file creation, filename format, JSON structure, message summary, preview truncation)*
-- [x] Groq provider `_groq_post` and `_stream_groq` — minimal coverage. *(`tests/test_groq_provider.py` — 11 tests: 429 retry, header parsing, backoff, max-history, streaming)*
+- [x] `api/api_logger.py` — zero coverage. *(`tests/test_api_logger.py` — 12 tests: file creation, filename format, JSON structure, usage field, message summary, preview truncation)*
+- [x] Groq provider `_groq_post` and `_stream_groq` — minimal coverage. *(`tests/test_groq_provider.py` — 13 tests: 429 retry, header parsing, backoff, max-history, streaming, rate-limit SSE event)*
 - [x] Skill lookup `detect()` and `lookup()` — minimal coverage. *(`tests/test_skill_lookup.py` — 21 tests)*
 - [x] NPC lookup `detect_all()`, `npc_dir_for()`, `lookup()` — minimal coverage. *(`tests/test_npc_lookup_extended.py` — 26 tests)*
 - [x] `GET /api/log/api` and `GET /api/log/api/{filename}` endpoints — no tests. *(`tests/test_api_logs.py` — 10 tests including path traversal case)*

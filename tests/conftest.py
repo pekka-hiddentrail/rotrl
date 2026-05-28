@@ -9,6 +9,24 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+_REAL_OUTPUTS = Path(__file__).resolve().parent.parent / "outputs"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_outputs():
+    """Remove api_log files and session logs written to the real outputs/ directory.
+
+    Runs once after the full test session.  Acts as a safety net — the client
+    fixture redirects writes to tmp_path, so normally nothing lands here.
+    """
+    yield
+    api_log_dir = _REAL_OUTPUTS / "api_log"
+    if api_log_dir.exists():
+        for f in api_log_dir.glob("*.json"):
+            f.unlink(missing_ok=True)
+    for f in _REAL_OUTPUTS.glob("*.log.md"):
+        f.unlink(missing_ok=True)
+
 
 # ── SSE helper ────────────────────────────────────────────────────────────────
 
@@ -58,9 +76,11 @@ def client(tmp_path, monkeypatch):
     Starts fresh — no leftover sessions or cached indexes between tests.
     """
     import api.session_manager as sm
+    import api.api_logger as api_logger
 
     # Redirect outputs to a temp directory
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(api_logger, "_API_LOG_DIR", tmp_path / "outputs" / "api_log")
     # Clear in-memory session registry between tests
     monkeypatch.setattr(sm, "_sessions", {})
     # Reset lazy-loaded NPC/skill indexes so tests that monkeypatch _REPO_ROOT

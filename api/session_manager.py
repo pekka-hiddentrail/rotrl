@@ -88,7 +88,15 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
             resp.raise_for_status()
             return resp
         if attempt == _GROQ_MAX_RETRIES:
-            resp.raise_for_status()  # will raise a 429 HTTPError after all retries
+            # Try to surface a human-readable message (e.g. daily token limit exceeded)
+            try:
+                err_body = resp.json()
+                err_msg = (err_body.get("error") or {}).get("message", "")
+                if err_msg:
+                    raise RuntimeError(f"Groq rate limit: {err_msg}")
+            except (ValueError, KeyError):
+                pass
+            resp.raise_for_status()  # fall back to bare HTTPError
 
         # Use the server-suggested wait if provided; otherwise keep the running
         # exponential backoff value.  Note: if the header is present on retry N
@@ -1093,11 +1101,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     # Build the exact payload that will be posted — mirrored from _stream_groq / _stream_ollama
     if session.provider == "groq":
         _raw_request: dict = {
-            "model":       session.model,
-            "messages":    messages,
-            "stream":      True,
-            "temperature": session.temperature,
-            "max_tokens":  1024,
+            "model":          session.model,
+            "messages":       messages,
+            "stream":         True,
+            "temperature":    session.temperature,
+            "max_tokens":     1024,
+            "stream_options": {"include_usage": True},
         }
     else:
         _raw_request = {
@@ -1109,9 +1118,10 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
 
     _llm_start = _time.monotonic()
     _llm_error: Optional[str] = None
+    _usage: dict = {}
     try:
         _raw = (
-            _stream_groq(session, messages, accumulated)
+            _stream_groq(session, messages, accumulated, _usage)
             if session.provider == "groq"
             else _stream_ollama(session, messages, options, accumulated)
         )
@@ -1131,7 +1141,13 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             duration_ms=_llm_ms,
             status="error" if _llm_error else "ok",
             error=_llm_error,
+            usage=_usage or None,
         )
+
+    # Emit rate limit info captured from Groq response headers (Groq only; None for Ollama).
+    # The UI uses this to show remaining requests/tokens in the header.
+    if _usage.get("rate_limits"):
+        yield f"data: {json.dumps({'type': 'rate_limits', **_usage['rate_limits']})}\n\n"
 
     response_text = "".join(accumulated)
     roll_data: Optional[dict] = None
@@ -1283,6 +1299,7 @@ def _stream_groq(
     session: GameSession,
     messages: list,
     accumulated: list[str],
+    usage_out: dict,
 ) -> Generator[str, None, None]:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
@@ -1296,8 +1313,25 @@ def _stream_groq(
         "stream": True,
         "temperature": session.temperature,
         "max_tokens": 1024,
+        # Request a final usage-only chunk after the stream ends.
+        # Groq sends: {"choices": [], "usage": {prompt_tokens, completion_tokens, ...}}
+        "stream_options": {"include_usage": True},
     }
     with _groq_post(api_key, payload, stream=True) as resp:
+        # Capture per-minute rate limit headers sent on every successful Groq response.
+        # Per-day limits only surface in 429 error bodies; we surface those via the
+        # RuntimeError message instead.
+        _RL_HEADERS = {
+            "x-ratelimit-limit-requests":     "rpm_limit",
+            "x-ratelimit-remaining-requests": "rpm_remaining",
+            "x-ratelimit-reset-requests":     "rpm_reset",
+            "x-ratelimit-limit-tokens":       "tpm_limit",
+            "x-ratelimit-remaining-tokens":   "tpm_remaining",
+            "x-ratelimit-reset-tokens":       "tpm_reset",
+        }
+        rl = {alias: resp.headers.get(hdr) for hdr, alias in _RL_HEADERS.items() if resp.headers.get(hdr)}
+        if rl:
+            usage_out["rate_limits"] = rl
         for raw in resp.iter_lines():
             if not raw:
                 continue
@@ -1307,6 +1341,10 @@ def _stream_groq(
             if not line.startswith("data: "):
                 continue
             chunk = json.loads(line[6:])
+            # Final usage-only chunk: choices is empty, usage is populated.
+            if not chunk.get("choices") and chunk.get("usage"):
+                usage_out.update(chunk["usage"])
+                continue
             content = ((chunk.get("choices") or [{}])[0].get("delta") or {}).get("content", "")
             if content:
                 accumulated.append(content)

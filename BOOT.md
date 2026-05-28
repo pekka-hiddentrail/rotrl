@@ -86,6 +86,10 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 │        Dev mode:    all tokens pass through (%%MARKERS%% visible in UI)
 │        Normal mode: only %%NARRATIVE%% section content forwarded as tokens
 │                     %%ROLL%%, %%GENERATE%%, %%DELTAS%% content suppressed
+│      Groq: per-minute rate-limit headers captured from the HTTP response
+│            → stored in usage_out["rate_limits"]
+│            → emitted as SSE event { "type": "rate_limits", rpm_remaining, tpm_remaining, … }
+│            → displayed in the UI header as a compact badge after each turn
 │
 ├─ 6. Process completed response
 │      ├─ _parse_response_sections() → { NARRATIVE, ROLL, GENERATE, DELTAS }
@@ -139,7 +143,7 @@ POST /api/sessions/{id}/resolve_roll  { "rolled": 14 }
 └─ return { "passed": true, "skill": "Diplomacy", "dc": 12, "rolled": 14, "outcome": "..." }
 ```
 
-> **Note:** The pass/fail result is currently returned to the frontend only. The next GM turn does not automatically receive it as context — this is a known gap (see PROJECT_TODO.md item F4).
+> **Note:** The pass/fail result is currently returned to the frontend only. The next GM turn does not automatically receive it as context — this is a known gap (see TODO.md, closed by M5).
 
 ---
 

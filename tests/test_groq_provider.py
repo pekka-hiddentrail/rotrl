@@ -26,15 +26,18 @@ def _make_resp(status_code: int, headers: dict = None) -> MagicMock:
     return mock
 
 
-def make_groq_stream_response(tokens: list[str]) -> MagicMock:
+def make_groq_stream_response(tokens: list[str], usage: dict = None) -> MagicMock:
     lines = [
         f'data: {json.dumps({"choices": [{"delta": {"content": t}}]})}'.encode()
         for t in tokens
     ]
+    if usage is not None:
+        lines.append(f'data: {json.dumps({"choices": [], "usage": usage})}'.encode())
     lines.append(b"data: [DONE]")
     mock = MagicMock()
     mock.status_code = 200
     mock.raise_for_status = MagicMock()
+    mock.headers = {}  # no rate-limit headers in test responses
     mock.iter_lines = MagicMock(return_value=iter(lines))
     mock.__enter__ = lambda s: s
     mock.__exit__ = MagicMock(return_value=False)
@@ -174,6 +177,85 @@ def test_groq_missing_api_key_returns_error(client, monkeypatch):
     events2 = parse_sse(resp2)
     error_events = [e for e in events2 if e["type"] == "error"]
     assert any("GROQ_API_KEY" in e["message"] for e in error_events)
+
+
+def test_groq_usage_written_to_api_log(groq_session, monkeypatch, tmp_path):
+    """Usage counts from the final Groq chunk are written to the API log."""
+    import api.api_logger as logger_mod
+    monkeypatch.setattr(logger_mod, "_API_LOG_DIR", tmp_path / "api_log")
+
+    client, session_id = groq_session
+    usage = {"prompt_tokens": 120, "completion_tokens": 45, "total_tokens": 165}
+    mock_resp = make_groq_stream_response(["%%NARRATIVE%%\nOk."], usage=usage)
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    import json as _json
+    log_files = list((tmp_path / "api_log").glob("*.json"))
+    assert log_files, "API log file should have been written"
+    data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert data["usage"] == usage
+
+
+def test_groq_usage_none_when_chunk_absent(groq_session, monkeypatch, tmp_path):
+    """When Groq sends no usage chunk, the log entry has usage: null."""
+    import api.api_logger as logger_mod
+    monkeypatch.setattr(logger_mod, "_API_LOG_DIR", tmp_path / "api_log")
+
+    client, session_id = groq_session
+    # No usage kwarg → helper does not append a usage chunk
+    mock_resp = make_groq_stream_response(["%%NARRATIVE%%\nOk."])
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    import json as _json
+    log_files = list((tmp_path / "api_log").glob("*.json"))
+    assert log_files
+    data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert data["usage"] is None
+
+
+def test_groq_rate_limits_sse_event(groq_session):
+    """Rate limit headers from Groq response are forwarded as a rate_limits SSE event."""
+    client, session_id = groq_session
+
+    def fake_post(url, headers, json, stream, timeout):
+        mock = make_groq_stream_response(["%%NARRATIVE%%\nOk."])
+        mock.headers = {
+            "x-ratelimit-limit-requests": "30",
+            "x-ratelimit-remaining-requests": "28",
+            "x-ratelimit-reset-requests": "2s",
+            "x-ratelimit-limit-tokens": "6000",
+            "x-ratelimit-remaining-tokens": "4500",
+            "x-ratelimit-reset-tokens": "10s",
+        }
+        return mock
+
+    with patch("api.session_manager._requests.post", side_effect=fake_post):
+        resp = client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    events = parse_sse(resp)
+    rl_events = [e for e in events if e["type"] == "rate_limits"]
+    assert len(rl_events) == 1
+    rl = rl_events[0]
+    assert rl["rpm_limit"] == "30"
+    assert rl["rpm_remaining"] == "28"
+    assert rl["tpm_limit"] == "6000"
+    assert rl["tpm_remaining"] == "4500"
+
+
+def test_groq_rate_limits_absent_when_no_headers(groq_session):
+    """No rate_limits SSE event is emitted when Groq returns no rate-limit headers."""
+    client, session_id = groq_session
+    mock_resp = make_groq_stream_response(["%%NARRATIVE%%\nOk."])
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        resp = client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    events = parse_sse(resp)
+    assert not any(e["type"] == "rate_limits" for e in events)
 
 
 def test_groq_max_history_respected(groq_session, monkeypatch):

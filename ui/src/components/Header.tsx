@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { SessionInfo } from '../types'
 
 const MODELS: Record<string, { value: string; label: string }[]> = {
@@ -13,6 +14,15 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 }
 
+interface RateLimits {
+  rpm_limit?: string
+  rpm_remaining?: string
+  rpm_reset?: string
+  tpm_limit?: string
+  tpm_remaining?: string
+  tpm_reset?: string
+}
+
 interface Props {
   session: SessionInfo | null
   streaming: boolean
@@ -21,6 +31,7 @@ interface Props {
   model: string
   devMode: boolean
   provider: 'ollama' | 'groq'
+  rateLimits: RateLimits | null
   onSessionNumberChange: (n: number) => void
   onModelChange: (m: string) => void
   onDevModeChange: (v: boolean) => void
@@ -43,9 +54,10 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 }))
 
 export default function Header({
-  session, streaming, ending, sessionNumber, model, devMode, provider,
+  session, streaming, ending, sessionNumber, model, devMode, provider, rateLimits,
   onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onViewLog, onPurgeNpcs,
 }: Props) {
+  const [confirmingPurge, setConfirmingPurge] = useState(false)
   const isBooted = session !== null
   const locked = streaming || ending
 
@@ -127,6 +139,17 @@ export default function Header({
               />
               Dev
             </label>
+            {confirmingPurge ? (
+              <span className="inline-confirm">
+                <span className="inline-confirm-label">Purge session NPCs?</span>
+                <button className="btn btn-danger btn-sm" onClick={() => { setConfirmingPurge(false); onPurgeNpcs() }}>Yes</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setConfirmingPurge(false)}>No</button>
+              </span>
+            ) : (
+              <button onClick={() => setConfirmingPurge(true)} className="btn btn-secondary" title="Delete all auto-created session NPCs">
+                Purge NPCs
+              </button>
+            )}
             <button onClick={onBoot} disabled={locked} className="btn btn-primary">
               {streaming ? 'Booting…' : 'Boot Session'}
             </button>
@@ -137,11 +160,31 @@ export default function Header({
             <span className="session-badge">
               Session {session.sessionNumber} · {session.model}
             </span>
+            {rateLimits && (
+              <span
+                className="rate-limits-badge"
+                title={[
+                  rateLimits.tpm_remaining && rateLimits.tpm_limit
+                    ? `TPM: ${rateLimits.tpm_remaining}/${rateLimits.tpm_limit} remaining${rateLimits.tpm_reset ? ` · resets in ${rateLimits.tpm_reset}` : ''}`
+                    : null,
+                  rateLimits.rpm_remaining && rateLimits.rpm_limit
+                    ? `RPM: ${rateLimits.rpm_remaining}/${rateLimits.rpm_limit} remaining${rateLimits.rpm_reset ? ` · resets in ${rateLimits.rpm_reset}` : ''}`
+                    : null,
+                ].filter(Boolean).join('\n') || 'Groq rate limits'}
+              >
+                {rateLimits.tpm_remaining && rateLimits.tpm_limit
+                  ? `⚡ ${Number(rateLimits.tpm_remaining).toLocaleString()}/${Number(rateLimits.tpm_limit).toLocaleString()} TPM`
+                  : null}
+                {rateLimits.tpm_remaining && rateLimits.tpm_limit && rateLimits.rpm_remaining && rateLimits.rpm_limit
+                  ? ' · '
+                  : null}
+                {rateLimits.rpm_remaining && rateLimits.rpm_limit
+                  ? `${rateLimits.rpm_remaining}/${rateLimits.rpm_limit} RPM`
+                  : null}
+              </span>
+            )}
             <button onClick={onViewLog} disabled={ending} className="btn btn-secondary">
               View Log
-            </button>
-            <button onClick={onPurgeNpcs} disabled={ending || streaming} className="btn btn-secondary" title="Delete all auto-created session NPCs">
-              Purge NPCs
             </button>
             <button onClick={onEnd} disabled={ending} className="btn btn-danger">
               {ending ? 'Ending…' : 'End Session'}

@@ -4,6 +4,12 @@ from __future__ import annotations
 from .conftest import parse_sse
 
 
+def test_health_returns_ok(client):
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+
 def test_boot_returns_session_id(client):
     resp = client.post("/api/sessions", json={
         "session_number": 1,
@@ -86,3 +92,58 @@ def test_delete_session_saves_and_removes(booted_session, tmp_path):
 def test_delete_unknown_session_404(client):
     resp = client.delete("/api/sessions/nonexistent")
     assert resp.status_code == 404
+
+
+# ── Purge session NPCs ────────────────────────────────────────────────────────
+
+def test_purge_session_npcs_removes_dot_dirs(client, monkeypatch, tmp_path):
+    import api.session_manager as sm
+    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    (npc_base / ".temp_guard").mkdir(parents=True)
+    (npc_base / ".unnamed_merchant").mkdir()
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sm, "_npc_index", None)
+
+    resp = client.delete("/api/npcs/session")
+    assert resp.status_code == 200
+    assert resp.json()["purged"] == 2
+    assert not (npc_base / ".temp_guard").exists()
+    assert not (npc_base / ".unnamed_merchant").exists()
+
+
+def test_purge_session_npcs_keeps_canonical_dirs(client, monkeypatch, tmp_path):
+    import api.session_manager as sm
+    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    (npc_base / "ameiko_kaijitsu").mkdir(parents=True)
+    (npc_base / ".temp_guard").mkdir()
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sm, "_npc_index", None)
+
+    resp = client.delete("/api/npcs/session")
+    assert resp.json()["purged"] == 1
+    assert (npc_base / "ameiko_kaijitsu").exists()
+
+
+def test_purge_session_npcs_returns_zero_when_none(client, monkeypatch, tmp_path):
+    import api.session_manager as sm
+    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    npc_base.mkdir(parents=True)
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+
+    resp = client.delete("/api/npcs/session")
+    assert resp.status_code == 200
+    assert resp.json()["purged"] == 0
+
+
+def test_list_session_npcs(client, monkeypatch, tmp_path):
+    import api.session_manager as sm
+    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    (npc_base / ".temp_guard").mkdir(parents=True)
+    (npc_base / ".unnamed_merchant").mkdir()
+    (npc_base / "ameiko_kaijitsu").mkdir()
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+
+    resp = client.get("/api/npcs/session")
+    assert resp.status_code == 200
+    slugs = resp.json()["npcs"]
+    assert sorted(slugs) == ["temp_guard", "unnamed_merchant"]  # dot stripped

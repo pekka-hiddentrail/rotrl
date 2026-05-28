@@ -88,6 +88,8 @@ And   the file contains: timestamp, provider, session_id, session_number, turn, 
 And   the file contains raw_request with the exact API payload
 And   the file contains raw_response with the full assembled response text
 And   the file contains summary with model, message count, and per-message previews
+And   for Groq turns: the file contains usage with prompt_tokens, completion_tokens, total_tokens
+And   for Ollama turns: the file contains usage: null
 ```
 
 ---
