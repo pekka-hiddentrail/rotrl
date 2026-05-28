@@ -194,8 +194,6 @@ rotrl/
 │   ├── 06_rules/skills/           # Skill files — trigger words + rules text for RAG
 │   └── 90_shared_references/      # Shared reference tables
 │
-├── facets/                        # GM behavior modules (reference — not yet injected)
-│
 ├── players/
 │   ├── player_01/
 │   │   ├── character_sheet.md     # Name, class, stats

@@ -8,12 +8,13 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## High Priority
 
-- [ ] Refine LLM output so GM responses are shorter, cleaner, and more mechanically grounded under pressure.
-- [ ] Refine the initial system prompt and the GM behavior.
+
+- [ ] Refine the initial system prompt and the GM behavior. The message to the API needs to be a better structures.
 - [ ] Make sure the DCs for rolls are from NPC stats AND supplemented by the skill file.
 - [ ] Feed resolved roll outcome into the next GM turn directive — `resolve_roll()` returns pass/fail but this result is never injected into the next turn's `system_content`, so the GM is narrating blind. Store on session, inject via `_build_turn_directive`, clear after use.
 - [ ] Remove the functionality where the diceroll goes to the input field. Feed the roll directly to the stream as an input.
 - [ ] Update player character knowledge files after each session so each PC only retains facts they actually learned in play.
+- [x] Refine LLM output so GM responses are shorter, cleaner, and more mechanically grounded under pressure.
 - [x] Update NPC knowledge and memory state after each session, including attitude shifts, known facts, suspicions, and unresolved goals. *(per-turn `%%DELTA%%` blocks written to `session_NNN.md` per NPC; delta files cleared on session boot)*
 - [x] Evaluate whether Ollama should remain the serving layer. *(Groq is now the primary provider — faster, no GPU overhead, better structured-output adherence. Ollama kept as offline fallback only; no further investment planned.)*
 
@@ -131,9 +132,9 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## Housekeeping
 
-- [ ] Delete `AGENTS.md` — documents the old `src/agents/gm_boot_agent.py` architecture that no longer exists. Only referenced once in `ADVENTURE.md` as a link. Remove the file and the link.
-- [ ] Decide what to do with `facets/FACET_*.md` — either implement facet injection (see GM and Session Flow) or add a note in `ADVENTURE.md` explicitly marking them as GM-reference-only (not injected). The ambiguity is a maintenance cost.
-- [ ] Review and clean `adventure_path/90_shared_references/temp.md` — almost certainly stale.
+- [x] Decide what to do with `facets/FACET_*.md` — absorbed the 7 non-empty facets into a `GM STYLE` section in `_build_slim_system_prompt()`; deleted all 13 facet files and the `facets/` directory. Empty facets were superseded by the `%%ROLL%%` format block already in the prompt.
+- [x] Review and clean `adventure_path/90_shared_references/temp.md` — almost certainly stale.
+- [x] Delete `AGENTS.md` — documents the old `src/agents/gm_boot_agent.py` architecture that no longer exists. Only referenced once in `ADVENTURE.md` as a link. Remove the file and the link.
 
 ---
 
@@ -141,4 +142,3 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 - [ ] Build a small admin view for inspecting session state, NPC memory, and pending continuity updates.
 - [ ] Add diff-friendly generated outputs so session-to-session changes are easier to review.
-- [ ] Create a lightweight issue triage process for rules bugs, lore bugs, UI bugs, and prompt bugs.
