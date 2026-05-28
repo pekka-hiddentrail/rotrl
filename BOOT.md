@@ -86,6 +86,10 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 │        Dev mode:    all tokens pass through (%%MARKERS%% visible in UI)
 │        Normal mode: only %%NARRATIVE%% section content forwarded as tokens
 │                     %%ROLL%%, %%GENERATE%%, %%DELTAS%% content suppressed
+│      Groq: per-minute rate-limit headers captured from the HTTP response
+│            → stored in usage_out["rate_limits"]
+│            → emitted as SSE event { "type": "rate_limits", rpm_remaining, tpm_remaining, … }
+│            → displayed in the UI header as a compact badge after each turn
 │
 ├─ 6. Process completed response
 │      ├─ _parse_response_sections() → { NARRATIVE, ROLL, GENERATE, DELTAS }
@@ -98,8 +102,9 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 │      ├─ %%GENERATE%% section (processed before %%DELTAS%% so stubs are findable)
 │      │    for each bracket block:
 │      │      if type == "location": log and skip
-│      │      else: create adventure_path/05_npcs/<slug>/base.md
+│      │      else: create adventure_path/05_npcs/.<slug>/base.md   ← dot-prefix = session NPC
 │      │            invalidate NPC index
+│      │            (rename dir to <slug>/ to promote to permanent)
 │      │
 │      ├─ %%DELTAS%% section
 │      │    for each bracket block:
@@ -138,7 +143,7 @@ POST /api/sessions/{id}/resolve_roll  { "rolled": 14 }
 └─ return { "passed": true, "skill": "Diplomacy", "dc": 12, "rolled": 14, "outcome": "..." }
 ```
 
-> **Note:** The pass/fail result is currently returned to the frontend only. The next GM turn does not automatically receive it as context — this is a known gap (see PROJECT_TODO.md item F4).
+> **Note:** The pass/fail result is currently returned to the frontend only. The next GM turn does not automatically receive it as context — this is a known gap (see TODO.md, closed by M5).
 
 ---
 
@@ -177,7 +182,7 @@ POST /api/sessions/{id}/end
 |------|-----------|------|
 | `outputs/*.log.md` | `_log()` | Continuously — every turn |
 | `outputs/api_log/*.json` | `write_api_log()` | After each LLM call |
-| `adventure_path/05_npcs/<slug>/base.md` | `_process_generate_block()` | When `%%GENERATE%%` names a new NPC |
+| `adventure_path/05_npcs/.<slug>/base.md` | `_process_generate_block()` | When `%%GENERATE%%` names a new NPC (dot-prefix = session NPC, purgeable) |
 | `adventure_path/05_npcs/<slug>/session_NNN.md` | `_write_npc_delta()` | When `%%DELTAS%%` references an NPC |
 | `adventure_path/05_npcs/<slug>/knowledge.md` | `_write_npc_delta()` | When `%%DELTAS%%` includes `knowledge:` lines |
 | `sessions/session_NNN/recap.md` | `stream_end_session()` | On End Session |
@@ -196,6 +201,10 @@ Session number: N
 
 CORE BEHAVIOR
 ...5 rules about description, player agency, lore fidelity...
+
+GM STYLE
+...7 style directives — NPC demeanor, location detail, rules rulings, player drift,
+   events, inventory, travel...
 
 PARTY
   - Yanyeeku (Kitsune Sorcerer / Crossblooded)

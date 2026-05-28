@@ -140,6 +140,28 @@ def test_summary_short_content_not_truncated():
     assert not preview.endswith("…")
 
 
+def test_usage_field_written():
+    usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+    path = write_api_log(
+        provider="groq", session_id="usage-test",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="Ok.", duration_ms=300,
+        usage=usage,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["usage"] == usage
+
+
+def test_usage_field_none_when_omitted():
+    path = write_api_log(
+        provider="ollama", session_id="no-usage",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="Ok.", duration_ms=100,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["usage"] is None
+
+
 def test_chars_field_correct():
     msgs = [{"role": "user", "content": "ABCDE"}]
     path = write_api_log(

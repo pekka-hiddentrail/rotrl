@@ -1,0 +1,69 @@
+# Feature Specification Index
+
+Quick reference for finding relevant specifications. Use tags to match PR changes to affected specs.
+
+---
+
+## Feature Files
+
+| Feature File | Domain | Tags | ACs | Key Components |
+|-------------|--------|------|-----|----------------|
+| [session-boot.feature](session-boot.feature) | Backend | `@session` `@boot` `@intro` | 5 | `create_session()`, `boot.md`, `intro` endpoint, `NpcIndex` |
+| [player-turn.feature](player-turn.feature) | Backend \| Frontend | `@turn` `@streaming` `@core` | 5 | `stream_turn()`, SSE token events, section filter |
+| [session-end-recap.feature](session-end-recap.feature) | Backend \| Frontend | `@session` `@recap` `@end` `@llm` | 4 | `stream_end_session()`, `recap.md`, `boot.md`, `notes.json` |
+| [llm-providers.feature](llm-providers.feature) | Backend \| Frontend | `@llm` `@groq` `@ollama` `@provider` | 6 | Groq API, Ollama API, rate-limit headers, `stream_options` fallback, `Header.tsx` model dropdown |
+| [context-detection.feature](context-detection.feature) | Backend | `@context` `@npc` `@skill` `@location` | 5 | `NpcIndex`, `SkillIndex`, `context` SSE event |
+| [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 5 | Streaming filter, holdback buffer, `patch_last` event |
+| [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
+| [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `06_rules/skills/` |
+| [session-logging.feature](session-logging.feature) | Backend | `@logging` `@session-log` `@api-log` `@dice` | 6 | `api_logger.py`, `*.log.md`, `api_log/` |
+| [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button |
+| [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 6 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
+| [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 11 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration |
+| [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 11 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
+| [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
+| [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
+| [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
+
+**Total: 100 acceptance criteria across 16 feature files**
+
+---
+
+## Related Documents
+
+| Document | Purpose |
+|----------|---------|
+| [_FEATURE_TEMPLATE.md](_FEATURE_TEMPLATE.md) | Template for new feature specs |
+| [dev.py](../dev.py) | One-command dev startup — port cleanup, process-tree teardown |
+| [api/main.py](../api/main.py) | All API endpoint definitions |
+| [api/session_manager.py](../api/session_manager.py) | Session lifecycle, streaming, context detection, response parsing |
+| [ui/src/App.tsx](../ui/src/App.tsx) | Frontend state and session orchestration |
+
+---
+
+## Tag Reference
+
+| Tag | Meaning | Match PR changes to… |
+|-----|---------|----------------------|
+| `@boot` | Session boot logic | `api/session_manager.py` `create_session()`, `sessions/` files |
+| `@chat` | Chat display components | `ui/src/components/ChatWindow.tsx`, `MessageBubble.tsx` |
+| `@character` | Character data and sheet UI | `ui/src/components/CharacterSidebar.tsx`, `ui/public/data/` |
+| `@context` | NPC/skill/location detection | `api/context/npc_lookup.py`, `api/context/skill_lookup.py` |
+| `@core` | Player turn round-trip | `api/main.py` `/turn` endpoint, `stream_turn()` |
+| `@deltas` | NPC state delta writes | `%%DELTAS%%` parsing, `session_NNN.md`, `knowledge.md` |
+| `@dice` | Dice panel and roll logging | `ui/src/components/DicePanel.tsx`, `/roll` endpoint |
+| `@groq` | Groq provider behaviour | `api/session_manager.py` Groq branch, `.env` `GROQ_API_KEY` |
+| `@header` | Session control header | `ui/src/components/Header.tsx` |
+| `@intent` | Intent bar display | `ui/src/components/IntentBar.tsx` |
+| `@llm` | LLM provider switching | `Header.tsx` provider toggle, `api/session_manager.py` `_stream_chat()` |
+| `@logging` | Session and API call logs | `api/api_logger.py`, `outputs/` |
+| `@narrative` | Narrative streaming filter | `stream_turn()` holdback buffer, `patch_last` SSE event |
+| `@npc` | NPC database and index | `api/context/npc_lookup.py`, `adventure_path/05_npcs/` |
+| `@ollama` | Ollama provider behaviour | `api/session_manager.py` Ollama branch, `num_ctx`/`num_gpu` |
+| `@parsing` | `%%SECTION%%` response parsing | `stream_turn()` section parser, `%%ROLL%%` / `%%GENERATE%%` / `%%DELTAS%%` |
+| `@prompt` | System prompt assembly | `_build_slim_system_prompt()`, `sessions/` boot files |
+| `@recap` | Session end and recap | `stream_end_session()`, `recap.md`, `boot.md` |
+| `@session` | Session lifecycle | `api/session_manager.py`, `GameSession` dataclass |
+| `@skill` | Skill detection and injection | `api/context/skill_lookup.py`, `adventure_path/06_rules/skills/` |
+| `@startup` | Dev startup process cleanup | `dev.py`, `start_backend.ps1`, `start_ui.ps1` |
+| `@streaming` | SSE token streaming | `StreamingResponse`, token/done/error/patch_last events |

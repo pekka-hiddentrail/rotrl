@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import type { Message, SessionInfo } from './types'
 import Header from './components/Header'
 import ChatWindow from './components/ChatWindow'
@@ -8,7 +8,7 @@ import CharacterSheet from './components/CharacterSheet'
 import DicePanel from './components/DicePanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
-import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll } from './api'
+import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs } from './api'
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -21,11 +21,14 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
+  const [sheetCharId, setSheetCharId] = useState<string | null>(null)
   const [lastInput, setLastInput] = useState('')
-  const [rollInjection, setRollInjection] = useState<{ id: number; value: string } | null>(null)
   const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null } | null>(null)
   const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
   const [diceKey, setDiceKey] = useState(0)
+  const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const endAbortRef = useRef<AbortController | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
   const appendToken = useCallback((token: string) => {
@@ -73,14 +76,16 @@ export default function App() {
 
   const handleSend = async (input: string) => {
     if (!session) return
+    const speaker = activeCharacter ? characterMap[activeCharacter] : null
+    const sentInput = speaker ? `@${speaker.name}: "${input}"` : input
     setError(null)
     setLastInput(input)
     setIntent(null)
-    setMessages(prev => [...prev, { role: 'player', content: input }])
+    setMessages(prev => [...prev, { role: 'player', content: sentInput }])
     setStreaming(true)
 
     try {
-      for await (const event of sendTurn(session.id, input)) {
+      for await (const event of sendTurn(session.id, sentInput)) {
         if (event.type === 'token') appendToken(event.content)
         if (event.type === 'context') setIntent(event)
         if (event.type === 'patch_last') {
@@ -91,6 +96,7 @@ export default function App() {
           })
         }
         if (event.type === 'roll_request') setPendingRoll(event)
+        if (event.type === 'rate_limits') setRateLimits(event)
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
@@ -100,15 +106,25 @@ export default function App() {
     }
   }
 
+  const handleKillEnd = () => {
+    endAbortRef.current?.abort()
+    endAbortRef.current = null
+    setEnding(false)
+    setSession(null)
+    setMessages([])
+  }
+
   const handleEnd = async () => {
     if (!session) return
+    const controller = new AbortController()
+    endAbortRef.current = controller
     setEnding(true)
     setStreaming(false)
     // Add the ending status bubble
     setMessages(prev => [...prev, { role: 'ending', content: 'Wrapping up the session…' }])
 
     try {
-      for await (const event of endSessionWithRecap(session.id)) {
+      for await (const event of endSessionWithRecap(session.id, controller.signal)) {
         if (event.type === 'status') {
           setMessages(prev => {
             const last = prev[prev.length - 1]
@@ -144,8 +160,26 @@ export default function App() {
     if (session) window.open(`/api/sessions/${session.id}/log`, '_blank')
   }
 
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 5000)
+  }
+
+  const handlePurgeNpcs = async () => {
+    try {
+      const { purged } = await purgeSessionNpcs()
+      showToast(`${purged} session NPC ${purged === 1 ? 'directory' : 'directories'} removed.`)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   const handleCharacterSelect = (id: string) => {
     setActiveCharacter(prev => (prev === id ? null : id))
+  }
+
+  const handleOpenSheet = (id: string) => {
+    setSheetCharId(id)
   }
 
   const isBooted = session !== null
@@ -167,9 +201,12 @@ export default function App() {
           setProvider(p)
           setModel(p === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen3:4b')
         }}
+        rateLimits={rateLimits}
         onBoot={handleBoot}
         onEnd={handleEnd}
+        onKillEnd={handleKillEnd}
         onViewLog={handleViewLog}
+        onPurgeNpcs={handlePurgeNpcs}
       />
 
       {error && <div className="error-bar">{error}</div>}
@@ -179,8 +216,9 @@ export default function App() {
         <CharacterSidebar
           characters={characters}
           loading={charsLoading}
-          activeCharacter={activeCharacter}
-          onSelect={handleCharacterSelect}
+          activeSpeakerId={activeCharacter}
+          onSetActive={handleCharacterSelect}
+          onOpenSheet={handleOpenSheet}
         />
 
         <div className="chat-area">
@@ -201,8 +239,7 @@ export default function App() {
             <InputBar
               onSend={handleSend}
               disabled={streaming || ending}
-              injectedValue={rollInjection?.value ?? null}
-              injectionId={rollInjection?.id ?? 0}
+              activeSpeaker={activeCharacter ? characterMap[activeCharacter] : null}
             />
           )}
         </div>
@@ -211,28 +248,46 @@ export default function App() {
           key={diceKey}
           sessionId={session?.id ?? null}
           pendingRoll={pendingRoll}
+          activeSpeaker={activeCharacter ? characterMap[activeCharacter] : null}
           onRoll={async (expr: string, rolls: number[], total: number) => {
-            setRollInjection(prev => ({ id: (prev?.id ?? 0) + 1, value: String(total) }))
-            if (!session) return
+            const speaker = activeCharacter ? characterMap[activeCharacter] : null
+            const speakerName = speaker?.name ?? null
+            const rawTotal = rolls.reduce((a, b) => a + b, 0)
+            const modifier = total - rawTotal
+            let rollMsg: string
+            if (modifier !== 0) {
+              const sign = modifier > 0 ? `+${modifier}` : String(modifier)
+              rollMsg = speakerName
+                ? `${speakerName} rolled a ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
+                : `Rolled ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
+            } else {
+              rollMsg = speakerName ? `${speakerName} rolled a ${rawTotal}.` : `Rolled ${rawTotal}.`
+            }
+            setMessages(prev => [...prev, { role: 'player', content: rollMsg }])
+            if (!session) return null
             logRoll(session.id, expr, rolls, total)
             if (pendingRoll) {
               try {
                 const result = await resolveRoll(session.id, total)
                 setPendingRoll(null)
                 setMessages(prev => [...prev, { role: 'gm', content: result.outcome }])
+                return { passed: result.passed }
               } catch {
                 setPendingRoll(null)
               }
             }
+            return null
           }}
         />
       </div>
 
-      {activeCharacter && characterMap[activeCharacter] && (
-        <CharacterSheet character={characterMap[activeCharacter]} onClose={() => setActiveCharacter(null)} />
+      {sheetCharId && characterMap[sheetCharId] && (
+        <CharacterSheet character={characterMap[sheetCharId]} onClose={() => setSheetCharId(null)} />
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />
+
+      {toast && <div className="toast">{toast}</div>}
     </div>
   )
 }

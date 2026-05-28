@@ -67,8 +67,15 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
     Reads the ``retry-after`` or ``x-ratelimit-reset-requests`` response header
     when present; otherwise falls back to exponential back-off starting at
     ``_GROQ_RETRY_BASE`` seconds.  Raises on any non-retryable error.
+
+    Some older Groq models (e.g. llama3-8b-8192) reject ``stream_options``
+    with a 400.  On the first 400 we silently drop that key and retry once
+    so usage tracking degrades gracefully rather than hard-failing.
     """
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    # Work on a shallow copy so the caller's payload is never mutated.
+    payload = dict(payload)
+    _stream_options_dropped = False
     wait = _GROQ_RETRY_BASE
     for attempt in range(_GROQ_MAX_RETRIES + 1):
         resp = _requests.post(
@@ -84,11 +91,25 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
                 "The session context has grown too big for the model. "
                 "Try starting a new session or switching to dev mode."
             )
+        # Older models return 400 when stream_options is present — drop it and
+        # retry immediately (does not count against the rate-limit retry budget).
+        if resp.status_code == 400 and not _stream_options_dropped and "stream_options" in payload:
+            payload.pop("stream_options")
+            _stream_options_dropped = True
+            continue
         if resp.status_code != 429:
             resp.raise_for_status()
             return resp
         if attempt == _GROQ_MAX_RETRIES:
-            resp.raise_for_status()  # will raise a 429 HTTPError after all retries
+            # Try to surface a human-readable message (e.g. daily token limit exceeded)
+            try:
+                err_body = resp.json()
+                err_msg = (err_body.get("error") or {}).get("message", "")
+                if err_msg:
+                    raise RuntimeError(f"Groq rate limit: {err_msg}")
+            except (ValueError, KeyError):
+                pass
+            resp.raise_for_status()  # fall back to bare HTTPError
 
         # Use the server-suggested wait if provided; otherwise keep the running
         # exponential backoff value.  Note: if the header is present on retry N
@@ -816,7 +837,8 @@ def _process_generate_block(body: str, session: GameSession) -> None:
         return
 
     npc_slug = _slugify(npc_name)
-    npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / npc_slug
+    # Dot-prefix marks this as a session NPC (temporary, purgeable from the UI).
+    npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / f".{npc_slug}"
     npc_dir.mkdir(parents=True, exist_ok=True)
 
     loc_str   = fields.get("location", "")
@@ -835,6 +857,37 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
     _log(session, f"\n> *[New NPC stub created: {npc_name} → {npc_dir.name}/base.md]*\n")
 
+
+def list_session_npcs() -> list[str]:
+    """Return the slug names of all session NPCs (dot-prefixed directories)."""
+    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    if not npc_base.exists():
+        return []
+    return sorted(
+        d.name[1:]  # strip the leading dot to expose the slug
+        for d in npc_base.iterdir()
+        if d.is_dir() and d.name.startswith(".")
+    )
+
+
+def purge_session_npcs() -> int:
+    """Delete all session NPC directories (dot-prefixed).
+
+    Returns the number of directories removed.  The NPC index is invalidated
+    so the next turn no longer injects profiles for purged NPCs.
+    """
+    import shutil as _shutil
+    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    if not npc_base.exists():
+        return 0
+    count = 0
+    for d in list(npc_base.iterdir()):
+        if d.is_dir() and d.name.startswith("."):
+            _shutil.rmtree(d)
+            count += 1
+    if count:
+        _invalidate_npc_index()
+    return count
 
 
 def _stream_with_narrative_filter(
@@ -1061,11 +1114,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     # Build the exact payload that will be posted — mirrored from _stream_groq / _stream_ollama
     if session.provider == "groq":
         _raw_request: dict = {
-            "model":       session.model,
-            "messages":    messages,
-            "stream":      True,
-            "temperature": session.temperature,
-            "max_tokens":  1024,
+            "model":          session.model,
+            "messages":       messages,
+            "stream":         True,
+            "temperature":    session.temperature,
+            "max_tokens":     1024,
+            "stream_options": {"include_usage": True},
         }
     else:
         _raw_request = {
@@ -1077,9 +1131,10 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
 
     _llm_start = _time.monotonic()
     _llm_error: Optional[str] = None
+    _usage: dict = {}
     try:
         _raw = (
-            _stream_groq(session, messages, accumulated)
+            _stream_groq(session, messages, accumulated, _usage)
             if session.provider == "groq"
             else _stream_ollama(session, messages, options, accumulated)
         )
@@ -1099,7 +1154,13 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             duration_ms=_llm_ms,
             status="error" if _llm_error else "ok",
             error=_llm_error,
+            usage=_usage or None,
         )
+
+    # Emit rate limit info captured from Groq response headers (Groq only; None for Ollama).
+    # The UI uses this to show remaining requests/tokens in the header.
+    if _usage.get("rate_limits"):
+        yield f"data: {json.dumps({'type': 'rate_limits', **_usage['rate_limits']})}\n\n"
 
     response_text = "".join(accumulated)
     roll_data: Optional[dict] = None
@@ -1251,6 +1312,7 @@ def _stream_groq(
     session: GameSession,
     messages: list,
     accumulated: list[str],
+    usage_out: dict,
 ) -> Generator[str, None, None]:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
@@ -1264,8 +1326,25 @@ def _stream_groq(
         "stream": True,
         "temperature": session.temperature,
         "max_tokens": 1024,
+        # Request a final usage-only chunk after the stream ends.
+        # Groq sends: {"choices": [], "usage": {prompt_tokens, completion_tokens, ...}}
+        "stream_options": {"include_usage": True},
     }
     with _groq_post(api_key, payload, stream=True) as resp:
+        # Capture per-minute rate limit headers sent on every successful Groq response.
+        # Per-day limits only surface in 429 error bodies; we surface those via the
+        # RuntimeError message instead.
+        _RL_HEADERS = {
+            "x-ratelimit-limit-requests":     "rpm_limit",
+            "x-ratelimit-remaining-requests": "rpm_remaining",
+            "x-ratelimit-reset-requests":     "rpm_reset",
+            "x-ratelimit-limit-tokens":       "tpm_limit",
+            "x-ratelimit-remaining-tokens":   "tpm_remaining",
+            "x-ratelimit-reset-tokens":       "tpm_reset",
+        }
+        rl = {alias: resp.headers.get(hdr) for hdr, alias in _RL_HEADERS.items() if resp.headers.get(hdr)}
+        if rl:
+            usage_out["rate_limits"] = rl
         for raw in resp.iter_lines():
             if not raw:
                 continue
@@ -1275,6 +1354,10 @@ def _stream_groq(
             if not line.startswith("data: "):
                 continue
             chunk = json.loads(line[6:])
+            # Final usage-only chunk: choices is empty, usage is populated.
+            if not chunk.get("choices") and chunk.get("usage"):
+                usage_out.update(chunk["usage"])
+                continue
             content = ((chunk.get("choices") or [{}])[0].get("delta") or {}).get("content", "")
             if content:
                 accumulated.append(content)

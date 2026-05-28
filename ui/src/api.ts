@@ -8,6 +8,7 @@ export type SseEvent =
   | { type: 'context'; npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; location: string | null; location_npcs: string[] }
   | { type: 'patch_last'; content: string }
   | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string }
+  | { type: 'rate_limits'; rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string }
 
 export async function* bootSession(
   sessionNumber: number,
@@ -43,13 +44,13 @@ export async function* sendTurn(
   yield* parseSseStream(res)
 }
 
-export async function* endSessionWithRecap(sessionId: string): AsyncGenerator<SseEvent> {
-  const res = await fetch(`${BASE}/sessions/${sessionId}/end`, { method: 'POST' })
+export async function* endSessionWithRecap(sessionId: string, signal?: AbortSignal): AsyncGenerator<SseEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/end`, { method: 'POST', signal })
   if (!res.ok) {
     const detail = await res.text()
     throw new Error(`End session failed (${res.status}): ${detail}`)
   }
-  yield* parseSseStream(res)
+  yield* parseSseStream(res, signal)
 }
 
 export async function endSession(sessionId: string): Promise<void> {
@@ -69,6 +70,12 @@ export async function resolveRoll(
   return res.json()
 }
 
+export async function purgeSessionNpcs(): Promise<{ purged: number }> {
+  const res = await fetch(`${BASE}/npcs/session`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Purge session NPCs failed (${res.status})`)
+  return res.json()
+}
+
 export async function logRoll(
   sessionId: string,
   expr: string,
@@ -82,14 +89,16 @@ export async function logRoll(
   })
 }
 
-async function* parseSseStream(response: Response): AsyncGenerator<SseEvent> {
+async function* parseSseStream(response: Response, signal?: AbortSignal): AsyncGenerator<SseEvent> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
 
+  signal?.addEventListener('abort', () => reader.cancel())
+
   while (true) {
     const { done, value } = await reader.read()
-    if (done) break
+    if (done || signal?.aborted) break
     buffer += decoder.decode(value, { stream: true })
 
     const lines = buffer.split('\n')

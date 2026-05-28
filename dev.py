@@ -16,6 +16,8 @@ What it does:
 from __future__ import annotations
 
 import argparse
+import re
+import socket
 import subprocess
 import sys
 import threading
@@ -38,6 +40,67 @@ def _stream(proc: subprocess.Popen, label: str, color: str) -> None:
     for line in proc.stdout:
         sys.stdout.write(f"{color}[{label}]{_R} {line}")
         sys.stdout.flush()
+
+
+# ── Port / process cleanup ────────────────────────────────────────────────────
+
+def _kill_tree(pid: int) -> None:
+    """Kill *pid* and all its children on Windows using taskkill /F /T."""
+    subprocess.run(
+        ["taskkill", "/F", "/T", "/PID", str(pid)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _pid_on_port(port: int) -> int | None:
+    """Return the PID of the process listening on *port*, or None."""
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano"],
+            capture_output=True, text=True,
+        )
+        for line in result.stdout.splitlines():
+            # Match lines like:  TCP  0.0.0.0:8000  ...  LISTENING  1234
+            if f":{port}" in line and "LISTENING" in line:
+                m = re.search(r"\s(\d+)\s*$", line)
+                if m:
+                    return int(m.group(1))
+    except Exception:
+        pass
+    return None
+
+
+def _port_free(port: int) -> bool:
+    with socket.socket() as s:
+        return s.connect_ex(("127.0.0.1", port)) != 0
+
+
+def _free_port(port: int) -> None:
+    """Kill whatever is on *port*, then wait up to 2 s for it to release.
+    Exits the process with a clear error if the port cannot be freed.
+    """
+    pid = _pid_on_port(port)
+    if pid is None:
+        return  # already free
+
+    print(f"{_DIM}  Port {port} held by PID {pid} — killing…{_R}", flush=True)
+    _kill_tree(pid)
+
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        if _port_free(port):
+            print(f"{_DIM}  Port {port} is now free.{_R}", flush=True)
+            return
+        time.sleep(0.1)
+
+    print(
+        f"{_RED}✗  Port {port} is still in use after killing PID {pid}. "
+        f"Cannot start. Check for access-denied or system processes.{_R}",
+        flush=True,
+    )
+    sys.exit(1)
+
 
 
 def run_tests() -> bool:
@@ -67,6 +130,10 @@ def main() -> None:
             )
             sys.exit(1)
         print(f"\n{_GREEN}✓  All tests passed.{_R}\n", flush=True)
+
+    # ── Pre-flight: free ports ────────────────────────────────────────────────
+    _free_port(8000)
+    _free_port(5173)
 
     # ── Launch processes ──────────────────────────────────────────────────────
     # On Windows, executables like `npm` resolve to `npm.cmd`, so shell=True
@@ -111,8 +178,11 @@ def main() -> None:
         print(f"\n{_BOLD}Shutting down…{_R}")
     finally:
         for proc in (api_proc, ui_proc):
+            pid = proc.pid
+            if pid is not None:
+                _kill_tree(pid)
+            # Wait briefly for the process to exit; force-kill via kill() if needed.
             try:
-                proc.terminate()
                 proc.wait(timeout=5)
             except Exception:
                 try:
