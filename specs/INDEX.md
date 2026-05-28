@@ -23,8 +23,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 11 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
 | [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
+| [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 
-**Total: 93 acceptance criteria across 15 feature files**
+**Total: 100 acceptance criteria across 16 feature files**
 
 ---
 
@@ -33,6 +34,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | Document | Purpose |
 |----------|---------|
 | [_FEATURE_TEMPLATE.md](_FEATURE_TEMPLATE.md) | Template for new feature specs |
+| [dev.py](../dev.py) | One-command dev startup — port cleanup, process-tree teardown |
 | [api/main.py](../api/main.py) | All API endpoint definitions |
 | [api/session_manager.py](../api/session_manager.py) | Session lifecycle, streaming, context detection, response parsing |
 | [ui/src/App.tsx](../ui/src/App.tsx) | Frontend state and session orchestration |
@@ -63,4 +65,5 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@recap` | Session end and recap | `stream_end_session()`, `recap.md`, `boot.md` |
 | `@session` | Session lifecycle | `api/session_manager.py`, `GameSession` dataclass |
 | `@skill` | Skill detection and injection | `api/context/skill_lookup.py`, `adventure_path/06_rules/skills/` |
+| `@startup` | Dev startup process cleanup | `dev.py`, `start_backend.ps1`, `start_ui.ps1` |
 | `@streaming` | SSE token streaming | `StreamingResponse`, token/done/error/patch_last events |

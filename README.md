@@ -88,6 +88,8 @@ python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 
 > **Windows notes:** Always `python -m uvicorn`, not bare `uvicorn`. Always `--host 127.0.0.1` — Vite's proxy requires explicit IPv4. Do **not** use `--reload` in production; `start_backend.ps1` kills whatever is on port 8000 before starting.
 
+> **Stale port cleanup:** Both `start_backend.ps1` (port 8000) and `start_ui.ps1` (port 5173) kill any existing listener and fail fast if the port stays held. `python dev.py` does the same for both ports before launching, and uses `taskkill /F /T` on exit so uvicorn's `--reload` child worker is not orphaned.
+
 **Terminal 2 — Vite dev server:**
 
 ```powershell
