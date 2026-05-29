@@ -25,6 +25,76 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ---
 
+## Event Injection System (`%%EVENT%%`)
+
+Event-triggered context injection. When the LLM decides a scene condition is met, it writes `%%EVENT%%` with an event ID. The code loads the corresponding content and injects it for N turns (currently N=5). Separate from `%%DELTAS%%` which is for persistent state — events are transient and time-bounded.
+
+> **Open design question:** N=5 turns is a starting point. Needs tuning against real sessions. Also deferred: full content → compressed summary mid-window.
+
+- [ ] **Spec — `%%EVENT%%` block format** — define the response block syntax the LLM writes. Decide: single-line (`%%EVENT%% goblin_attack_starts`) or block form with fields. Add to the response structure spec in `_build_slim_system_prompt`. Document in `specs/`.
+- [ ] **Event content files** — create `adventure_path/08_events/` directory and write injectable content files for the four Swallowtail events: `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Each file: compact, prompt-ready, covers what the LLM needs for that event window.
+- [ ] **`EventIndex`** — new class in `api/context/event_index.py`. Loads `08_events/`, maps event ID → content. Same pattern as `LocationIndex`. Add lazy-loaded singleton `_event_index` + `_get_event_index()` to `session_manager.py`.
+- [ ] **Session state** — add `active_events: list` to `GameSession` (list of `ActiveEvent` dataclass: `event_id`, `content`, `turns_remaining`). Each turn: decrement all, remove expired.
+- [ ] **Parser** — extend `_parse_response_sections` (or add a sibling) to extract `%%EVENT%%` blocks from LLM responses. On detection: look up content via EventIndex, append to `active_events`.
+- [ ] **Injection** — in `_inject_context`, include active event content in the system payload alongside NPC/skill/location context. Expired events are already gone; no extra cleanup needed at injection time.
+- [ ] **Tests** — unit tests for EventIndex loading, parser extraction, turn countdown/expiry, injection presence, and the full round-trip (event fires → content injected → expires after N turns).
+
+---
+
+## Adventure Content
+
+The adventure is ~80% narrative infrastructure and ~20% mechanical execution. The items below are what's missing before a real session can run without the GM improvising from nothing. Priority order: things that block the first session come first; things that enrich later sessions come last.
+
+### Act I — Swallowtail Festival (levels 1–2)
+
+- [x] **Verify and complete bestiary files** — `goblin.md`, `goblin_commando.md`, and `goblin_warchanter.md` confirmed complete: AC, HP, attacks, combat scripts, morale thresholds, XP values all present.
+- [x] **Festival encounter sequence** — `FESTIVAL_ENCOUNTER.md` created: three-wave raid script, Aldern rescue moment, Hemlock arrival timing, civilian rescue beat, aftermath state changes.
+- [x] **Aldern Foxglove introduction** — `base.md` verified complete (rescue hook, hunting trip, estate reference present); `knowledge.md` exists as session tracking log (correct format); backstory seed content lives in `base.md`.
+- [x] **PC leveling milestone — level 2** — `LEVELING.md` created with all three milestones (levels 2, 3, 4) and book completion guidance.
+
+### Act II — Shadows in Sandpoint (levels 2–3)
+
+- [x] **Catacombs of Wrath — dungeon document** — `CATACOMBS.md` created: 7-room prose layout, 5 sinspawn encounters, Runewell chamber with cross-reference to LOCATIONS.md, full treasure and XP tables, Karzoug name drop in Room 2, Sihedron Rune callback in Room 7.
+- [x] **Sinspawn stat block** — `adventure_path/02_campaign_setting/bestiary/sinspawn.md` created: AC 14, HP 16, claws+bite, sinful bite (Will DC 12 or wrath compulsion), wrathful strike, GM narrative notes.
+- [x] **Glassworks investigation sequence** — `GLASSWORKS.md` created: three entry hooks, room-by-room layout (main floor/office/upper floor), Tsuto encounter, Ameiko rescue, journal content, Catacombs entrance discovery, full aftermath.
+- [x] **Tsuto Kaijitsu combat stats** — added to `05_npcs/tsuto_kaijitsu/base.md`: monk 7, CR 6, AC 20, HP 42, full attack line, surrender condition, loot (journal).
+- [x] **PC leveling milestone — level 3** — documented in `LEVELING.md`.
+
+### Act III — Thistletop (levels 3–4)
+
+- [x] **Thistletop — dungeon document** — `THISTLETOP.md` created: Nettlewood approach, rope bridge mechanics, full surface level (throne room, barracks, guard post, stables, trapdoor), Thassilonian level (entry passage sinspawn, Lyrie's library, yeth hound corridor, Nualia's sanctum, Runewell chamber), clearing conditions, Ameiko aftermath beat.
+- [x] **Nualia Tobyn — combat stats** — added to `05_npcs/nualia_tobyn/base.md`: cleric 4/barbarian 3, CR 7, AC 20, HP 62, spell list, aura of madness, demon claw, full combat script, redemption condition, loot (journal bridges to Book II).
+- [x] **Thistletop goblin roster** — `05_npcs/thistletop_roster/base.md` created: Ripnugget (fighter 4, gecko mount, surrender), Bruthazmus (bugbear ranger 4, Ameiko connection, turning), Orik Vancaskerkin (fighter 4, mercenary, turning conditions), Lyrie Akenja (wizard 4, library intelligence, cooperation conditions), Stickfoot.
+- [x] **Additional bestiary entries** — `goblin_dog.md` (CR 1, Goblin Pox disease, morale); `yeth_hound.md` (CR 3, Bay DC 13, flight, DR 5/silver). Warchanter variant already complete.
+- [x] **PC leveling milestone — level 4** — in `LEVELING.md`; THISTLETOP.md cross-references it.
+
+### Secondary NPCs
+
+The existing "Sandpoint NPC skeletons" backlog item is correct but needs priority ordering. The 70+ secondary NPCs referenced in SANDPOINT_LOCATIONS.md have no `05_npcs/` files. Do these in tiers:
+
+- [ ] **Tier A — encounter anchors** (players will meet these in Act I regardless of what they do): Naffer Vosk (boneyard groundskeeper — relevant when PCs investigate the Tobyn crypt), Brodert Quink (town sage — the only person who can explain Thassilonian runes), Savah Bevaniky (armory — equipment, Act I context), Risa Magravi (Hagfish tavern — rumours, Sczarni colour), Shayliss Vinder (General Store — Ven Vinder subplot). Write `base.md` for each: name, role, one-sentence personality, location anchor, and what they know that's plot-relevant.
+- [ ] **Tier B — district colour** (players will encounter if they explore): Hannah Velerin (healer, White Deer district), Das Korvut (blacksmith, grief subplot), Ven Vinder (General Store owner, protective father), Banny Harker (lumber mill, Act II body discovery), Ibor Thorn (lumber mill partner). Same format as Tier A.
+- [ ] **Tier C — background presence** (can be invented on demand but benefit from anchors): remaining shop owners, militia deputies, festival vendors. Batch these as a single lightweight file `adventure_path/05_npcs/_SANDPOINT_SECONDARY.md` listing name/role/location for each — not full base.md files, just enough to prevent contradiction.
+
+### Location Coverage
+
+- [ ] **Brodert Quink's home/study** — add `adventure_path/07_locations/quinks_house/base.md`. Players will go here to research Thassilonian runes in Act II. Needs: description (crowded with maps and artifacts), what he can tell them (Sihedron Rune meaning, Thassilon's sin-magic system), and what he doesn't know (the Runewell's current state). The knowledge injection makes this a much richer scene than the LLM improvising a generic scholar.
+- [ ] **The Hagfish** — add `adventure_path/07_locations/hagfish/base.md`. Risa's tavern is the rough-end counterpart to the Rusty Dragon — different social class, Sczarni presence, rumour economy. Players will contrast the two inns early. Aliases: hagfish, risa's, the fish.
+- [ ] **Sandpoint Mercantile League / Valdemar Building** — add `adventure_path/07_locations/sandpoint_mercantile/base.md`. Economic power centre; the Valdemars and Scarnettis matter for faction pressure in Act II.
+- [ ] **Remaining high-traffic locations** — audit SANDPOINT_LOCATIONS.md and create `base.md` files for the next 5–8 buildings players are most likely to enter: General Store (Vinder's), Cathedral Rectory, Fatman's Feedbag, Town Hall interior, and the Jail. Each follows the existing template.
+
+### Skill Files
+
+- [ ] **Expand skill coverage beyond the current five** — `adventure_path/06_rules/skills/` has Bluff, Diplomacy, Intimidate, Perception, Sense Motive. These are the social/detection skills. Act I also needs: **Knowledge (local)** (for Sandpoint history and NPC connections), **Knowledge (religion)** (for interpreting the Desna ceremony and Nualia's corruption), **Stealth** (goblin ambush and Thistletop infiltration). Add one file per skill in the same payload/REFERENCE format. Minimum viable: Knowledge (local), Knowledge (religion), Stealth.
+- [ ] **Knowledge (history) and Knowledge (planes)** — needed for Catacombs and Runewell investigation. Lower priority than the three above but add before Act II begins.
+
+### Session Pacing
+
+- [ ] **Session zero checklist** — create `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/SESSION_ZERO.md`. What the GM needs before session 1: player character files loaded, session 1 boot file prepared, leveling milestones known, faction pressures initialised at 0. This is a pre-flight checklist, not rules content.
+- [ ] **Encounter budget per session** — document in ACT_STRUCTURE.md: Act I is approximately 2–3 sessions (festival attack + aftermath + investigation hook). Act II is 3–5 sessions depending on Catacombs depth. Act III is 2–4 sessions for Thistletop. Knowing this prevents the LLM from burning through an act in a single exchange or dragging it over ten.
+
+---
+
 ## NPC Lifecycle and Knowledge
 
 - [ ] Carry `scene_npcs` forward into the next session's boot file — `session.scene_npcs` is in-memory only and lost when the session ends. On `stream_end_session`, append the active NPC list to `sessions/session_NNN+1/boot.md` so the next session starts with those NPCs already in context. Without this the GM starts cold every session regardless of what was in-flight.

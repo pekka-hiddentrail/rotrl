@@ -423,8 +423,8 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 **Chain A — log structure + latency fields**
 After a session with at least 4 turns:
 
-1. Open `http://localhost:8000/api/log/api` in a new tab.
-2. Click the most recent log filename.
+1. Open `http://localhost:8000/api/log/api` in a new tab — you'll see a JSON object with a `files` array.
+2. Copy the most recent filename (e.g. `session_001_turn_004_20260526_150507.json`) and navigate to `http://localhost:8000/api/log/api/<filename>`.
 3. ✔ `duration_ms` values are plausible: 800–20 000 ms for normal Groq turns.
 4. ✔ `first_token_ms` is a positive integer and less than `duration_ms` (e.g. 200–3 000 ms for Groq).
 5. ✔ `section_format_ok` is `true` (good model compliance) or `false` (flat-prose fallback). Never `null` on a successful turn.
