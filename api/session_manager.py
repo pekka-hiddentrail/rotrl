@@ -15,6 +15,11 @@ import time as _time
 import requests as _requests
 
 try:
+    import anthropic as _anthropic
+except ImportError:
+    _anthropic = None  # type: ignore[assignment]  # optional; required only for "anthropic" provider
+
+try:
     from dotenv import load_dotenv as _load_dotenv
     _load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 except ImportError:
@@ -169,9 +174,10 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
     raise RuntimeError("Groq: exhausted retries")  # pragma: no cover
 
 # Dev mode limits: keep only the last N messages (pairs of user+assistant)
-_DEV_MAX_HISTORY   = 6   # 3 exchanges
-_FULL_MAX_HISTORY  = 30  # 15 exchanges — Ollama (local, no payload limit)
-_GROQ_MAX_HISTORY  = 10  # 5 exchanges  — Groq (cloud, tighter payload limit)
+_DEV_MAX_HISTORY        = 6   # 3 exchanges
+_FULL_MAX_HISTORY       = 30  # 15 exchanges — Ollama (local, no payload limit)
+_GROQ_MAX_HISTORY       = 10  # 5 exchanges  — Groq (cloud, tighter payload limit)
+_ANTHROPIC_MAX_HISTORY  = 20  # 10 exchanges — Anthropic (200K context, generous but bounded)
 _DEV_MAX_TOKENS    = 180  # cap generation length in dev mode
 # Groq: hard ceiling on the system prompt character count.
 # Injected context chunks beyond this point are silently dropped.
@@ -425,7 +431,7 @@ class GameSession:
     host: str
     temperature: float
     dev_mode: bool = False
-    provider: str = "ollama"   # "ollama" | "groq"
+    provider: str = "ollama"   # "ollama" | "groq" | "anthropic"
     num_ctx: int = 2048
     num_gpu: int = 999
     system_prompt: str = ""
@@ -1127,6 +1133,8 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         max_hist = _DEV_MAX_HISTORY
     elif session.provider == "groq":
         max_hist = _GROQ_MAX_HISTORY
+    elif session.provider == "anthropic":
+        max_hist = _ANTHROPIC_MAX_HISTORY
     else:
         max_hist = _FULL_MAX_HISTORY
     history = session.messages[-max_hist:] if len(session.messages) > max_hist else session.messages
@@ -1278,7 +1286,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         _log(session, f"\n**[{role}]**\n```\n{msg['content']}\n```\n")
     _log(session, "</details>\n")
 
-    # Build the exact payload that will be posted — mirrored from _stream_groq / _stream_ollama
+    # Build the exact payload that will be posted — mirrored from each provider's function
     if session.provider == "groq":
         _raw_request: dict = {
             "model":          session.model,
@@ -1287,6 +1295,16 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             "temperature":    session.temperature,
             "max_tokens":     1024,
             "stream_options": {"include_usage": True},
+        }
+    elif session.provider == "anthropic":
+        _system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
+        _raw_request = {
+            "model":       session.model,
+            "system":      _system_msg,
+            "messages":    [m for m in messages if m["role"] != "system"],
+            "stream":      True,
+            "temperature": session.temperature,
+            "max_tokens":  1024,
         }
     else:
         _raw_request = {
@@ -1301,11 +1319,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     _llm_error: Optional[str] = None
     _usage: dict = {}
     try:
-        _raw = (
-            _stream_groq(session, messages, accumulated, _usage, _timing)
-            if session.provider == "groq"
-            else _stream_ollama(session, messages, options, accumulated, _timing)
-        )
+        if session.provider == "groq":
+            _raw = _stream_groq(session, messages, accumulated, _usage, _timing)
+        elif session.provider == "anthropic":
+            _raw = _stream_anthropic(session, messages, accumulated, _usage, _timing)
+        else:
+            _raw = _stream_ollama(session, messages, options, accumulated, _timing)
         yield from _stream_with_narrative_filter(_raw, session.dev_mode)
     except Exception as _llm_exc:
         _llm_error = str(_llm_exc)
@@ -1575,6 +1594,48 @@ def _stream_groq(
                 yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
 
 
+def _stream_anthropic(
+    session: GameSession,
+    messages: list,
+    accumulated: list[str],
+    usage_out: dict,
+    timing_out: dict,
+) -> Generator[str, None, None]:
+    if _anthropic is None:
+        raise RuntimeError(
+            "anthropic package is not installed. Run: pip install anthropic"
+        )
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY environment variable is not set. "
+            "Get a key at https://console.anthropic.com"
+        )
+    # Anthropic SDK requires system prompt at top level, not as a message.
+    system_text = next((m["content"] for m in messages if m["role"] == "system"), "")
+    non_system = [m for m in messages if m["role"] != "system"]
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    with client.messages.stream(
+        model=session.model,
+        system=system_text,
+        messages=non_system,
+        temperature=session.temperature,
+        max_tokens=1024,
+    ) as stream:
+        for text in stream.text_stream:
+            if text:
+                if "first_token_ms" not in timing_out:
+                    timing_out["first_token_ms"] = int((_time.monotonic() - timing_out["start"]) * 1000)
+                accumulated.append(text)
+                yield f"data: {json.dumps({'type': 'token', 'content': text})}\n\n"
+        # Capture usage from the final message object.
+        final = stream.get_final_message()
+        if final and final.usage:
+            usage_out["prompt_tokens"] = final.usage.input_tokens
+            usage_out["completion_tokens"] = final.usage.output_tokens
+
+
 # ── Session-end recap generation ──────────────────────────────────────────────
 
 def _parse_turns_from_log(log_path: Path) -> list[dict]:
@@ -1707,6 +1768,21 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
         }
         resp = _groq_post(api_key, payload, stream=False)
         return (resp.json()["choices"][0]["message"] or {}).get("content", "").strip()
+    elif session.provider == "anthropic":
+        if _anthropic is None:
+            raise RuntimeError("anthropic package is not installed. Run: pip install anthropic")
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set.")
+        client = _anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=session.model,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+            temperature=0.5,
+            max_tokens=2048,
+        )
+        return (msg.content[0].text if msg.content else "").strip()
     else:
         resp = _requests.post(
             f"{session.host}/api/chat",

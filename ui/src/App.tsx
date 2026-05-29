@@ -17,7 +17,7 @@ export default function App() {
   const [sessionNumber, setSessionNumber] = useState(1)
   const [model, setModel] = useState('llama-3.3-70b-versatile')
   const [devMode, setDevMode] = useState(false)
-  const [provider, setProvider] = useState<'ollama' | 'groq'>('groq')
+  const [provider, setProvider] = useState<'ollama' | 'groq' | 'anthropic'>('groq')
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
@@ -199,7 +199,9 @@ export default function App() {
         onDevModeChange={setDevMode}
         onProviderChange={(p) => {
           setProvider(p)
-          setModel(p === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen3:4b')
+          if (p === 'groq') setModel('llama-3.3-70b-versatile')
+          else if (p === 'anthropic') setModel('claude-sonnet-4-6')
+          else setModel('qwen3:4b')
         }}
         rateLimits={rateLimits}
         onBoot={handleBoot}

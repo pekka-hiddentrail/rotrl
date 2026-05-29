@@ -6,6 +6,9 @@ pydantic>=2.0.0
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
 
+# LLM Providers
+anthropic>=0.34.0
+
 # Development & Testing
 pytest>=7.4.0
 black>=23.0.0

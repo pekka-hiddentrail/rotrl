@@ -32,7 +32,7 @@ class BootRequest(BaseModel):
     host: str = "http://localhost:11434"
     temperature: float = 0.3
     dev_mode: bool = False
-    provider: str = "ollama"  # "ollama" | "groq"
+    provider: str = "ollama"  # "ollama" | "groq" | "anthropic"
     num_ctx: int = 2048       # context window — smaller = faster (Ollama only)
     num_gpu: int = 999        # GPU layers — 999 = push everything to GPU (Ollama only)
 
