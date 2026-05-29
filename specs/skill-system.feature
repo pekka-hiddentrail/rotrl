@@ -115,6 +115,6 @@ And   no Skill Reference block is injected into the per-turn prompt
 ## Notes
 
 - See: [INDEX.md §7 — Skill System](INDEX.md)
-- Defined skills (13): Bluff · Diplomacy · Intimidate · Perception · Sense Motive · Knowledge (Arcana) · Knowledge (History) · Knowledge (Local) · Knowledge (Nature) · Knowledge (Nobility) · Knowledge (Planes) · Knowledge (Religion) · Stealth
+- Defined skills (17): Acrobatics · Bluff · Diplomacy · Disable Device · Heal · Intimidate · Knowledge (Arcana) · Knowledge (History) · Knowledge (Local) · Knowledge (Nature) · Knowledge (Nobility) · Knowledge (Planes) · Knowledge (Religion) · Perception · Sense Motive · Stealth · Survival
 - Trigger matching uses word-boundary regex (`\b`), case-insensitive
 - Skill files with underscore prefix are skipped by SkillIndex

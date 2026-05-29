@@ -73,8 +73,11 @@ adventure_path/
 ├── 06_rules/                      — Skill and rule files (read by SkillIndex at runtime)
 │   └── skills/
 │       ├── _SKILL_TEMPLATE.md          Template for new skill files
+│       ├── acrobatics.md
 │       ├── bluff.md
 │       ├── diplomacy.md
+│       ├── disable_device.md
+│       ├── heal.md
 │       ├── intimidate.md
 │       ├── knowledge_arcana.md
 │       ├── knowledge_history.md
@@ -85,7 +88,8 @@ adventure_path/
 │       ├── knowledge_religion.md
 │       ├── perception.md
 │       ├── sense_motive.md
-│       └── stealth.md
+│       ├── stealth.md
+│       └── survival.md
 │
 ├── 07_locations/                  — Location profiles (read by LocationIndex at runtime)
 │   ├── _LOCATION_TEMPLATE.md       Template for new location directories

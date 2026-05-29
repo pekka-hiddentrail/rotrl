@@ -4,35 +4,51 @@
 
 ## Resolution
 
-**[Opposed check: Skill vs X. / DC check using ABILITY modifier + Skill ranks.]**
-[One sentence describing the core resolution mechanic.]
+**[DC check using ABILITY modifier + Skill ranks. / Opposed by X.]**  
+[One sentence on the resolution mechanic. If the check is made secretly by the GM, note it here.]
 
-Untrained characters (0 ranks) can attempt DC 10 checks only.
+### [Sub-use One — omit heading if the skill has a single resolution mode]
 
-| DC | Information / Condition / Effect |
+| Task / Condition | DC | Time |
+|---|---|---|
+| [Easy] | 10 | [action] |
+| [Moderate] | 15 | [action] |
+| [Hard] | 20 | [action] |
+
+[Important rules note — flat-footed status, required tools, once-per-day limits, penalty per missing resource, etc.]
+
+**Fail by 4 or less:** [consequence; can retry]  
+**Fail by 5+:** [worse consequence — trigger, locked out, believed-disabled-but-isn't, etc.]
+
+### [Sub-use Two — e.g. Tracking, Open Locks, Jumping, Tumbling; omit if not applicable]
+
+| Condition / Surface / Complexity | DC |
 |---|---|
-| 10 | [Easy: common knowledge, well-known fact] |
-| 15 | [Moderate: specific knowledge, typical difficulty] |
-| 20 | [Hard: obscure, hidden, or detailed information] |
-| 25 | [Very Hard: secrets, rare expertise] |
-| 30 | [Near-impossible: deep expertise or unique knowledge] |
+| [Easy condition] | 5 |
+| [Normal condition] | 10–15 |
+| [Hard condition] | 20+ |
 
-## [Identifying Creatures — include only for skills that cover creature types]
+### [Condition Modifiers — omit if not applicable]
+
+| Condition | DC Modifier |
+|---|---|
+| [Slight penalty] | +2 |
+| [Moderate penalty] | +5 |
+| [Severe penalty] | +10 |
+
+[Apply only the most severe modifier of each type unless stated otherwise.]
+
+## [Identifying Creatures — omit if the skill does not cover creature types]
 
 Base DC = **10 + CR**. Common creatures = **5 + CR**. Rare creatures = **15 + CR** or more.
-For every 5 by which you exceed the DC, you recall one additional useful fact.
 
 | Creature Type | Base DC |
 |---|---|
-| [Type (example)] | 10 + CR |
+| [Type] | 10 + CR |
 | [Common type] | 5 + CR |
 | [Rare type] | 15 + CR |
 
-## [Special Mode — include only if the skill has a named sub-use, e.g. Feint, Sniping, Diversion]
-
-[Description and mechanics.]
-
-## Sample Questions ([Act or context])
+## Sample Questions ([Act I / Sandpoint])
 
 | Question | DC |
 |---|---|
@@ -41,28 +57,35 @@ For every 5 by which you exceed the DC, you recall one additional useful fact.
 
 ## GM Notes
 
-- [At least 2 bullet points about when/how to call for this skill in this campaign]
-- [Typical NPC or creature bonus if relevant]
-- [Common failure handling: what to tell the player on a miss]
+- [When to call for this skill in Act I — name specific scenes or encounters]
+- [Typical NPC or creature bonus / opposition value]
+- [What to tell the player on a near-miss vs a clean fail]
 
 <!-- REFERENCE -->
 
 ## What It Does
 
-[One paragraph: what this skill covers per PF1e RAW. Use exact RAW domain language where possible.]
+[One paragraph per PF1e RAW, using the official domain language for the skill.]
 
 ## Untrained
 
-[Can / Cannot] be attempted untrained for DC 10 or lower. [If applicable: Access to an extensive library removes the DC 10 limit, but check time increases to 1d4 hours. A particularly complete library may grant a bonus on the check.]
+[Can / Cannot] be attempted untrained. [Note any DC cap, library exception, or training requirement. Not all skills default to DC 10 for untrained — state the actual rule.]
 
 ## Action
 
-[Action economy description — usually none / standard / move / as part of movement / etc.]
+[If single action type for all uses: one sentence.]  
+[If multiple tasks have different action costs, list each:]
+- **[Task name]:** [action cost]
+- **[Task name]:** [action cost]
 
 ## Try Again
 
-[Yes or No, with reasoning.]
+[Yes / No / Varies. If varies, explain per task including any retry window (e.g. "retry after 1 hour outdoors").]
 
 ## Special
 
-[Racial bonuses, class bonuses, feats. List each on its own line.]
+- [Feat, class ability, or racial bonus — one bullet per item]
+
+## Restriction *(omit if not applicable)*
+
+[Class or feature restrictions on specific uses — e.g. trapfinding for magic traps, favored enemy for tracking bonus.]

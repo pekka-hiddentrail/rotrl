@@ -1,6 +1,6 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (423 pytest + 88 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (427 pytest + 88 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 

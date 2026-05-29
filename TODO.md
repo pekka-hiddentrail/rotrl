@@ -82,7 +82,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ### Skill Files
 
-- [x] **Expand skill coverage beyond the current five** — Added 8 new skill files: Knowledge (Local), Knowledge (Religion), Knowledge (History), Knowledge (Planes), Knowledge (Arcana), Knowledge (Nature), Knowledge (Nobility), Stealth. All RAW-complemented with `<!-- REFERENCE -->` separator. `_SKILL_TEMPLATE.md` created for future additions. `SkillIndex` auto-discovers all files; no code changes needed.
+- [x] **Expand skill coverage beyond the current five** — Added 17 skill files total: original 5 (Bluff, Diplomacy, Intimidate, Perception, Sense Motive) + 8 Knowledge/Stealth (Knowledge (Local), (Religion), (History), (Planes), (Arcana), (Nature), (Nobility), Stealth) + 4 Act I utility skills (Heal, Survival, Acrobatics, Disable Device). All RAW-complemented with `<!-- REFERENCE -->` separator. `_SKILL_TEMPLATE.md` updated with multi-table, condition modifier, fail-by-X, and Restriction section patterns. `SkillIndex` auto-discovers all files; no code changes needed.
 - [x] **Knowledge (history) and Knowledge (planes)** — Both added. Knowledge (Planes) covers outsiders (removed from Religion); Knowledge (History) covers Thassilonian lore. Both include 10+CR creature identification tables and library exception for untrained use.
 
 ### Session Pacing

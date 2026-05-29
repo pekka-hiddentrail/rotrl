@@ -201,7 +201,7 @@ def test_parse_skill_file_reference_separator(tmp_path):
 
 @pytest.fixture()
 def extended_skill_root(tmp_path):
-    """Fixture with all new Knowledge skills and Stealth alongside Diplomacy."""
+    """Fixture with all new Knowledge skills, Stealth, and Act I utility skills."""
     _make_skill(tmp_path, "diplomacy.md", "Diplomacy",
                 ["persuade", "convince", "talk to", "diplomacy"],
                 "DC 15 for basic cooperation.")
@@ -229,6 +229,22 @@ def extended_skill_root(tmp_path):
     _make_skill(tmp_path, "stealth.md", "Stealth",
                 ["stealth", "sneak", "hide", "hiding", "move silently"],
                 "Opposed by Perception. Half speed: no penalty; > half speed: -5.")
+    _make_skill(tmp_path, "heal.md", "Heal",
+                ["heal", "stabilize", "first aid", "treat wounds", "treat poison", "treat disease",
+                 "long-term care", "bandage", "revive"],
+                "First Aid DC 15; Treat Deadly Wounds DC 20 (1 HP/level).")
+    _make_skill(tmp_path, "survival.md", "Survival",
+                ["survival", "track", "tracking", "follow tracks", "navigate",
+                 "get along in the wild", "predict weather", "find food"],
+                "Get along in the wild DC 10; tracking DC by surface type.")
+    _make_skill(tmp_path, "acrobatics.md", "Acrobatics",
+                ["acrobatics", "balance", "tumble", "tumbling", "jump", "leap", "fall",
+                 "move through", "dodge past"],
+                "Balance DC by surface width; tumble DC = opponent CMD.")
+    _make_skill(tmp_path, "disable_device.md", "Disable Device",
+                ["disable device", "disable trap", "disarm trap", "pick lock", "open lock",
+                 "disarm", "defuse", "sabotage"],
+                "Simple device DC 10; tricky DC 15; difficult DC 20; extreme DC 25.")
     return tmp_path
 
 
@@ -283,6 +299,30 @@ class TestNewSkillCoverage:
         assert m is not None
         assert m.skill_name == "Stealth"
 
+    def test_heal_detects(self, extended_skill_root):
+        idx = SkillIndex(_repo_root=extended_skill_root)
+        m = idx.detect("Can I stabilize the dying guard before he bleeds out?")
+        assert m is not None
+        assert m.skill_name == "Heal"
+
+    def test_survival_detects(self, extended_skill_root):
+        idx = SkillIndex(_repo_root=extended_skill_root)
+        m = idx.detect("I try to track the goblins through the Nettlewood.")
+        assert m is not None
+        assert m.skill_name == "Survival"
+
+    def test_acrobatics_detects(self, extended_skill_root):
+        idx = SkillIndex(_repo_root=extended_skill_root)
+        m = idx.detect("I try to tumble past the goblin without getting hit.")
+        assert m is not None
+        assert m.skill_name == "Acrobatics"
+
+    def test_disable_device_detects(self, extended_skill_root):
+        idx = SkillIndex(_repo_root=extended_skill_root)
+        m = idx.detect("I use disable device to open the chest.")
+        assert m is not None
+        assert m.skill_name == "Disable Device"
+
     def test_knowledge_local_vs_religion_no_collision(self, extended_skill_root):
         """Longer trigger wins: 'knowledge local' and 'knowledge religion' must
         each fire only their own skill, not each other's."""
@@ -302,6 +342,7 @@ class TestNewSkillCoverage:
             "Knowledge (Local)", "Knowledge (Religion)", "Knowledge (Arcana)",
             "Knowledge (History)", "Knowledge (Planes)", "Knowledge (Nature)",
             "Knowledge (Nobility)", "Stealth",
+            "Heal", "Survival", "Acrobatics", "Disable Device",
         }
         assert new_skills.issubset(skills)
 
@@ -309,7 +350,7 @@ class TestNewSkillCoverage:
 # ── Integration: real skill files ─────────────────────────────────────────────
 
 def test_real_skill_files_all_loaded():
-    """Sanity-check that SkillIndex loads all 13 expected skill files from the repo."""
+    """Sanity-check that SkillIndex loads all 17 expected skill files from the repo."""
     repo_root = Path(__file__).resolve().parents[1]
     idx = SkillIndex(_repo_root=repo_root)
     skills = set(idx.known_skills)
@@ -318,5 +359,6 @@ def test_real_skill_files_all_loaded():
         "Knowledge (Local)", "Knowledge (Religion)", "Knowledge (History)",
         "Knowledge (Planes)", "Knowledge (Arcana)", "Knowledge (Nature)",
         "Knowledge (Nobility)", "Stealth",
+        "Heal", "Survival", "Acrobatics", "Disable Device",
     }
     assert expected.issubset(skills), f"Missing: {expected - skills}"
