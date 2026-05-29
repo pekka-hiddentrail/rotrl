@@ -48,25 +48,22 @@ The adventure is ~80% narrative infrastructure and ~20% mechanical execution. Th
 ### Act I — Swallowtail Festival (levels 1–2)
 
 - [x] **Verify and complete bestiary files** — `goblin.md`, `goblin_commando.md`, and `goblin_warchanter.md` confirmed complete: AC, HP, attacks, combat scripts, morale thresholds, XP values all present.
-- [x] **Festival encounter sequence** — `FESTIVAL_ENCOUNTER.md` created: three-wave raid script, Aldern rescue moment, Hemlock arrival timing, civilian rescue beat, aftermath state changes.
+- [ ] **Festival encounter sequence** — `FESTIVAL_ENCOUNTER.md` created: three-wave raid script, Aldern rescue moment, Hemlock arrival timing, civilian rescue beat, aftermath state changes.
 - [x] **Aldern Foxglove introduction** — `base.md` verified complete (rescue hook, hunting trip, estate reference present); `knowledge.md` exists as session tracking log (correct format); backstory seed content lives in `base.md`.
-- [x] **PC leveling milestone — level 2** — `LEVELING.md` created with all three milestones (levels 2, 3, 4) and book completion guidance.
 
 ### Act II — Shadows in Sandpoint (levels 2–3)
 
-- [x] **Catacombs of Wrath — dungeon document** — `CATACOMBS.md` created: 7-room prose layout, 5 sinspawn encounters, Runewell chamber with cross-reference to LOCATIONS.md, full treasure and XP tables, Karzoug name drop in Room 2, Sihedron Rune callback in Room 7.
-- [x] **Sinspawn stat block** — `adventure_path/02_campaign_setting/bestiary/sinspawn.md` created: AC 14, HP 16, claws+bite, sinful bite (Will DC 12 or wrath compulsion), wrathful strike, GM narrative notes.
-- [x] **Glassworks investigation sequence** — `GLASSWORKS.md` created: three entry hooks, room-by-room layout (main floor/office/upper floor), Tsuto encounter, Ameiko rescue, journal content, Catacombs entrance discovery, full aftermath.
+- [ ] **Catacombs of Wrath — dungeon document** — `CATACOMBS.md` created: 7-room prose layout, 5 sinspawn encounters, Runewell chamber with cross-reference to LOCATIONS.md, full treasure and XP tables, Karzoug name drop in Room 2, Sihedron Rune callback in Room 7.
+- [ ] **Sinspawn stat block** — `adventure_path/02_campaign_setting/bestiary/sinspawn.md` created: AC 14, HP 16, claws+bite, sinful bite (Will DC 12 or wrath compulsion), wrathful strike, GM narrative notes.
+- [ ] **Glassworks investigation sequence** — `GLASSWORKS.md` created: three entry hooks, room-by-room layout (main floor/office/upper floor), Tsuto encounter, Ameiko rescue, journal content, Catacombs entrance discovery, full aftermath.
 - [x] **Tsuto Kaijitsu combat stats** — added to `05_npcs/tsuto_kaijitsu/base.md`: monk 7, CR 6, AC 20, HP 42, full attack line, surrender condition, loot (journal).
-- [x] **PC leveling milestone — level 3** — documented in `LEVELING.md`.
 
 ### Act III — Thistletop (levels 3–4)
 
-- [x] **Thistletop — dungeon document** — `THISTLETOP.md` created: Nettlewood approach, rope bridge mechanics, full surface level (throne room, barracks, guard post, stables, trapdoor), Thassilonian level (entry passage sinspawn, Lyrie's library, yeth hound corridor, Nualia's sanctum, Runewell chamber), clearing conditions, Ameiko aftermath beat.
+- [ ] **Thistletop — dungeon document** — `THISTLETOP.md` created: Nettlewood approach, rope bridge mechanics, full surface level (throne room, barracks, guard post, stables, trapdoor), Thassilonian level (entry passage sinspawn, Lyrie's library, yeth hound corridor, Nualia's sanctum, Runewell chamber), clearing conditions, Ameiko aftermath beat.
 - [x] **Nualia Tobyn — combat stats** — added to `05_npcs/nualia_tobyn/base.md`: cleric 4/barbarian 3, CR 7, AC 20, HP 62, spell list, aura of madness, demon claw, full combat script, redemption condition, loot (journal bridges to Book II).
-- [x] **Thistletop goblin roster** — `05_npcs/thistletop_roster/base.md` created: Ripnugget (fighter 4, gecko mount, surrender), Bruthazmus (bugbear ranger 4, Ameiko connection, turning), Orik Vancaskerkin (fighter 4, mercenary, turning conditions), Lyrie Akenja (wizard 4, library intelligence, cooperation conditions), Stickfoot.
-- [x] **Additional bestiary entries** — `goblin_dog.md` (CR 1, Goblin Pox disease, morale); `yeth_hound.md` (CR 3, Bay DC 13, flight, DR 5/silver). Warchanter variant already complete.
-- [x] **PC leveling milestone — level 4** — in `LEVELING.md`; THISTLETOP.md cross-references it.
+- [ ] **Thistletop goblin roster** — `05_npcs/thistletop_roster/base.md` created: Ripnugget (fighter 4, gecko mount, surrender), Bruthazmus (bugbear ranger 4, Ameiko connection, turning), Orik Vancaskerkin (fighter 4, mercenary, turning conditions), Lyrie Akenja (wizard 4, library intelligence, cooperation conditions), Stickfoot.
+- [ ] **Additional bestiary entries** — `goblin_dog.md` (CR 1, Goblin Pox disease, morale); `yeth_hound.md` (CR 3, Bay DC 13, flight, DR 5/silver). Warchanter variant already complete.
 
 ### Secondary NPCs
 
@@ -85,8 +82,8 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ### Skill Files
 
-- [ ] **Expand skill coverage beyond the current five** — `adventure_path/06_rules/skills/` has Bluff, Diplomacy, Intimidate, Perception, Sense Motive. These are the social/detection skills. Act I also needs: **Knowledge (local)** (for Sandpoint history and NPC connections), **Knowledge (religion)** (for interpreting the Desna ceremony and Nualia's corruption), **Stealth** (goblin ambush and Thistletop infiltration). Add one file per skill in the same payload/REFERENCE format. Minimum viable: Knowledge (local), Knowledge (religion), Stealth.
-- [ ] **Knowledge (history) and Knowledge (planes)** — needed for Catacombs and Runewell investigation. Lower priority than the three above but add before Act II begins.
+- [x] **Expand skill coverage beyond the current five** — Added 8 new skill files: Knowledge (Local), Knowledge (Religion), Knowledge (History), Knowledge (Planes), Knowledge (Arcana), Knowledge (Nature), Knowledge (Nobility), Stealth. All RAW-complemented with `<!-- REFERENCE -->` separator. `_SKILL_TEMPLATE.md` created for future additions. `SkillIndex` auto-discovers all files; no code changes needed.
+- [x] **Knowledge (history) and Knowledge (planes)** — Both added. Knowledge (Planes) covers outsiders (removed from Religion); Knowledge (History) covers Thassilonian lore. Both include 10+CR creature identification tables and library exception for untrained use.
 
 ### Session Pacing
 
