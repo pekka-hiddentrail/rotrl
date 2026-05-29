@@ -1,0 +1,25 @@
+**Event:** fire_phase_begins
+**Trigger:** When Wave 1 is suppressed and goblin arsonists appear on rooftops or alleys
+**Expires:** 5 turns
+
+<!-- INJECT -->
+
+## Active Event — Goblin Raid: Wave 2 (Fire)
+
+Wave 1 is over. Goblin arsonists have appeared on rooftops; alley goblins are cutting off retreat to the south.
+
+### Combatants (Wave 2)
+**Rooftop goblins (3–4):** AC 20 (cover +4), HP 5, throwing torches. Can throw OR move, not both. Must be dislodged or killed — ranged attacks, climb checks (DC 12), or spells.
+**Alley goblins (2–3):** AC 16, HP 5, standard stats. Morale: flee if 2 fall.
+
+### Fire mechanics
+- 1d4 stalls/structures catch fire this round
+- Adjacent creatures take 1 fire damage per round unless they move away
+- Scaffolding collapses on round 4 if not extinguished: Reflex DC 12 or 1d6 damage
+- Extinguishing: full-round action at the well (30 ft west), one hazard per action
+
+### Hemlock arrives
+Sheriff Hemlock arrives mid-wave with 4 militia. He organises civilians toward the cathedral and engages rooftops with crossbow fire. He does not take the PCs' kills — he handles crowd control.
+
+### Wave 2 ends when
+Rooftop goblins are silenced and immediate fire threat is addressed (or not — casualties apply). Write `%%EVENT%% cavalry_arrives` when Wave 3 starts.

@@ -25,8 +25,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
+| [event-injection.feature](event-injection.feature) | Backend | `@event` `@injection` `@context` `@parsing` `@session` | 8 | `EventIndex`, `active_events`, `%%EVENT%%` parser, event map in system prompt |
 
-**Total: 110 acceptance criteria across 17 feature files**
+**Total: 118 acceptance criteria across 18 feature files**
 
 ---
 
@@ -69,3 +70,4 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@skill` | Skill detection and injection | `api/context/skill_lookup.py`, `adventure_path/06_rules/skills/` |
 | `@startup` | Dev startup process cleanup | `dev.py`, `start_backend.ps1`, `start_ui.ps1` |
 | `@streaming` | SSE token streaming | `StreamingResponse`, token/done/error/patch_last events |
+| `@event` | Scene-triggered event injection | `api/context/event_index.py`, `adventure_path/08_events/`, `active_events`, `%%EVENT%%` |
