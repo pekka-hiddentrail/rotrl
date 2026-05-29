@@ -12,6 +12,7 @@ This file is a working backlog for the RotRL automation project. Items are group
 - [ ] Make player identity loading consistent across code paths; current boot logic still expects some optional files in different locations than the repo uses.
 - [ ] Route boot and recap generation to `llama-3.3-70b-versatile` and normal turns to `llama-3.1-8b-instant` — add a per-call-type model override in `_stream_groq`.
 - [ ] Fix prompt spec gaps — three small changes to `_build_slim_system_prompt`: (1) add `personality:` field to `%%GENERATE%%` block spec (code already reads it, model never writes it); (2) add "skip `%%GENERATE%%` for NPCs already in the scene" rule; (3) add "at most one `%%ROLL%%` block per response" constraint.
+- [ ] **Load `00_system_authority/` files into the system prompt** — CORE BEHAVIOR and GM STYLE are currently hardcoded strings in `_build_slim_system_prompt()`. Replace with file loading: load `ADJUDICATION_PRINCIPLES.md` and the trimmed `PF1E_RULES_SCOPE.md` payload at boot; load `COMBAT_AND_POSITIONING.md` per-turn when combat keywords are detected. Mark `PERSISTENCE_HANDLING_RULES.md` and `SESSION_NOTES_PROTOCOL.md` as reference-only (already done). Update ADVENTURE.md when implemented.
 - [ ] Move the format example below a `<!-- REFERENCE -->` marker in the system prompt — it is currently injected on every turn (~500 chars). Same mechanism used by skill files. The model has already learned the format; the example only needs to be loaded at boot.
 - [x] Refine LLM output so GM responses are shorter, cleaner, and more mechanically grounded under pressure.
 - [x] Split skill files into GM payload and reader reference sections. *(`<!-- REFERENCE -->` separator added to all five skill files; `_parse_skill_file` stops at the marker — payload ~26–39% smaller per injection, reader docs preserved below the line.)*
@@ -37,7 +38,11 @@ Event-triggered context injection. When the LLM decides a scene condition is met
 - [x] **Session state** — `ActiveEvent` dataclass (`event_id`, `content`, `turns_remaining`) added. `active_events: list` field on `GameSession`. TTL decremented in `_inject_context`; expired entries removed.
 - [x] **Parser** — `_EVENT_LINE_RE` regex; fires in both section-based and flat-block paths. Duplicate check (no TTL reset), unknown-ID guard (silent ignore).
 - [x] **Injection** — active event content injected in `_inject_context` alongside NPC/skill/location blocks. `%%EVENT%%` added to streaming filter `_END_MARKERS` (hidden from player). Event map appended to system prompt via `_build_slim_system_prompt`.
-- [x] **Tests** — `tests/test_event_injection.py`: 23 tests covering EventIndex loading, file parsing, event map text, firing, unknown ID, duplicate TTL, expiry, injection presence, expiry suppresses injection, SSE active_events list, player-hidden token stream. 450 total passing.
+- [x] **Tests** — `tests/test_event_injection.py`: 24 tests. Covers EventIndex loading, file parsing, event map text, firing, unknown ID, duplicate TTL, expiry, injection presence, expiry suppresses injection, SSE active_events list, player-hidden token stream, and double-write regression (LLM writes bare `%%EVENT%%` then `%%EVENT%% <id>` — see known quirk note below). 451 total passing.
+- [x] **Live-testing bugs found and fixed** — two issues discovered during manual testing:
+  - *Prompt format:* `%%EVENT%%` was listed in RESPONSE STRUCTURE like other section markers, so the LLM wrote it as a section header with explanation text below, never putting the ID on the same line. Fixed: rewritten as `SCENE EVENT (optional — not a section header)` with explicit `CORRECT` / `WRONG` examples including the exact double-write pattern.
+  - *Regex false match:* `_EVENT_LINE_RE = r'^%%EVENT%%\s+(\S+)'` — in multiline mode `\s+` consumes a newline, causing the second `%%EVENT%%` marker to be captured as the ID when the LLM double-writes. Fixed: `(\S+)` → `([A-Za-z]\w*)` (event IDs always start with a letter; the marker itself starts with `%`).
+- [ ] **Monitor event firing in real sessions** — verify the LLM fires events at the right narrative moments and does not double-fire or skip. N=5 turns TTL is a starting point; tune against observed sessions. Also watch whether the CORRECT/WRONG examples in the prompt fully eliminate the double-write behavior over time.
 
 ---
 
@@ -48,7 +53,7 @@ The adventure is ~80% narrative infrastructure and ~20% mechanical execution. Th
 ### Act I — Swallowtail Festival (levels 1–2)
 
 - [x] **Verify and complete bestiary files** — `goblin.md`, `goblin_commando.md`, and `goblin_warchanter.md` confirmed complete: AC, HP, attacks, combat scripts, morale thresholds, XP values all present.
-- [ ] **Festival encounter sequence** — `FESTIVAL_ENCOUNTER.md` created: three-wave raid script, Aldern rescue moment, Hemlock arrival timing, civilian rescue beat, aftermath state changes.
+- [x] **Festival encounter sequence** — `FESTIVAL_ENCOUNTER.md` created: three-wave raid script, Aldern rescue moment, Hemlock arrival timing, civilian rescue beat, aftermath state changes. All 12 encounter stubs (EC-COM-01 through EC-SUP-01) written with PF1e-correct content.
 - [x] **Aldern Foxglove introduction** — `base.md` verified complete (rescue hook, hunting trip, estate reference present); `knowledge.md` exists as session tracking log (correct format); backstory seed content lives in `base.md`.
 
 ### Act II — Shadows in Sandpoint (levels 2–3)
@@ -125,6 +130,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Character Data and UI Content
 
+- [ ] Roll the skill dice by clicking the box above the dice view prompting a d20 roll.
 - [ ] Open the "character action menu" to the right side of the character avatar.
 - [ ] Normalize all player JSON files to one agreed UI schema and keep them synchronized with the markdown sheets.
 - [ ] Audit Ani's data and other player records for internal inconsistencies before relying on them in UI or prompts.
@@ -184,6 +190,7 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## Runtime and Tooling
 
+- [ ] **Add Anthropic (Claude) as a provider** — install `anthropic` SDK, add `_stream_anthropic` to `session_manager.py` following the same pattern as `_stream_groq`, wire `ANTHROPIC_API_KEY` into the env config, add Anthropic models to the UI provider/model dropdowns. Suggested models: `claude-sonnet-4-6` (default), `claude-opus-4-7` (quality), `claude-haiku-4-5-20251001` (fast/cheap).
 - [ ] **View Log — surface API call logs in the UI** — the current "View Log" button opens the session markdown log (`GET /api/sessions/{id}/log`). Extend or add a second view so the GM can browse `outputs/api_log/` from the UI without leaving the browser: a file list (newest first) and a JSON viewer for the selected entry. Key fields to surface prominently: `first_token_ms`, `duration_ms`, `section_format_ok`, `usage.total_tokens`, and `status`. The endpoints (`GET /api/log/api` and `GET /api/log/api/{filename}`) already exist. Decide whether to replace the current log button, add a tab, or open a separate panel.
 - [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
 - [ ] Session crash recovery — sessions are purely in-memory; a server restart during play loses `session.messages`, `scene_npcs`, `pending_roll`. After each turn, write a recovery snapshot to `outputs/sessions/{session_id}_snapshot.json`. On startup, detect orphaned snapshots and offer recovery.

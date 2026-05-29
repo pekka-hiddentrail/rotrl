@@ -420,17 +420,21 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 
 ## 10. Event Injection
 
-**What automated tests cover:** `EventIndex` loading, file parsing, event firing from `%%EVENT%%` tags, TTL decrement and expiry, duplicate guard, unknown-ID guard, event map in system prompt, `%%EVENT%%` hidden from player token stream, `active_events` in SSE context event — all with temp directories.
+**What automated tests cover:** `EventIndex` loading, file parsing, event firing from `%%EVENT%%` tags, TTL decrement and expiry, duplicate guard, unknown-ID guard, event map in system prompt, `%%EVENT%%` hidden from player token stream, `active_events` in SSE context event, and a double-write regression (LLM writes `%%EVENT%%` alone then `%%EVENT%% <id>` on the next line — the regex correctly skips the bare marker and fires on the second line) — all with temp directories.
 
 **What to probe manually (real LLM behaviour and on-screen visibility):**
 
 **Chain A — event fires from goblin attack**
 1. Boot a session (Dev Mode ON so you can see raw markers).
 2. Send: `I hear an alarm bell and shouts from the north gate — goblins!`
-3. Confirm the GM writes `%%EVENT%% goblin_attack_starts` somewhere in the raw response (visible in dev mode).
+3. ✔ The raw GM response (visible in dev mode) contains `%%EVENT%% goblin_attack_starts` on its own line.
 4. Send a follow-up turn: `I draw my weapon and charge toward the commotion.`
-5. ✔ Intent bar or dev output shows event content injected — look for `## Active Event — goblin_attack_starts` in the system context.
-6. ✔ The GM response includes goblin stat details or wave-1 battlefield cues (from the event file content).
+5. Open `outputs/api_log/` and inspect the JSON file for this second turn. ✔ `messages[0].content` (the system message) contains a block starting with `## Active Event — goblin_attack_starts`.
+6. ✔ The GM response references combat details (goblin stats, wave description, or scene constraints) drawn from the injected event content — it knows more than it would without the injection.
+
+> **Note:** The intent bar shows only NPCs, skills, and locations detected from the player's text. Active events are injected silently into the system prompt — they do not appear in the intent bar.
+
+> **Known LLM quirk:** The model sometimes writes `%%EVENT%%` on its own line (treating it as a section header) followed by `%%EVENT%% goblin_attack_starts` on the next line. This is handled: the regex `_EVENT_LINE_RE = r'^%%EVENT%%\s+([A-Za-z]\w*)'` skips the bare marker (which starts with `%`, not a letter) and fires on the second line correctly. If you see both lines in dev mode output, the event still fires.
 
 **Chain B — event hidden from player (non-dev)**
 1. Boot a session with Dev Mode OFF.
@@ -438,18 +442,24 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 3. ✔ No `%%EVENT%%` line appears in the player chat — only narrative prose is visible.
 4. ✔ The intent bar still updates normally.
 
-**Chain C — event expires after 5 turns**
+**Chain C — event expires after N turns**
 1. Trigger `goblin_attack_starts` (see Chain A, step 3).
-2. Send 5 more player turns (any content).
-3. ✔ After 5 turns, the event content is no longer injected — subsequent dev-mode responses no longer show the `## Active Event` block.
-4. ✔ The SSE `context` event's `active_events` list is empty (check in dev mode network tab or backend log).
+2. Send 3 more player turns (any content — "I look around", "I wait", etc.).
+3. After each turn, open the corresponding API log JSON in `outputs/api_log/` and check `raw_request.messages[0].content`.
+4. ✔ `## Active Event — goblin_attack_starts` block is present in the system prompt on each of those turns.
+5. Keep sending turns until the block disappears from `messages[0].content`.
+6. ✔ On that same turn, the `context` SSE event (visible in the browser network tab) has `active_events: []`.
+7. Note how many turns the event was active — it should match the `**Expires:**` value in `adventure_path/08_events/goblin_attack_starts.md`.
 
-**Chain D — multiple simultaneous events**
-1. Boot a session. Trigger `goblin_attack_starts`.
-2. On the next turn, send input that prompts the GM to write `%%EVENT%% fire_phase_begins`.
-3. ✔ Both events are injected into the system prompt simultaneously.
-4. ✔ Both `goblin_attack_starts` and `fire_phase_begins` appear in `active_events` in the SSE `context` event.
-5. ✔ Their TTLs decrement independently — the older event expires first.
+> **Note:** The system prompt is never visible in the chat window — dev mode or not. The only ways to inspect it are the API log JSON (`messages[0].content`) and the session markdown log (`outputs/session_NNN_*.log.md`, inside each `<details>LLM payload</details>` block).
+
+**Chain D — wave transition replaces active event**
+1. Boot a session. Trigger `goblin_attack_starts` (Chain A).
+2. Send turns until the GM produces `%%EVENT%% fire_phase_begins` (kill or rout the warchanter).
+3. Open the API log for the turn *after* `fire_phase_begins` fires.
+4. ✔ `messages[0].content` contains `## Active Event — fire_phase_begins` (Wave 2 content).
+5. ✔ The `context` SSE event has `active_events` containing `fire_phase_begins`.
+6. ✔ If `goblin_attack_starts` has already expired by this point, it is absent; if it still has turns remaining, both events appear simultaneously.
 
 **Chain E — unknown event ID is silent**
 1. Boot Dev Mode ON.

@@ -206,6 +206,32 @@ class TestEventFiring:
         assert len(active) == 1
         assert active[0].turns_remaining != 5  # was decremented, not reset
 
+    def test_double_write_event_still_fires(self, booted_session):
+        """Regression: LLM writes %%EVENT%% on its own then %%EVENT%% <id> below.
+        The bare %%EVENT%% must not be captured as the ID; the second line fires correctly.
+        """
+        import api.session_manager as sm
+        client, session_id = booted_session
+        session = sm._sessions[session_id]
+
+        # Simulate the LLM writing %%EVENT%% as a section header, then the correct line below
+        tokens = ["%%NARRATIVE%%\n\nGoblins!\n\n%%DELTAS%%\n[\nnpc: Belor Hemlock\nsummary: s\n]\n\n%%EVENT%%\n%%EVENT%% goblin_attack_starts"]
+        mock_resp = make_stream_response(tokens)
+
+        with patch("api.session_manager._requests.post", return_value=mock_resp), \
+             patch("api.session_manager._get_event_index") as mock_idx:
+            mock_entry = EventEntry(
+                event_id="goblin_attack_starts",
+                trigger="When goblins appear",
+                content="## Goblins\nAC 16, HP 5.",
+            )
+            mock_idx.return_value.get.return_value = mock_entry
+            client.post(f"/api/sessions/{session_id}/turn", json={"input": "I look around."})
+
+        # Event must fire despite the spurious bare %%EVENT%% line
+        assert len(session.active_events) == 1
+        assert session.active_events[0].event_id == "goblin_attack_starts"
+
 
 class TestEventExpiry:
     def test_event_expires_after_n_turns(self, booted_session):

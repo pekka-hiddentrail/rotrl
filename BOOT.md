@@ -219,7 +219,14 @@ RESPONSE STRUCTURE (strictly enforced)
 %%GENERATE%%   — one block per new NPC/location introduced
 %%DELTAS%%     — one block per active NPC in the scene
 
-...complete format example with all four sections...
+SCENE EVENT (optional — not a section header)
+%%EVENT%% <event_id>   ← ID on the same line; fires once per event; omit if no trigger applies
+
+...complete format example with all four sections + SCENE EVENT line...
+
+---
+EVENT MAP
+...one line per event ID from 08_events/ with trigger condition...
 ```
 
 The total prompt is capped at `_GROQ_MAX_SYSTEM_CHARS = 30,000` characters for Groq.

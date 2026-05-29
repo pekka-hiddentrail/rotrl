@@ -146,7 +146,7 @@ In **dev mode** all markers are visible in the stream so you can see the raw out
 | Path | When created | Contents |
 |------|-------------|----------|
 | `outputs/*.log.md` | At session boot | Timestamped markdown: system prompt, every exchange, dice rolls |
-| `outputs/api_log/*.json` | Per turn | Full LLM request + response payload for debugging |
+| `outputs/api_log/*.json` | Per turn | Full LLM request + response payload. Key fields: `first_token_ms` (ms to first streamed token), `section_format_ok` (true if `%%MARKER%%` sections present), `duration_ms`, `usage.total_tokens`, `status` |
 | `sessions/session_NNN/recap.md` | On End Session | Player-facing recap for the next session's intro card |
 | `sessions/session_NNN+1/boot.md` | On End Session | GM-facing continuity brief for the next session's system prompt |
 | `adventure_path/05_npcs/<slug>/session_NNN.md` | Per turn (per NPC) | NPC disposition, location, knowledge written after each interaction |
@@ -227,7 +227,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 450 pytest tests
+├── tests/                         # 451 pytest tests
 ├── ui/src/components/__tests__/    # 69 Vitest component tests
 ├── ui/src/__tests__/               # 19 Vitest App SSE integration tests
 │
@@ -291,19 +291,20 @@ npm run test:watch                # watch frontend tests during UI work
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest, so use `npm run test` from `ui/` before merging frontend changes.
 
-**Backend:** 450 pytest tests passing across 17 test files:
+**Backend:** 453 pytest tests passing across 20 test files:
 
 | File | Covers |
 |------|--------|
 | `test_sessions.py` | Session lifecycle endpoints, boot, turn, delete |
 | `test_turns.py` | Turn streaming, Ollama mock, error cases |
 | `test_boot_prompt.py` | System prompt assembly, party extraction, situation loading, delta cleanup |
-| `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, `stream_options` 400 fallback, streaming, max-history, rate-limit SSE event |
-| `test_api_logger.py` | LLM call log file format, usage field, summary truncation |
+| `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, `stream_options` 400 fallback, streaming, max-history, rate-limit SSE event, `first_token_ms` capture |
+| `test_api_logger.py` | LLM call log file format, usage field, summary truncation, `first_token_ms`, `section_format_ok` |
 | `test_api_logs.py` | Log list and fetch endpoints, path traversal rejection |
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
 | `test_npc_lookup_extended.py` | `detect_all`, `lookup`, status/knowledge reads, `_parse_base` |
+| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC/skill/location/event injection, context metadata |
 | `test_end_session.py` | `_parse_turns_from_log`, `_enforce_recap_header`, `stream_end_session` errors |
 | `test_stream_filter.py` | `_stream_with_narrative_filter` — dev pass-through, narrative extraction, split tokens |
 | `test_recap_header.py` | Recap header normalization edge cases |
@@ -311,7 +312,9 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_npc_generator.py` | `generate_base_md`, NPC stub creation |
 | `test_character_data.py` | Character sheet loading |
 | `test_intro.py` | Intro file resolution and fallback |
-| `test_event_injection.py` | `EventIndex` loading, `%%EVENT%%` parsing, TTL expiry, duplicate guard, event map, SSE `active_events` |
+| `test_event_injection.py` | `EventIndex` loading, `%%EVENT%%` parsing, TTL expiry, duplicate guard, event map, SSE `active_events`, double-write regression |
+| `test_location_lookup.py` | `LocationIndex` loading, alias detection, `<!-- REFERENCE -->` boundary, profile injection, scene re-injection, session-generated location stubs |
+| `test_dev_startup.py` | `dev.py` startup hardening — `_pid_on_port`, `_port_free`, `_kill_tree`, `_free_port` |
 
 **Frontend:** 88 Vitest tests passing across 4 test files:
 
@@ -440,19 +443,20 @@ ollama list                            # confirm model is pulled
 | Dice roll request + resolution (UI panel + API) | ✅ Complete |
 | Dev mode (raw marker visibility, full pass-through) | ✅ Complete |
 | Session log (timestamped markdown, live view) | ✅ Complete |
-| API call logging (`outputs/api_log/`) with Groq token usage | ✅ Complete |
+| API call logging — `first_token_ms`, `section_format_ok`, token usage, rate limits | ✅ Complete |
 | Groq rate limit display in header (RPM/TPM remaining) | ✅ Complete |
 | `stream_options` graceful degradation for older Groq models | ✅ Complete |
 | Event injection system (`%%EVENT%%` tag, TTL-based active events, event map) | ✅ Complete |
-| Test suites — 450 pytest + 88 Vitest tests | ✅ Complete |
-| System Authority docs | ✅ Complete |
+| Per-turn location RAG (`LocationIndex`, alias detection, profile injection, scene persistence) | ✅ Complete |
+| Test suites — 453 pytest + 88 Vitest tests | ✅ Complete |
+| System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
-| Book I Act I (Swallowtail Festival + Goblin Raid) | ✅ Complete |
-| Player character — Yanyeeku (Kitsune Sorcerer L1) | ✅ Complete |
+| Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
+| Player characters — Yanyeeku, Revemox, Ani | ✅ Complete |
 | Roll outcome fed into next GM turn directive | 🔴 Not done — GM narrates blind after resolve |
-| Location tracking (`07_locations/` analog to NPCs) | 🔴 Not started |
 | Session crash recovery (in-memory sessions lost on restart) | 🔴 Not started |
-| Acts II–III of Burnt Offerings | 🔴 Placeholder |
+| Anthropic (Claude) provider | 🔴 Not started |
+| Acts II–III of Burnt Offerings | 🔴 In progress — sinspawn, Glassworks, Catacombs, Thistletop pending |
 | Player agent (autonomous PC AI) | 🔴 Not started |
 
 ---

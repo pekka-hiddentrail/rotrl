@@ -45,14 +45,27 @@ adventure_path/
 │       ├── goblin_commando.md
 │       └── goblin_warchanter.md
 │
-├── 03_books/                      — Published adventure content
+├── 03_books/                      — Published adventure content (human-reference; not injected at boot)
 │   └── BOOK_01_BURNT_OFFERINGS/            Rise of the Runelords Book I (Levels 1–4)
 │       ├── BOOK_OVERVIEW.md                Campaign role, themes, narrative arc
 │       ├── ACT_STRUCTURE.md                Act-by-act breakdown with escalation mechanics
 │       ├── LOCATIONS.md                    Narrative-significant locations & world state
 │       ├── SANDPOINT_LOCATIONS.md          Sandpoint district map and location profiles
 │       ├── NPCS.md                         Campaign NPCs by persistence tier
-│       └── EVENTS_AND_TRIGGERS.md          Time-based escalations, pressure track
+│       ├── EVENTS_AND_TRIGGERS.md          Time-based escalations, pressure track
+│       └── act_01/
+│           ├── ACT_01_OVERVIEW.md          Scene flow, scene index, encounter references
+│           ├── FESTIVAL_ENCOUNTER.md       Consolidated three-wave raid reference (Aldern timing, Hemlock, aftermath)
+│           ├── active_npcs.md / act_overview.md / current_tensions.md
+│           └── encounters/
+│               ├── EC-COM-01.md  Wave 1 — Initial Goblin Assault (PF1e)
+│               ├── EC-COM-02.md  Wave 2 — Fire Phase
+│               ├── EC-COM-03.md  Wave 3 — Goblin Cavalry
+│               ├── EC-CIV-01.md  Civilian Rescue Beat
+│               ├── EC-INF-01.md  Goblin Capture & Interrogation
+│               ├── EC-EVT-01/02  Swallowtail Release · Cathedral Alarm
+│               ├── EC-SOC-01–04  Social encounters (speeches, games, NPC interaction, Aldern)
+│               └── EC-SUP-01.md  Aid the Wounded (aftermath)
 │
 ├── 04_persistence/                — Cross-session state tracking
 │   └── PERSISTENCE_LEDGER.md               Record of permanent world-state changes
@@ -145,13 +158,13 @@ When the GM encounters conflicting rules or facts, higher entries always win. No
 
 ### Boot (`create_session`)
 
-`_build_slim_system_prompt()` in [api/session_manager.py](api/session_manager.py) loads:
+`_build_slim_system_prompt()` in [api/session_manager.py](api/session_manager.py) builds a hardcoded f-string prompt. It loads only:
 
-1. All files from `00_system_authority/` in filename order
-2. All files from `01_world_setting/` in filename order
-3. All files from `02_campaign_setting/` in filename order
-4. Book-level files from `03_books/BOOK_01_BURNT_OFFERINGS/`
-5. Event map from `08_events/` via `EventIndex.event_map_text()` — appended if the directory is non-empty
+1. `players/*/character_sheet.md` → PARTY block (name + class per character)
+2. `sessions/session_NNN/boot.md` (or prior recap, or fallback text) → CURRENT SITUATION block
+3. Event map from `08_events/` via `EventIndex.event_map_text()` — appended if the directory is non-empty
+
+**The `00_system_authority/`, `01_world_setting/`, `02_campaign_setting/`, and `03_books/` files are NOT currently loaded at boot.** The CORE BEHAVIOR and GM STYLE blocks are hardcoded strings in `_build_slim_system_prompt()`. The adventure_path files outside `05_npcs/`, `06_rules/skills/`, `07_locations/`, and `08_events/` are human-reference documents — valuable for authoring and review, but not injected into the LLM. Loading them at boot is a planned improvement (see TODO.md, `00_system_authority` loading section).
 
 The assembled prompt is static for the entire session — it is never mutated after boot.
 
@@ -168,6 +181,8 @@ The assembled prompt is static for the entire session — it is never mutated af
 Location profiles persist across turns via `session.scene_locations` — once the party enters a location it is re-injected as ambient context on every subsequent turn until the session ends.
 
 Active events are TTL-bound — they expire automatically after 5 turns. The LLM is given an EVENT MAP in the system prompt (built from `08_events/` at boot) listing valid event IDs and their trigger conditions.
+
+**`%%EVENT%%` is a signal line, not a section header.** Unlike `%%NARRATIVE%%` / `%%DELTAS%%` etc., the event ID goes on the same line: `%%EVENT%% goblin_attack_starts`. The system prompt explicitly labels it `SCENE EVENT (optional — not a section header)` and shows CORRECT/WRONG examples to prevent the LLM from treating it as a section. The parser regex `^%%EVENT%%\s+([A-Za-z]\w*)` requires the ID to start with a letter, so a bare `%%EVENT%%` line followed by the correct line (a known LLM quirk) is handled gracefully — the correct line fires and the bare marker is ignored.
 
 ### NPC lifecycle (`05_npcs/`)
 
