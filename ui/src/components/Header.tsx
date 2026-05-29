@@ -8,9 +8,7 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
   ],
   groq: [
     { value: 'llama-3.3-70b-versatile', label: 'llama-3.3-70b — best quality' },
-    { value: 'llama-3.1-8b-instant',    label: 'llama-3.1-8b-instant — fastest' },
-    { value: 'llama3-8b-8192',          label: 'llama3-8b-8192' },
-    { value: 'mixtral-8x7b-32768',      label: 'mixtral-8x7b — long context' },
+    { value: 'llama-3.1-8b-instant',    label: 'llama-3.1-8b — fastest' },
   ],
 }
 

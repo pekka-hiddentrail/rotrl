@@ -148,6 +148,31 @@ def test_groq_post_400_without_stream_options_raises_immediately(monkeypatch):
     assert call_count == 1
 
 
+def test_groq_post_400_surfaces_groq_error_message(monkeypatch):
+    """A 400 with a Groq error body raises RuntimeError with the message text.
+
+    Covers the case where the model is deprecated or not found — Groq returns
+    {"error": {"message": "model not found"}} and we surface that instead of
+    a bare 'Bad Request' HTTPError.
+    """
+    bad = _make_resp(400)
+    bad.json = MagicMock(return_value={"error": {"message": "model not found: mixtral-8x7b-32768"}})
+
+    monkeypatch.setattr(sm._requests, "post", lambda *a, **kw: bad)
+    with pytest.raises(RuntimeError, match="model not found: mixtral-8x7b-32768"):
+        _groq_post("key", {"model": "mixtral-8x7b-32768"})
+
+
+def test_groq_post_400_after_stream_options_retry_surfaces_error(monkeypatch):
+    """If the stream_options retry also returns 400 with an error body, surface it."""
+    bad = _make_resp(400)
+    bad.json = MagicMock(return_value={"error": {"message": "model is deprecated"}})
+
+    monkeypatch.setattr(sm._requests, "post", lambda *a, **kw: bad)
+    with pytest.raises(RuntimeError, match="model is deprecated"):
+        _groq_post("key", {"model": "x", "stream_options": {"include_usage": True}})
+
+
 def test_groq_post_raises_on_413(monkeypatch):
     resp = MagicMock()
     resp.status_code = 413

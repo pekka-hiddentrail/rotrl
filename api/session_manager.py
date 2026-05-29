@@ -125,6 +125,16 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
             payload.pop("stream_options")
             _stream_options_dropped = True
             continue
+        if resp.status_code == 400:
+            # Surface Groq's error body so the player sees "model not found" /
+            # "model deprecated" instead of a bare HTTP 400.
+            try:
+                err_msg = (resp.json().get("error") or {}).get("message", "")
+                if err_msg:
+                    raise RuntimeError(f"Groq rejected the request: {err_msg}")
+            except (ValueError, KeyError):
+                pass
+            resp.raise_for_status()
         if resp.status_code != 429:
             resp.raise_for_status()
             return resp
@@ -218,7 +228,9 @@ _BRACKET_BLOCK_RE = re.compile(
 _HAS_SECTION_MARKERS_RE = re.compile(r'^%%(?:NARRATIVE|ROLL|DELTAS|GENERATE|EVENT)%%', re.MULTILINE)
 
 # Detect a %%EVENT%% tag line: %%EVENT%% <event_id>
-_EVENT_LINE_RE = re.compile(r'^%%EVENT%%\s+(\S+)', re.MULTILINE)
+# Uses [A-Za-z]\w* so a bare %%EVENT%% followed by a newline + another %%EVENT%% ...
+# line cannot cause the marker itself to be captured as the ID.
+_EVENT_LINE_RE = re.compile(r'^%%EVENT%%\s+([A-Za-z]\w*)', re.MULTILINE)
 
 # ── Narrative name detection ──────────────────────────────────────────────────
 # Used to catch NPCs the LLM introduces in prose without any structured block.
@@ -588,9 +600,19 @@ knowledge: [quest] Asks Yanyeeku to fetch him a drink from the tavern
 summary: Abstalar Zantus asked Yanyeeku to fetch him a drink from the tavern.
 ]
 
-%%EVENT%%
-Write `%%EVENT%% <id>` on its own line (after %%DELTAS%%) when a scene transition occurs.
-One event per response. See the event map below for valid IDs and trigger conditions.
+SCENE EVENT — write when a trigger condition is first met; omit only when none apply
+Check the EVENT MAP below. If any trigger condition is met by this turn, append ONE line after %%DELTAS%%:
+%%EVENT%% <event_id>
+This is NOT a section header. The event ID goes on the SAME LINE as %%EVENT%%. Nothing else.
+Rules:
+- Fire on the FIRST turn the condition is met — do not delay, do not wait for a roll result.
+- Event triggers are NOT blocked by scene setup ("no threats", "peaceful festival") — those prevent unprompted GM foreshadowing, not event responses to what the player has already described.
+- If the player's input itself describes the trigger condition (alarm bell, goblins visible), the event fires this turn.
+- Omit this line only if NO event trigger applies to this turn.
+CORRECT:   %%EVENT%% goblin_attack_starts
+WRONG:     %%EVENT%%                              ← missing ID
+WRONG:     %%EVENT%%\n%%EVENT%% goblin_attack_starts  ← do NOT write twice
+WRONG:     %%EVENT%% goblin_attack_starts (Note: ...) ← no trailing text
 
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
