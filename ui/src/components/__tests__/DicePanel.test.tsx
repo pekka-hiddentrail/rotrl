@@ -190,9 +190,9 @@ describe('DicePanel — AC-004 pending roll banner', () => {
     expect(screen.getByText('DC 15')).toBeInTheDocument()
   })
 
-  it('shows "roll d20" hint in the banner (AC-004)', () => {
+  it('shows "click to roll d20" hint in the banner (AC-004)', () => {
     renderPanel({ pendingRoll: DIPLOMACY_ROLL })
-    expect(screen.getByText('roll d20')).toBeInTheDocument()
+    expect(screen.getByText('click to roll d20')).toBeInTheDocument()
   })
 
   it('adds dice-panel-active class to aside when pending roll is set (AC-004)', () => {
@@ -368,6 +368,53 @@ describe('DicePanel — AC-011 skill normalisation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Roll' }))
     // sense motive modifier = +4, d20 = 13, total = 17
     await waitFor(() => expect(onRoll).toHaveBeenCalledWith('1d20', [13], 17))
+  })
+})
+
+// ─── Component: AC-012 — click banner to quick-roll d20 ──────────────────────
+
+describe('DicePanel — AC-012 click banner to quick-roll d20', () => {
+  it('clicking the roll-request-prompt calls onRoll with 1d20 and modifier (AC-012)', async () => {
+    const onRoll = vi.fn().mockResolvedValue({ passed: true })
+    renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
+    fireEvent.click(screen.getByTitle('Click to roll d20'))
+    // d20 = 13 (Math.random = 0.6), Perception +7 = total 20
+    await waitFor(() => expect(onRoll).toHaveBeenCalledWith('1d20', [13], 20))
+  })
+
+  it('clicking the banner with no active speaker uses raw total (AC-012)', async () => {
+    const onRoll = vi.fn().mockResolvedValue(null)
+    renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: null, onRoll })
+    fireEvent.click(screen.getByTitle('Click to roll d20'))
+    await waitFor(() => expect(onRoll).toHaveBeenCalledWith('1d20', [13], 13))
+  })
+
+  it('clicking the banner does not clear the manually queued dice (AC-012)', async () => {
+    const onRoll = vi.fn().mockResolvedValue(null)
+    renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
+    fireEvent.click(screen.getByTitle('d6'))
+    fireEvent.click(screen.getByTitle('d6'))
+    expect(screen.getByText('2d6')).toBeInTheDocument()
+    fireEvent.click(screen.getByTitle('Click to roll d20'))
+    await waitFor(() => expect(onRoll).toHaveBeenCalled())
+    // Manual queue still shows 2d6
+    expect(screen.getByText('2d6')).toBeInTheDocument()
+  })
+
+  it('clicking the banner respects the auto-bonus toggle when off (AC-012)', async () => {
+    const onRoll = vi.fn().mockResolvedValue(null)
+    renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByTitle('Click to roll d20'))
+    // auto-bonus off → raw d20 = 13
+    await waitFor(() => expect(onRoll).toHaveBeenCalledWith('1d20', [13], 13))
+  })
+
+  it('banner click shows PASSED badge when roll resolves (AC-012)', async () => {
+    const onRoll = vi.fn().mockResolvedValue({ passed: true })
+    renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
+    fireEvent.click(screen.getByTitle('Click to roll d20'))
+    await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
   })
 })
 

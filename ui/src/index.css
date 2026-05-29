@@ -896,11 +896,32 @@ body {
   line-height: 1.1;
 }
 
+.roll-request-prompt {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: inherit;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.roll-request-prompt:hover .roll-request-hint {
+  color: #c9a84c;
+}
+.roll-request-prompt:hover .roll-request-dc {
+  text-shadow: 0 0 8px #c9a84c44;
+}
+
 .roll-request-hint {
   font-size: 9px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: #7a6838;
+  transition: color 0.15s;
 }
 
 /* Bonus preview line inside the roll-request banner */

@@ -130,7 +130,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Character Data and UI Content
 
-- [ ] Roll the skill dice by clicking the box above the dice view prompting a d20 roll.
+- [x] **Quick d20 from pending-roll banner** — clicking the skill/DC box above the dice grid (the `roll-request-prompt` area) immediately fires a single d20 roll, applying the auto-bonus if enabled. Does not affect the manual dice queue. The hint text reads "click to roll d20".
 - [ ] Open the "character action menu" to the right side of the character avatar.
 - [ ] Normalize all player JSON files to one agreed UI schema and keep them synchronized with the markdown sheets.
 - [ ] Audit Ani's data and other player records for internal inconsistencies before relying on them in UI or prompts.

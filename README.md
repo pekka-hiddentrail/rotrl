@@ -228,7 +228,7 @@ rotrl/
 │   └── api_log/                   # Per-turn LLM payloads
 │
 ├── tests/                         # 451 pytest tests
-├── ui/src/components/__tests__/    # 69 Vitest component tests
+├── ui/src/components/__tests__/    # 74 Vitest component tests
 ├── ui/src/__tests__/               # 19 Vitest App SSE integration tests
 │
 ├── dev.py                         # One-command dev startup (pytest → API + UI)
@@ -316,12 +316,12 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_location_lookup.py` | `LocationIndex` loading, alias detection, `<!-- REFERENCE -->` boundary, profile injection, scene re-injection, session-generated location stubs |
 | `test_dev_startup.py` | `dev.py` startup hardening — `_pid_on_port`, `_port_free`, `_kill_tree`, `_free_port` |
 
-**Frontend:** 88 Vitest tests passing across 4 test files:
+**Frontend:** 93 Vitest tests passing across 4 test files:
 
 | File | Covers |
 |------|--------|
 | `App.test.tsx` | App-level SSE integration — boot flow, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), error bar, session end cleanup |
-| `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display |
+| `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display, quick-roll from banner (AC-012) |
 | `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
 | `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |
 
@@ -448,7 +448,7 @@ ollama list                            # confirm model is pulled
 | `stream_options` graceful degradation for older Groq models | ✅ Complete |
 | Event injection system (`%%EVENT%%` tag, TTL-based active events, event map) | ✅ Complete |
 | Per-turn location RAG (`LocationIndex`, alias detection, profile injection, scene persistence) | ✅ Complete |
-| Test suites — 453 pytest + 88 Vitest tests | ✅ Complete |
+| Test suites — 453 pytest + 93 Vitest tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
