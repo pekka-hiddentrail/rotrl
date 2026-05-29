@@ -102,6 +102,12 @@ adventure_path/
 │   ├── sandpoint_glassworks/       base.md
 │   └── white_deer/                 base.md
 │
+├── 08_events/                     — Event files (read by EventIndex at runtime)
+│   ├── goblin_attack_starts.md     Wave 1 goblin raid — stats, civilian rescue, scene constraints
+│   ├── fire_phase_begins.md        Wave 2 — rooftop goblins, alley fires, Hemlock arrives
+│   ├── cavalry_arrives.md          Wave 3 — goblin commandos, goblin dogs, morale/flee conditions
+│   └── attack_repelled.md          Aftermath — town state, Aldern moment, level 2 milestone
+│
 └── npc_library/                   — Text pools for auto-generated NPC descriptions
     ├── appearances.txt
     ├── narrative_functions.txt
@@ -145,6 +151,7 @@ When the GM encounters conflicting rules or facts, higher entries always win. No
 2. All files from `01_world_setting/` in filename order
 3. All files from `02_campaign_setting/` in filename order
 4. Book-level files from `03_books/BOOK_01_BURNT_OFFERINGS/`
+5. Event map from `08_events/` via `EventIndex.event_map_text()` — appended if the directory is non-empty
 
 The assembled prompt is static for the entire session — it is never mutated after boot.
 
@@ -156,8 +163,11 @@ The assembled prompt is static for the entire session — it is never mutated af
 - **Skill rules** — `06_rules/skills/{skill}.md` (content above the `<!-- REFERENCE -->` marker only)
 - **NPC-at-location** — NPCs whose `**Locations:**` field matches a location keyword
 - **Location profiles** — `07_locations/{slug}/base.md` (content above `<!-- REFERENCE -->` only)
+- **Active event content** — `session.active_events` entries are decremented each turn (TTL=5). Live events inject their content as `## Active Event — {id}` blocks. Events are fired when the LLM writes `%%EVENT%% <id>` and `08_events/<id>.md` exists.
 
 Location profiles persist across turns via `session.scene_locations` — once the party enters a location it is re-injected as ambient context on every subsequent turn until the session ends.
+
+Active events are TTL-bound — they expire automatically after 5 turns. The LLM is given an EVENT MAP in the system prompt (built from `08_events/` at boot) listing valid event IDs and their trigger conditions.
 
 ### NPC lifecycle (`05_npcs/`)
 
@@ -192,4 +202,5 @@ Session-generated locations (from `%%GENERATE%%` blocks with `type: location`) a
 | [api/context/npc_lookup.py](api/context/npc_lookup.py) | `NpcIndex` singleton, alias detection |
 | [api/context/skill_lookup.py](api/context/skill_lookup.py) | `SkillIndex`, trigger detection |
 | [api/context/location_lookup.py](api/context/location_lookup.py) | `LocationIndex` singleton, location alias detection and profile injection |
+| [api/context/event_index.py](api/context/event_index.py) | `EventIndex` singleton — loads `08_events/`, maps event_id → EventEntry, generates event map |
 | [README.md](README.md) | Setup, startup, and usage guide |

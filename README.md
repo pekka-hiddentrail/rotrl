@@ -137,6 +137,7 @@ The GM response is structured internally into sections that are stripped before 
 | `%%ROLL%%` | Triggers a dice panel with skill, DC, success/failure text |
 | `%%GENERATE%%` | Creates a new NPC stub file on disk |
 | `%%DELTAS%%` | Writes updated disposition/location/knowledge to each NPC's file |
+| `%%EVENT%%` | Signals a scene transition — injects event content into context for N turns |
 
 In **dev mode** all markers are visible in the stream so you can see the raw output.
 
@@ -177,7 +178,9 @@ rotrl/
 │   ├── api_logger.py              # Per-turn LLM call logging to outputs/api_log/
 │   └── context/
 │       ├── npc_lookup.py          # NpcIndex — detect NPC names, inject profiles
-│       └── skill_lookup.py        # SkillIndex — detect skill triggers, inject rules
+│       ├── skill_lookup.py        # SkillIndex — detect skill triggers, inject rules
+│       ├── location_lookup.py     # LocationIndex — detect locations, inject scene profiles
+│       └── event_index.py         # EventIndex — load 08_events/, inject on %%EVENT%% tag
 │
 ├── ui/                            # Vite 5 + React 18 + TypeScript
 │   └── src/
@@ -201,6 +204,8 @@ rotrl/
 │   ├── 04_persistence/            # Session ledger
 │   ├── 05_npcs/                   # NPC stubs — hand-crafted or auto-created per turn
 │   ├── 06_rules/skills/           # Skill files — trigger words + rules text for RAG
+│   ├── 07_locations/              # Location profiles (read by LocationIndex at runtime)
+│   ├── 08_events/                 # Event files — fired by %%EVENT%% tag, injected for N turns
 │   └── 90_shared_references/      # Shared reference tables
 │
 ├── players/
@@ -222,7 +227,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 427 pytest tests
+├── tests/                         # 450 pytest tests
 ├── ui/src/components/__tests__/    # 69 Vitest component tests
 ├── ui/src/__tests__/               # 19 Vitest App SSE integration tests
 │
@@ -286,7 +291,7 @@ npm run test:watch                # watch frontend tests during UI work
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest, so use `npm run test` from `ui/` before merging frontend changes.
 
-**Backend:** 309 pytest tests passing across 16 test files:
+**Backend:** 450 pytest tests passing across 17 test files:
 
 | File | Covers |
 |------|--------|
@@ -306,6 +311,7 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_npc_generator.py` | `generate_base_md`, NPC stub creation |
 | `test_character_data.py` | Character sheet loading |
 | `test_intro.py` | Intro file resolution and fallback |
+| `test_event_injection.py` | `EventIndex` loading, `%%EVENT%%` parsing, TTL expiry, duplicate guard, event map, SSE `active_events` |
 
 **Frontend:** 88 Vitest tests passing across 4 test files:
 
@@ -345,6 +351,7 @@ POST /api/sessions/{id}/turn  (repeated each exchange)
        │    %%ROLL%%     → set pending_roll, yield roll_request event
        │    %%GENERATE%% → create new NPC stub in adventure_path/05_npcs/.<slug>/
        │    %%DELTAS%%   → write NPC status + knowledge files
+       │    %%EVENT%%    → add event to active_events (TTL=5 turns); silently ignored if unknown or duplicate
        └─ yield patch_last (non-dev), append to history
 
 POST /api/sessions/{id}/end
@@ -359,11 +366,13 @@ POST /api/sessions/{id}/end
 
 ### Per-turn context injection (RAG)
 
-No vector database. Every turn, three lightweight keyword lookups run against the player's input:
+No vector database. Every turn, keyword lookups and active-event TTL checks run before the LLM call:
 
 1. **NPC lookup** — `NpcIndex` scans for alias matches against `adventure_path/05_npcs/*/base.md`. Matching NPC's profile (minus `<!-- REFERENCE -->` section) is prepended to system content.
 2. **Skill lookup** — `SkillIndex` scans for trigger words against `adventure_path/06_rules/skills/*.md`. Longest-match trigger wins; skill rules are prepended.
 3. **Scene NPCs** — NPCs accumulated in `session.scene_npcs` (from `%%DELTAS%%` writes + `_detect_narrative_npcs` scan) have their current status injected so the GM knows their last known state.
+4. **Active events** — `session.active_events` TTL is decremented; expired events are removed. Remaining events' content is injected as `## Active Event — {id}` blocks. Events are added when the LLM writes `%%EVENT%% <id>` and the corresponding `08_events/<id>.md` file exists.
+5. **Event map** (system prompt, not per-turn) — `EventIndex.event_map_text()` builds a compact block listing all valid event IDs and their trigger conditions, injected once at boot. Zero-cost if `08_events/` is empty.
 
 ### Authority hierarchy
 
@@ -434,7 +443,8 @@ ollama list                            # confirm model is pulled
 | API call logging (`outputs/api_log/`) with Groq token usage | ✅ Complete |
 | Groq rate limit display in header (RPM/TPM remaining) | ✅ Complete |
 | `stream_options` graceful degradation for older Groq models | ✅ Complete |
-| Test suites — 427 pytest + 88 Vitest tests | ✅ Complete |
+| Event injection system (`%%EVENT%%` tag, TTL-based active events, event map) | ✅ Complete |
+| Test suites — 450 pytest + 88 Vitest tests | ✅ Complete |
 | System Authority docs | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I (Swallowtail Festival + Goblin Raid) | ✅ Complete |

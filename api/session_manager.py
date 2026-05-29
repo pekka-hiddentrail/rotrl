@@ -23,6 +23,7 @@ except ImportError:
 from api.context.npc_lookup import NpcIndex
 from api.context.skill_lookup import SkillIndex
 from api.context.location_lookup import LocationIndex
+from api.context.event_index import EventIndex
 from api.api_logger import write_api_log
 from api.npc_generator import generate_base_md, generate_location_base_md, slugify as _slugify
 
@@ -33,6 +34,7 @@ _OUTPUTS_DIR = _REPO_ROOT / "outputs"
 _npc_index: Optional[NpcIndex] = None
 _skill_index: Optional[SkillIndex] = None
 _location_index: Optional[LocationIndex] = None
+_event_index: Optional[EventIndex] = None
 
 
 def _get_npc_index() -> NpcIndex:
@@ -74,6 +76,13 @@ def _invalidate_location_index() -> None:
     """
     global _location_index
     _location_index = None
+
+
+def _get_event_index() -> EventIndex:
+    global _event_index
+    if _event_index is None:
+        _event_index = EventIndex(_repo_root=_REPO_ROOT)
+    return _event_index
 
 _GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 _GROQ_MAX_RETRIES = 4
@@ -206,7 +215,10 @@ _BRACKET_BLOCK_RE = re.compile(
 )
 
 # Detect whether the response uses section markers at all (vs old flat format).
-_HAS_SECTION_MARKERS_RE = re.compile(r'^%%(?:NARRATIVE|ROLL|DELTAS|GENERATE)%%', re.MULTILINE)
+_HAS_SECTION_MARKERS_RE = re.compile(r'^%%(?:NARRATIVE|ROLL|DELTAS|GENERATE|EVENT)%%', re.MULTILINE)
+
+# Detect a %%EVENT%% tag line: %%EVENT%% <event_id>
+_EVENT_LINE_RE = re.compile(r'^%%EVENT%%\s+(\S+)', re.MULTILINE)
 
 # ── Narrative name detection ──────────────────────────────────────────────────
 # Used to catch NPCs the LLM introduces in prose without any structured block.
@@ -385,6 +397,15 @@ _ROLL_BLOCK_RE = re.compile(
 
 
 @dataclass
+@dataclass
+class ActiveEvent:
+    """An event currently injecting content into the system prompt."""
+    event_id: str
+    content: str
+    turns_remaining: int
+
+
+@dataclass
 class GameSession:
     id: str
     session_number: int
@@ -408,6 +429,8 @@ class GameSession:
     # Canonical location names visited in the current session, accumulated across turns.
     # Full location profiles are re-injected as ambient context on subsequent turns.
     scene_locations: list = field(default_factory=list)
+    # Events currently active — each has content injected for turns_remaining turns.
+    active_events: list = field(default_factory=list)  # list[ActiveEvent]
 
 
 _sessions: dict[str, GameSession] = {}
@@ -457,7 +480,7 @@ def _build_slim_system_prompt(session_number: int) -> str:
         boot_path = sessions_dir / f"session_{session_number - 1:03d}" / "recap.md"
     situation = boot_path.read_text(encoding="utf-8") if boot_path.exists() else "(No boot context found for this session.)"
 
-    return f"""You are the Game Master for a Pathfinder 1st Edition campaign: Rise of the Runelords.
+    _base_prompt = f"""You are the Game Master for a Pathfinder 1st Edition campaign: Rise of the Runelords.
 Session number: {session_number}
 
 CORE BEHAVIOR (always active)
@@ -565,7 +588,18 @@ knowledge: [quest] Asks Yanyeeku to fetch him a drink from the tavern
 summary: Abstalar Zantus asked Yanyeeku to fetch him a drink from the tavern.
 ]
 
+%%EVENT%%
+Write `%%EVENT%% <id>` on its own line (after %%DELTAS%%) when a scene transition occurs.
+One event per response. See the event map below for valid IDs and trigger conditions.
+
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
+
+    # Append event map if any events are defined for this adventure
+    _event_map = _get_event_index().event_map_text()
+    if _event_map:
+        _base_prompt += f"\n\n---\nEVENT MAP\n{_event_map}"
+
+    return _base_prompt
 
 
 def create_session(
@@ -962,7 +996,7 @@ def _stream_with_narrative_filter(
         return
 
     _NARRATIVE_START = "%%NARRATIVE%%\n"
-    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%")
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%")
     _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14
 
     buf           = ""      # not-yet-emitted accumulation
@@ -1129,6 +1163,21 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         if _loc.canonical_name not in session.scene_npcs:
             session.scene_npcs.append(_loc.canonical_name)
 
+    # ── Active events — decrement TTL, inject content ─────────────────────────
+    expired_ids: list[str] = []
+    for _ev in session.active_events:
+        _ev.turns_remaining -= 1
+        if _ev.turns_remaining <= 0:
+            expired_ids.append(_ev.event_id)
+    if expired_ids:
+        session.active_events = [e for e in session.active_events if e.event_id not in expired_ids]
+        _log(session, f"\n> *[Events expired: {', '.join(expired_ids)}]*\n")
+
+    for _ev in session.active_events:
+        injected.append(f"## Active Event — {_ev.event_id}\n\n{_ev.content}")
+
+    active_event_ids = [e.event_id for e in session.active_events]
+
     if injected:
         block = "\n\n---\n".join(injected)
         directive = _build_turn_directive(npc_match, skill_match, location_matches, session.scene_npcs)
@@ -1157,6 +1206,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         "location_npcs": [m.canonical_name for m in location_matches] if location_matches else [],
         "loc":           loc_canonical,
         "loc_trigger":   loc_trigger,
+        "active_events": active_event_ids,
         "history":       history,
     }
 
@@ -1180,6 +1230,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         "location_npcs": context_info["location_npcs"],
         "loc":           context_info["loc"],
         "loc_trigger":   context_info["loc_trigger"],
+        "active_events": context_info["active_events"],
     }) + "\n\n"
 
     messages = [{"role": "system", "content": system_content}] + history
@@ -1315,6 +1366,21 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 except Exception as _e:
                     _log(session, f"\n> *[%%DELTAS%% processing error: {_e}]*\n")
 
+        # ── %%EVENT%% ─────────────────────────────────────────────────────────
+        _event_m = _EVENT_LINE_RE.search(response_text)
+        if _event_m:
+            _fired_id = _event_m.group(1).strip()
+            _already_active = any(e.event_id == _fired_id for e in session.active_events)
+            if not _already_active:
+                _entry = _get_event_index().get(_fired_id)
+                if _entry:
+                    session.active_events.append(
+                        ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
+                    )
+                    _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                else:
+                    _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
+
     else:
         # ── Fallback: old flat-block format ───────────────────────────────────
         display_text = response_text
@@ -1357,6 +1423,21 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                     _write_npc_delta(_fields, session)
                 except Exception as _e:
                     _log(session, f"\n> *[%%DELTA%% processing error: {_e}]*\n")
+
+        # %%EVENT%% (flat-block fallback path)
+        _event_m_flat = _EVENT_LINE_RE.search(response_text)
+        if _event_m_flat:
+            _fired_id = _event_m_flat.group(1).strip()
+            _already_active = any(e.event_id == _fired_id for e in session.active_events)
+            if not _already_active:
+                _entry = _get_event_index().get(_fired_id)
+                if _entry:
+                    session.active_events.append(
+                        ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
+                    )
+                    _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                else:
+                    _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
     # ── Single patch_last if anything was stripped ────────────────────────────
     # Emitting one event after all stripping avoids the UI briefly flashing

@@ -88,6 +88,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "_npc_index", None)
     monkeypatch.setattr(sm, "_skill_index", None)
     monkeypatch.setattr(sm, "_location_index", None)
+    monkeypatch.setattr(sm, "_event_index", None)
 
     from api.main import app
     with TestClient(app, raise_server_exceptions=True) as c:

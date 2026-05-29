@@ -290,6 +290,11 @@ The **Swallowtail Festival** opening adventure has been fully implemented with:
   - current_tensions.md: Background conflicts, NPC reaction framework (pressure-based emotions)
   - encounter_01.md: Complete Combat specs (Goblin Cavalry, stat blocks, battlefield mechanics, scaling)
 
+- **Event injection system** (`adventure_path/08_events/`)
+  - Four event files covering the complete goblin raid arc (waves 1–3 + aftermath)
+  - LLM writes `%%EVENT%% <id>` to trigger scene transitions; content injected for 5 turns
+  - Event map (valid IDs + trigger conditions) appended to system prompt at boot
+
 - **Hallucination prevention** across all files
   - Explicit pressure tables preventing ambiguous NPC behavior
   - Concrete DC values for all checks (no "roll when you feel appropriate")

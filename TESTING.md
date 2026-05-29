@@ -1,6 +1,6 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (427 pytest + 88 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (450 pytest + 88 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 
@@ -418,7 +418,54 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 
 ---
 
-## 10. Log Sanity Check
+## 10. Event Injection
+
+**What automated tests cover:** `EventIndex` loading, file parsing, event firing from `%%EVENT%%` tags, TTL decrement and expiry, duplicate guard, unknown-ID guard, event map in system prompt, `%%EVENT%%` hidden from player token stream, `active_events` in SSE context event — all with temp directories.
+
+**What to probe manually (real LLM behaviour and on-screen visibility):**
+
+**Chain A — event fires from goblin attack**
+1. Boot a session (Dev Mode ON so you can see raw markers).
+2. Send: `I hear an alarm bell and shouts from the north gate — goblins!`
+3. Confirm the GM writes `%%EVENT%% goblin_attack_starts` somewhere in the raw response (visible in dev mode).
+4. Send a follow-up turn: `I draw my weapon and charge toward the commotion.`
+5. ✔ Intent bar or dev output shows event content injected — look for `## Active Event — goblin_attack_starts` in the system context.
+6. ✔ The GM response includes goblin stat details or wave-1 battlefield cues (from the event file content).
+
+**Chain B — event hidden from player (non-dev)**
+1. Boot a session with Dev Mode OFF.
+2. Play through to a point where the GM fires `%%EVENT%% goblin_attack_starts`.
+3. ✔ No `%%EVENT%%` line appears in the player chat — only narrative prose is visible.
+4. ✔ The intent bar still updates normally.
+
+**Chain C — event expires after 5 turns**
+1. Trigger `goblin_attack_starts` (see Chain A, step 3).
+2. Send 5 more player turns (any content).
+3. ✔ After 5 turns, the event content is no longer injected — subsequent dev-mode responses no longer show the `## Active Event` block.
+4. ✔ The SSE `context` event's `active_events` list is empty (check in dev mode network tab or backend log).
+
+**Chain D — multiple simultaneous events**
+1. Boot a session. Trigger `goblin_attack_starts`.
+2. On the next turn, send input that prompts the GM to write `%%EVENT%% fire_phase_begins`.
+3. ✔ Both events are injected into the system prompt simultaneously.
+4. ✔ Both `goblin_attack_starts` and `fire_phase_begins` appear in `active_events` in the SSE `context` event.
+5. ✔ Their TTLs decrement independently — the older event expires first.
+
+**Chain E — unknown event ID is silent**
+1. Boot Dev Mode ON.
+2. Send a turn that contains no real event trigger.
+3. Manually note: if the GM mistakenly writes `%%EVENT%% nonexistent_event`, the system should not crash.
+4. Check the backend log — ✔ a warning is logged but no exception and the turn completes normally.
+
+**Chain F — event map visible in system prompt (dev mode)**
+1. Boot Dev Mode ON.
+2. Inspect the first LLM payload in `outputs/api_log/` (the boot payload).
+3. ✔ The system prompt contains an `EVENT MAP` section listing at minimum `goblin_attack_starts`, `fire_phase_begins`, `cavalry_arrives`, `attack_repelled` with their trigger conditions.
+4. ✔ The map includes the `%%EVENT%%` syntax instruction (e.g. "Use `%%EVENT%% <id>` on its own line").
+
+---
+
+## 11. Log Sanity Check
 
 **Chain A — log structure + latency fields**
 After a session with at least 4 turns:

@@ -31,13 +31,13 @@ Event-triggered context injection. When the LLM decides a scene condition is met
 
 > **Open design question:** N=5 turns is a starting point. Needs tuning against real sessions. Also deferred: full content → compressed summary mid-window.
 
-- [ ] **Spec — `%%EVENT%%` block format** — define the response block syntax the LLM writes. Decide: single-line (`%%EVENT%% goblin_attack_starts`) or block form with fields. Add to the response structure spec in `_build_slim_system_prompt`. Document in `specs/`.
-- [ ] **Event content files** — create `adventure_path/08_events/` directory and write injectable content files for the four Swallowtail events: `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Each file: compact, prompt-ready, covers what the LLM needs for that event window.
-- [ ] **`EventIndex`** — new class in `api/context/event_index.py`. Loads `08_events/`, maps event ID → content. Same pattern as `LocationIndex`. Add lazy-loaded singleton `_event_index` + `_get_event_index()` to `session_manager.py`.
-- [ ] **Session state** — add `active_events: list` to `GameSession` (list of `ActiveEvent` dataclass: `event_id`, `content`, `turns_remaining`). Each turn: decrement all, remove expired.
-- [ ] **Parser** — extend `_parse_response_sections` (or add a sibling) to extract `%%EVENT%%` blocks from LLM responses. On detection: look up content via EventIndex, append to `active_events`.
-- [ ] **Injection** — in `_inject_context`, include active event content in the system payload alongside NPC/skill/location context. Expired events are already gone; no extra cleanup needed at injection time.
-- [ ] **Tests** — unit tests for EventIndex loading, parser extraction, turn countdown/expiry, injection presence, and the full round-trip (event fires → content injected → expires after N turns).
+- [x] **Spec — `%%EVENT%%` block format** — `specs/event-injection.feature` written: 8 ACs, inline syntax `%%EVENT%% <id>`, single event per response, TTL-only expiry.
+- [x] **Event content files** — `adventure_path/08_events/` created with `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Format: metadata header above `<!-- INJECT -->`, injectable content below.
+- [x] **`EventIndex`** — `api/context/event_index.py`: `EventEntry` dataclass, `EventIndex` with lazy load, `get()`, `event_map_text()`, `_parse_event_file()`. Singleton + `_get_event_index()` in `session_manager.py`.
+- [x] **Session state** — `ActiveEvent` dataclass (`event_id`, `content`, `turns_remaining`) added. `active_events: list` field on `GameSession`. TTL decremented in `_inject_context`; expired entries removed.
+- [x] **Parser** — `_EVENT_LINE_RE` regex; fires in both section-based and flat-block paths. Duplicate check (no TTL reset), unknown-ID guard (silent ignore).
+- [x] **Injection** — active event content injected in `_inject_context` alongside NPC/skill/location blocks. `%%EVENT%%` added to streaming filter `_END_MARKERS` (hidden from player). Event map appended to system prompt via `_build_slim_system_prompt`.
+- [x] **Tests** — `tests/test_event_injection.py`: 23 tests covering EventIndex loading, file parsing, event map text, firing, unknown ID, duplicate TTL, expiry, injection presence, expiry suppresses injection, SSE active_events list, player-hidden token stream. 450 total passing.
 
 ---
 
@@ -87,8 +87,8 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ### Session Pacing
 
-- [ ] **Session zero checklist** — create `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/SESSION_ZERO.md`. What the GM needs before session 1: player character files loaded, session 1 boot file prepared, leveling milestones known, faction pressures initialised at 0. This is a pre-flight checklist, not rules content.
 - [ ] **Encounter budget per session** — document in ACT_STRUCTURE.md: Act I is approximately 2–3 sessions (festival attack + aftermath + investigation hook). Act II is 3–5 sessions depending on Catacombs depth. Act III is 2–4 sessions for Thistletop. Knowing this prevents the LLM from burning through an act in a single exchange or dragging it over ten.
+- ~~[ ] **Session zero checklist** — create `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/SESSION_ZERO.md`. What the GM needs before session 1: player character files loaded, session 1 boot file prepared, leveling milestones known, faction pressures initialised at 0. This is a pre-flight checklist, not rules content.~~
 
 ---
 
