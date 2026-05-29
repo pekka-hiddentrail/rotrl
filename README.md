@@ -222,7 +222,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 322 pytest tests
+├── tests/                         # 427 pytest tests
 ├── ui/src/components/__tests__/    # 69 Vitest component tests
 ├── ui/src/__tests__/               # 19 Vitest App SSE integration tests
 │
@@ -434,7 +434,7 @@ ollama list                            # confirm model is pulled
 | API call logging (`outputs/api_log/`) with Groq token usage | ✅ Complete |
 | Groq rate limit display in header (RPM/TPM remaining) | ✅ Complete |
 | `stream_options` graceful degradation for older Groq models | ✅ Complete |
-| Test suites — 322 pytest + 88 Vitest tests | ✅ Complete |
+| Test suites — 427 pytest + 88 Vitest tests | ✅ Complete |
 | System Authority docs | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I (Swallowtail Festival + Goblin Raid) | ✅ Complete |

@@ -171,3 +171,95 @@ def test_chars_field_correct():
     )
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["summary"]["messages"][0]["chars"] == 5
+
+
+# ── AC-007: first_token_ms ────────────────────────────────────────────────────
+
+def test_first_token_ms_written_when_provided():
+    path = write_api_log(
+        provider="groq", session_id="ftms-test",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="Ok.", duration_ms=800,
+        first_token_ms=120,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["first_token_ms"] == 120
+
+
+def test_first_token_ms_none_by_default():
+    path = write_api_log(
+        provider="groq", session_id="ftms-default",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="", duration_ms=50,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["first_token_ms"] is None
+
+
+def test_first_token_ms_positive_when_set():
+    path = write_api_log(
+        provider="groq", session_id="ftms-pos",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="Ok.", duration_ms=500,
+        first_token_ms=42,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["first_token_ms"] > 0
+
+
+def test_first_token_ms_lte_duration_ms():
+    path = write_api_log(
+        provider="groq", session_id="ftms-lte",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="Ok.", duration_ms=1000,
+        first_token_ms=350,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["first_token_ms"] <= data["duration_ms"]
+
+
+# ── AC-008: section_format_ok ─────────────────────────────────────────────────
+
+def test_section_format_ok_true_when_set():
+    path = write_api_log(
+        provider="groq", session_id="sfo-true",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="%%NARRATIVE%%\nOk.", duration_ms=300,
+        section_format_ok=True,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["section_format_ok"] is True
+
+
+def test_section_format_ok_false_when_set():
+    path = write_api_log(
+        provider="groq", session_id="sfo-false",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="Plain prose.", duration_ms=300,
+        section_format_ok=False,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["section_format_ok"] is False
+
+
+def test_section_format_ok_none_by_default():
+    path = write_api_log(
+        provider="groq", session_id="sfo-default",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="", duration_ms=50,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["section_format_ok"] is None
+
+
+def test_section_format_ok_none_on_error():
+    path = write_api_log(
+        provider="groq", session_id="sfo-err",
+        session_number=1, turn=1,
+        raw_request=_req(), response_text="", duration_ms=50,
+        status="error", error="Connection refused",
+        section_format_ok=None,
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["section_format_ok"] is None
+    assert data["status"] == "error"

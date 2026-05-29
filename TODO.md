@@ -25,6 +25,73 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ---
 
+## Event Injection System (`%%EVENT%%`)
+
+Event-triggered context injection. When the LLM decides a scene condition is met, it writes `%%EVENT%%` with an event ID. The code loads the corresponding content and injects it for N turns (currently N=5). Separate from `%%DELTAS%%` which is for persistent state — events are transient and time-bounded.
+
+> **Open design question:** N=5 turns is a starting point. Needs tuning against real sessions. Also deferred: full content → compressed summary mid-window.
+
+- [ ] **Spec — `%%EVENT%%` block format** — define the response block syntax the LLM writes. Decide: single-line (`%%EVENT%% goblin_attack_starts`) or block form with fields. Add to the response structure spec in `_build_slim_system_prompt`. Document in `specs/`.
+- [ ] **Event content files** — create `adventure_path/08_events/` directory and write injectable content files for the four Swallowtail events: `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Each file: compact, prompt-ready, covers what the LLM needs for that event window.
+- [ ] **`EventIndex`** — new class in `api/context/event_index.py`. Loads `08_events/`, maps event ID → content. Same pattern as `LocationIndex`. Add lazy-loaded singleton `_event_index` + `_get_event_index()` to `session_manager.py`.
+- [ ] **Session state** — add `active_events: list` to `GameSession` (list of `ActiveEvent` dataclass: `event_id`, `content`, `turns_remaining`). Each turn: decrement all, remove expired.
+- [ ] **Parser** — extend `_parse_response_sections` (or add a sibling) to extract `%%EVENT%%` blocks from LLM responses. On detection: look up content via EventIndex, append to `active_events`.
+- [ ] **Injection** — in `_inject_context`, include active event content in the system payload alongside NPC/skill/location context. Expired events are already gone; no extra cleanup needed at injection time.
+- [ ] **Tests** — unit tests for EventIndex loading, parser extraction, turn countdown/expiry, injection presence, and the full round-trip (event fires → content injected → expires after N turns).
+
+---
+
+## Adventure Content
+
+The adventure is ~80% narrative infrastructure and ~20% mechanical execution. The items below are what's missing before a real session can run without the GM improvising from nothing. Priority order: things that block the first session come first; things that enrich later sessions come last.
+
+### Act I — Swallowtail Festival (levels 1–2)
+
+- [x] **Verify and complete bestiary files** — `goblin.md`, `goblin_commando.md`, and `goblin_warchanter.md` confirmed complete: AC, HP, attacks, combat scripts, morale thresholds, XP values all present.
+- [ ] **Festival encounter sequence** — `FESTIVAL_ENCOUNTER.md` created: three-wave raid script, Aldern rescue moment, Hemlock arrival timing, civilian rescue beat, aftermath state changes.
+- [x] **Aldern Foxglove introduction** — `base.md` verified complete (rescue hook, hunting trip, estate reference present); `knowledge.md` exists as session tracking log (correct format); backstory seed content lives in `base.md`.
+
+### Act II — Shadows in Sandpoint (levels 2–3)
+
+- [ ] **Catacombs of Wrath — dungeon document** — `CATACOMBS.md` created: 7-room prose layout, 5 sinspawn encounters, Runewell chamber with cross-reference to LOCATIONS.md, full treasure and XP tables, Karzoug name drop in Room 2, Sihedron Rune callback in Room 7.
+- [ ] **Sinspawn stat block** — `adventure_path/02_campaign_setting/bestiary/sinspawn.md` created: AC 14, HP 16, claws+bite, sinful bite (Will DC 12 or wrath compulsion), wrathful strike, GM narrative notes.
+- [ ] **Glassworks investigation sequence** — `GLASSWORKS.md` created: three entry hooks, room-by-room layout (main floor/office/upper floor), Tsuto encounter, Ameiko rescue, journal content, Catacombs entrance discovery, full aftermath.
+- [x] **Tsuto Kaijitsu combat stats** — added to `05_npcs/tsuto_kaijitsu/base.md`: monk 7, CR 6, AC 20, HP 42, full attack line, surrender condition, loot (journal).
+
+### Act III — Thistletop (levels 3–4)
+
+- [ ] **Thistletop — dungeon document** — `THISTLETOP.md` created: Nettlewood approach, rope bridge mechanics, full surface level (throne room, barracks, guard post, stables, trapdoor), Thassilonian level (entry passage sinspawn, Lyrie's library, yeth hound corridor, Nualia's sanctum, Runewell chamber), clearing conditions, Ameiko aftermath beat.
+- [x] **Nualia Tobyn — combat stats** — added to `05_npcs/nualia_tobyn/base.md`: cleric 4/barbarian 3, CR 7, AC 20, HP 62, spell list, aura of madness, demon claw, full combat script, redemption condition, loot (journal bridges to Book II).
+- [ ] **Thistletop goblin roster** — `05_npcs/thistletop_roster/base.md` created: Ripnugget (fighter 4, gecko mount, surrender), Bruthazmus (bugbear ranger 4, Ameiko connection, turning), Orik Vancaskerkin (fighter 4, mercenary, turning conditions), Lyrie Akenja (wizard 4, library intelligence, cooperation conditions), Stickfoot.
+- [ ] **Additional bestiary entries** — `goblin_dog.md` (CR 1, Goblin Pox disease, morale); `yeth_hound.md` (CR 3, Bay DC 13, flight, DR 5/silver). Warchanter variant already complete.
+
+### Secondary NPCs
+
+The existing "Sandpoint NPC skeletons" backlog item is correct but needs priority ordering. The 70+ secondary NPCs referenced in SANDPOINT_LOCATIONS.md have no `05_npcs/` files. Do these in tiers:
+
+- [ ] **Tier A — encounter anchors** (players will meet these in Act I regardless of what they do): Naffer Vosk (boneyard groundskeeper — relevant when PCs investigate the Tobyn crypt), Brodert Quink (town sage — the only person who can explain Thassilonian runes), Savah Bevaniky (armory — equipment, Act I context), Risa Magravi (Hagfish tavern — rumours, Sczarni colour), Shayliss Vinder (General Store — Ven Vinder subplot). Write `base.md` for each: name, role, one-sentence personality, location anchor, and what they know that's plot-relevant.
+- [ ] **Tier B — district colour** (players will encounter if they explore): Hannah Velerin (healer, White Deer district), Das Korvut (blacksmith, grief subplot), Ven Vinder (General Store owner, protective father), Banny Harker (lumber mill, Act II body discovery), Ibor Thorn (lumber mill partner). Same format as Tier A.
+- [ ] **Tier C — background presence** (can be invented on demand but benefit from anchors): remaining shop owners, militia deputies, festival vendors. Batch these as a single lightweight file `adventure_path/05_npcs/_SANDPOINT_SECONDARY.md` listing name/role/location for each — not full base.md files, just enough to prevent contradiction.
+
+### Location Coverage
+
+- [ ] **Brodert Quink's home/study** — add `adventure_path/07_locations/quinks_house/base.md`. Players will go here to research Thassilonian runes in Act II. Needs: description (crowded with maps and artifacts), what he can tell them (Sihedron Rune meaning, Thassilon's sin-magic system), and what he doesn't know (the Runewell's current state). The knowledge injection makes this a much richer scene than the LLM improvising a generic scholar.
+- [ ] **The Hagfish** — add `adventure_path/07_locations/hagfish/base.md`. Risa's tavern is the rough-end counterpart to the Rusty Dragon — different social class, Sczarni presence, rumour economy. Players will contrast the two inns early. Aliases: hagfish, risa's, the fish.
+- [ ] **Sandpoint Mercantile League / Valdemar Building** — add `adventure_path/07_locations/sandpoint_mercantile/base.md`. Economic power centre; the Valdemars and Scarnettis matter for faction pressure in Act II.
+- [ ] **Remaining high-traffic locations** — audit SANDPOINT_LOCATIONS.md and create `base.md` files for the next 5–8 buildings players are most likely to enter: General Store (Vinder's), Cathedral Rectory, Fatman's Feedbag, Town Hall interior, and the Jail. Each follows the existing template.
+
+### Skill Files
+
+- [x] **Expand skill coverage beyond the current five** — Added 17 skill files total: original 5 (Bluff, Diplomacy, Intimidate, Perception, Sense Motive) + 8 Knowledge/Stealth (Knowledge (Local), (Religion), (History), (Planes), (Arcana), (Nature), (Nobility), Stealth) + 4 Act I utility skills (Heal, Survival, Acrobatics, Disable Device). All RAW-complemented with `<!-- REFERENCE -->` separator. `_SKILL_TEMPLATE.md` updated with multi-table, condition modifier, fail-by-X, and Restriction section patterns. `SkillIndex` auto-discovers all files; no code changes needed.
+- [x] **Knowledge (history) and Knowledge (planes)** — Both added. Knowledge (Planes) covers outsiders (removed from Religion); Knowledge (History) covers Thassilonian lore. Both include 10+CR creature identification tables and library exception for untrained use.
+
+### Session Pacing
+
+- [ ] **Session zero checklist** — create `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/SESSION_ZERO.md`. What the GM needs before session 1: player character files loaded, session 1 boot file prepared, leveling milestones known, faction pressures initialised at 0. This is a pre-flight checklist, not rules content.
+- [ ] **Encounter budget per session** — document in ACT_STRUCTURE.md: Act I is approximately 2–3 sessions (festival attack + aftermath + investigation hook). Act II is 3–5 sessions depending on Catacombs depth. Act III is 2–4 sessions for Thistletop. Knowing this prevents the LLM from burning through an act in a single exchange or dragging it over ten.
+
+---
+
 ## NPC Lifecycle and Knowledge
 
 - [ ] Carry `scene_npcs` forward into the next session's boot file — `session.scene_npcs` is in-memory only and lost when the session ends. On `stream_end_session`, append the active NPC list to `sessions/session_NNN+1/boot.md` so the next session starts with those NPCs already in context. Without this the GM starts cold every session regardless of what was in-flight.
@@ -117,10 +184,11 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## Runtime and Tooling
 
+- [ ] **View Log — surface API call logs in the UI** — the current "View Log" button opens the session markdown log (`GET /api/sessions/{id}/log`). Extend or add a second view so the GM can browse `outputs/api_log/` from the UI without leaving the browser: a file list (newest first) and a JSON viewer for the selected entry. Key fields to surface prominently: `first_token_ms`, `duration_ms`, `section_format_ok`, `usage.total_tokens`, and `status`. The endpoints (`GET /api/log/api` and `GET /api/log/api/{filename}`) already exist. Decide whether to replace the current log button, add a tab, or open a separate panel.
 - [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
 - [ ] Session crash recovery — sessions are purely in-memory; a server restart during play loses `session.messages`, `scene_npcs`, `pending_roll`. After each turn, write a recovery snapshot to `outputs/sessions/{session_id}_snapshot.json`. On startup, detect orphaned snapshots and offer recovery.
-- [ ] Add `first_token_ms` to the API log so first-token latency is captured alongside total response time.
-- [ ] Add `section_format_ok` boolean to the API log (true if `_HAS_SECTION_MARKERS_RE` matched) to track structured-output adherence passively across real sessions.
+- [x] Add `first_token_ms` to the API log so first-token latency is captured alongside total response time. *(`timing_out` dict threaded through `_stream_groq` / `_stream_ollama`; first content token records elapsed ms since request dispatch; `null` on error. 4 unit tests + 2 integration tests in `test_groq_provider.py`. Spec: `specs/session-logging.feature` AC-007.)*
+- [x] Add `section_format_ok` boolean to the API log (true if `_HAS_SECTION_MARKERS_RE` matched) to track structured-output adherence passively across real sessions. *(`_HAS_SECTION_MARKERS_RE.search` applied to assembled response in the `finally` block; `null` on error, `true`/`false` on success. 4 unit tests + 2 integration tests. Spec: `specs/session-logging.feature` AC-008.)*
 - [x] Add `GET /api/health` endpoint — returns `{"status": "ok"}`. The UI can hit this before attempting boot and surface a clear "backend not running" message instead of a generic network error.
 - [x] Track Groq token usage per turn — `stream_options: {include_usage: true}` added to Groq payload; final usage chunk captured in `_stream_groq`; written to `write_api_log()` under `"usage"` key alongside duration.
 - [x] Surface Groq rate limits to the UI — per-minute `x-ratelimit-*` response headers captured in `_stream_groq` after each successful call; emitted as a `rate_limits` SSE event; `Header.tsx` shows a compact badge (e.g. `⚡ 4,500/6,000 TPM · 28/30 RPM`) with a tooltip showing reset times. 429 exhaustion now parses the error body to surface a human-readable daily-limit message instead of a bare HTTP error. 2 new tests.

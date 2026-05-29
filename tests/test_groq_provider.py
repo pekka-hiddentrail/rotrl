@@ -308,3 +308,105 @@ def test_groq_max_history_respected(groq_session, monkeypatch):
     # On the last call, messages sent should not exceed limit + system prompt
     last_payload = captured[-1]
     assert len(last_payload["messages"]) <= sm._GROQ_MAX_HISTORY + 1
+
+
+# ── AC-007: first_token_ms integration ───────────────────────────────────────
+
+def test_groq_first_token_ms_positive_in_api_log(groq_session, monkeypatch, tmp_path):
+    """first_token_ms is a positive integer in the API log after a successful turn."""
+    import api.api_logger as logger_mod
+    monkeypatch.setattr(logger_mod, "_API_LOG_DIR", tmp_path / "api_log")
+
+    client, session_id = groq_session
+    mock_resp = make_groq_stream_response(["%%NARRATIVE%%\nThe square hums with activity."])
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    import json as _json
+    log_files = list((tmp_path / "api_log").glob("*.json"))
+    assert log_files
+    data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert data["first_token_ms"] is not None
+    assert isinstance(data["first_token_ms"], int)
+    assert data["first_token_ms"] >= 0
+    assert data["first_token_ms"] <= data["duration_ms"]
+
+
+def test_groq_first_token_ms_null_on_error(groq_session, monkeypatch, tmp_path):
+    """first_token_ms is null in the API log when the request fails before any token."""
+    import api.api_logger as logger_mod
+    monkeypatch.setattr(logger_mod, "_API_LOG_DIR", tmp_path / "api_log")
+
+    client, session_id = groq_session
+
+    def fail_post(*a, **kw):
+        raise RuntimeError("simulated network failure")
+
+    with patch("api.session_manager._requests.post", side_effect=fail_post):
+        client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    import json as _json
+    log_files = list((tmp_path / "api_log").glob("*.json"))
+    assert log_files
+    data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert data["first_token_ms"] is None
+    assert data["status"] == "error"
+
+
+# ── AC-008: section_format_ok integration ────────────────────────────────────
+
+def test_groq_section_format_ok_true_for_sectioned_response(groq_session, monkeypatch, tmp_path):
+    """section_format_ok is True when the LLM uses %%SECTION%% markers."""
+    import api.api_logger as logger_mod
+    monkeypatch.setattr(logger_mod, "_API_LOG_DIR", tmp_path / "api_log")
+
+    client, session_id = groq_session
+    mock_resp = make_groq_stream_response(["%%NARRATIVE%%\nThe crowd cheers."])
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    import json as _json
+    log_files = list((tmp_path / "api_log").glob("*.json"))
+    assert log_files
+    data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert data["section_format_ok"] is True
+
+
+def test_groq_section_format_ok_false_for_flat_response(groq_session, monkeypatch, tmp_path):
+    """section_format_ok is False when the LLM returns flat prose (no markers)."""
+    import api.api_logger as logger_mod
+    monkeypatch.setattr(logger_mod, "_API_LOG_DIR", tmp_path / "api_log")
+
+    client, session_id = groq_session
+    mock_resp = make_groq_stream_response(["The market bustles with vendors."])
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    import json as _json
+    log_files = list((tmp_path / "api_log").glob("*.json"))
+    assert log_files
+    data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert data["section_format_ok"] is False
+
+
+def test_groq_section_format_ok_null_on_error(groq_session, monkeypatch, tmp_path):
+    """section_format_ok is null in the API log when the request errors out."""
+    import api.api_logger as logger_mod
+    monkeypatch.setattr(logger_mod, "_API_LOG_DIR", tmp_path / "api_log")
+
+    client, session_id = groq_session
+
+    def fail_post(*a, **kw):
+        raise RuntimeError("simulated failure")
+
+    with patch("api.session_manager._requests.post", side_effect=fail_post):
+        client.post(f"/api/sessions/{session_id}/turn", json={"input": "Look around."})
+
+    import json as _json
+    log_files = list((tmp_path / "api_log").glob("*.json"))
+    assert log_files
+    data = _json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert data["section_format_ok"] is None

@@ -17,7 +17,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 5 | Streaming filter, holdback buffer, `patch_last` event |
 | [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `06_rules/skills/` |
-| [session-logging.feature](session-logging.feature) | Backend | `@logging` `@session-log` `@api-log` `@dice` | 6 | `api_logger.py`, `*.log.md`, `api_log/` |
+| [session-logging.feature](session-logging.feature) | Backend | `@logging` `@session-log` `@api-log` `@dice` | 7 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok` |
 | [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button |
 | [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 6 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
 | [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 11 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration |
@@ -26,7 +26,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 
-**Total: 109 acceptance criteria across 17 feature files**
+**Total: 110 acceptance criteria across 17 feature files**
 
 ---
 

@@ -1,3 +1,6 @@
+<!-- REFERENCE -->
+<!-- Human reference only — not injected into the LLM prompt. The GM writes persistence entries; the LLM does not. -->
+
 # Persistence Handling Rules
 
 ## Authority

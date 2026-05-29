@@ -87,6 +87,7 @@ def client(tmp_path, monkeypatch):
     # don't get the real repo's index from a previous test run.
     monkeypatch.setattr(sm, "_npc_index", None)
     monkeypatch.setattr(sm, "_skill_index", None)
+    monkeypatch.setattr(sm, "_location_index", None)
 
     from api.main import app
     with TestClient(app, raise_server_exceptions=True) as c:

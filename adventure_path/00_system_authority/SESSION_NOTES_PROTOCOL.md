@@ -1,3 +1,6 @@
+<!-- REFERENCE -->
+<!-- Human reference only — not injected into the LLM prompt. Session notes are written by the GM pipeline, not the LLM. -->
+
 # SESSION_NOTES_PROTOCOL.md
 
 This document defines the mandatory rules and format for creating session notes. Session notes are **authoritative canon**. They exist to preserve game state, prevent hallucination, and ensure long-term consistency.

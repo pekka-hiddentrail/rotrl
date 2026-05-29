@@ -31,6 +31,8 @@ def write_api_log(
     raw_request: dict,       # the exact payload posted to the API — nothing added or removed
     response_text: str,
     duration_ms: int,
+    first_token_ms: Optional[int] = None,   # ms from request dispatch to first streamed token; null on error
+    section_format_ok: Optional[bool] = None,  # True if response uses %%SECTION%% markers; null on error
     status: str = "ok",
     error: Optional[str] = None,
     usage: Optional[dict] = None,  # token counts from Groq (prompt/completion/total)
@@ -56,14 +58,16 @@ def write_api_log(
         })
 
     data = {
-        "timestamp":      now.isoformat(timespec="milliseconds"),
-        "provider":       provider,
-        "session_id":     session_id,
-        "session_number": session_number,
-        "turn":           turn,
-        "status":         status,
-        "duration_ms":    duration_ms,
-        "usage":          usage,  # None for Ollama; {prompt_tokens, completion_tokens, total_tokens} for Groq
+        "timestamp":         now.isoformat(timespec="milliseconds"),
+        "provider":          provider,
+        "session_id":        session_id,
+        "session_number":    session_number,
+        "turn":              turn,
+        "status":            status,
+        "duration_ms":       duration_ms,
+        "first_token_ms":    first_token_ms,    # null on error or non-streaming path
+        "section_format_ok": section_format_ok, # null on error; true/false based on %%SECTION%% markers
+        "usage":             usage,  # None for Ollama; {prompt_tokens, completion_tokens, total_tokens} for Groq
 
         # ── Exact payload sent to the API ─────────────────────────────────────
         # This is identical to what Groq / Ollama received.  Nothing added.

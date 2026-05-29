@@ -95,6 +95,38 @@ And   for Ollama turns: the file contains usage: null
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-007 — API log records first-token latency alongside total duration
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM streams a response
+
+```gherkin
+Given a turn is submitted and the LLM streams tokens
+When  the first token arrives from the stream
+Then  the elapsed time from request dispatch to first token is captured as first_token_ms (integer milliseconds)
+When  the full stream completes
+Then  the API log JSON contains both first_token_ms and duration_ms
+And   first_token_ms is less than or equal to duration_ms
+And   first_token_ms is greater than 0
+```
+
+**Scenario:** LLM call errors before any token arrives
+
+```gherkin
+Given a turn is submitted and the LLM returns an error before streaming
+When  the API log JSON is written
+Then  first_token_ms is null
+And   status is "error"
+```
+
+**Notes:**
+- `first_token_ms` is measured from the moment the HTTP request is dispatched (not from when the user presses send).
+- For non-streaming providers (if any are added), `first_token_ms` equals `duration_ms`.
+- The field is always present in the log object; null only on error.
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
 ### AC-005 — Session log is readable via GET /api/sessions/{id}/log
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
@@ -122,6 +154,43 @@ When  GET /api/log/api is called
 Then  the response lists up to 50 filenames, newest first
 And   GET /api/log/api/{filename} returns the JSON contents of that file
 ```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-008 — `section_format_ok` boolean tracks structured-output adherence per call
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario A:** LLM response uses the section-based format
+
+```gherkin
+Given a turn completes and the LLM response contains at least one %%NARRATIVE%%, %%ROLL%%, %%DELTAS%%, or %%GENERATE%% marker
+When  the API call log JSON is written
+Then  the top-level field section_format_ok is true
+```
+
+**Scenario B:** LLM response omits section markers (flat / legacy format)
+
+```gherkin
+Given a turn completes and the LLM response contains no %%-section markers
+When  the API call log JSON is written
+Then  the top-level field section_format_ok is false
+```
+
+**Scenario C:** LLM call errors before any response is received
+
+```gherkin
+Given the LLM call fails before any content is streamed
+When  the API call log JSON is written
+Then  the top-level field section_format_ok is null
+And   status is "error"
+```
+
+**Notes:**
+- Detection uses `_HAS_SECTION_MARKERS_RE` (already module-level in `session_manager.py`); no new regex is introduced.
+- The field is computed from the fully assembled response (`"".join(accumulated)`) in the same `finally:` block that calls `write_api_log`, so the log and the parse result are always consistent.
+- `section_format_ok` is a passive observability field only — it does not affect session behaviour.
+- Intended use: scan `outputs/api_log/*.json` after a real session to measure the rate at which the model is following the structured output template (`section_format_ok == true`) vs falling back to flat prose.
 
 ---
 
