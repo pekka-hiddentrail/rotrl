@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
+import { makeCharacter } from '../test/fixtures'
 
 // ── Module mocks (hoisted by Vitest) ─────────────────────────────────────────
 
@@ -32,12 +33,14 @@ import {
   bootSession,
   sendTurn,
   endSessionWithRecap,
+  purgeSessionNpcs,
 } from '../api'
 import { useCharacters } from '../data/characters'
 
 const mockBoot = vi.mocked(bootSession)
 const mockSend = vi.mocked(sendTurn)
 const mockEnd = vi.mocked(endSessionWithRecap)
+const mockPurge = vi.mocked(purgeSessionNpcs)
 const mockUseChars = vi.mocked(useCharacters)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -84,6 +87,7 @@ function stubFetch(introText = '# Test Session Intro') {
 
 /** Common pre-test setup: mock characters hook and stub fetch. */
 function setup() {
+  vi.clearAllMocks()
   mockUseChars.mockReturnValue({
     characters: [],
     characterMap: {},
@@ -181,6 +185,103 @@ describe('App — boot flow', () => {
       expect(screen.getByText(/Boot failed \(503\)/)).toBeInTheDocument(),
     )
   })
+
+  it('character data hook error is surfaced in the app error bar', () => {
+    mockUseChars.mockReturnValue({
+      characters: [],
+      characterMap: {},
+      loading: false,
+      error: 'TypeError: Failed to fetch',
+    })
+
+    render(<App />)
+
+    expect(screen.getByText(/Character data: TypeError: Failed to fetch/)).toBeInTheDocument()
+  })
+
+  it('provider/model switching is sent to bootSession', async () => {
+    const user = userEvent.setup()
+    mockBoot.mockImplementation(() =>
+      makeGen({ type: 'done' as const, session_id: 'sess-ollama' }),
+    )
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: /Ollama/ }))
+    expect(screen.getByRole('combobox')).toHaveValue('qwen3:4b')
+    await user.click(screen.getByRole('button', { name: 'Boot Session' }))
+
+    await waitFor(() =>
+      expect(mockBoot).toHaveBeenCalledWith(1, 'qwen3:4b', false, 'ollama'),
+    )
+  })
+})
+
+// ── Header/session controls in App ────────────────────────────────────────────
+
+describe('App — header/session controls', () => {
+  let user: ReturnType<typeof userEvent.setup>
+
+  beforeEach(async () => {
+    setup()
+    user = userEvent.setup()
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('View Log opens the active session log in a new tab', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    await bootApp(user)
+
+    await user.click(screen.getByRole('button', { name: 'View Log' }))
+
+    expect(openSpy).toHaveBeenCalledWith('/api/sessions/sess-test/log', '_blank')
+    openSpy.mockRestore()
+  })
+
+  it('Purge NPCs uses inline confirm and shows the purge count toast', async () => {
+    mockPurge.mockResolvedValueOnce({ purged: 2 })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Purge NPCs' }))
+    expect(screen.getByText('Purge session NPCs?')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Yes' }))
+
+    await waitFor(() =>
+      expect(screen.getByText('2 session NPC directories removed.')).toBeInTheDocument(),
+    )
+    expect(mockPurge).toHaveBeenCalledOnce()
+  })
+
+  it('Purge NPCs collapses without calling the API when No is clicked', async () => {
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Purge NPCs' }))
+    await user.click(screen.getByRole('button', { name: 'No' }))
+
+    expect(mockPurge).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Purge NPCs' })).toBeInTheDocument()
+  })
+
+  it('Kill confirmation No keeps ending; Yes resets back to pre-boot', async () => {
+    await bootApp(user)
+    const { gen, release } = makeStalledGen<never>()
+    mockEnd.mockImplementation(() => gen)
+
+    await user.click(screen.getByRole('button', { name: 'End Session' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Kill' })).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Kill' }))
+    await user.click(screen.getByRole('button', { name: 'No' }))
+    expect(screen.getByRole('button', { name: 'Kill' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Boot Session' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Kill' }))
+    await user.click(screen.getByRole('button', { name: 'Yes' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Boot Session' })).toBeInTheDocument(),
+    )
+    release()
+  })
 })
 
 // ── Send-turn SSE event order ─────────────────────────────────────────────────
@@ -216,6 +317,34 @@ describe('App — send-turn SSE event handling', () => {
     await waitFor(() =>
       expect(screen.getByText('The tavern is quiet.')).toBeInTheDocument(),
     )
+  })
+
+  it('shows thinking indicator and disables input while waiting for first token', async () => {
+    const { gen, release } = makeStalledGen<never>()
+    mockSend.mockImplementation(() => gen)
+
+    await user.type(screen.getByRole('textbox'), 'listen')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(screen.getByText('listen')).toBeInTheDocument())
+    expect(document.querySelector('.thinking-bubble')).toBeInTheDocument()
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    const sendButton = document.querySelector('.btn-send') as HTMLButtonElement
+    expect(sendButton).toBeDisabled()
+    release()
+  })
+
+  it('shows the streaming cursor while a GM token bubble is still active', async () => {
+    const { gen, release } = makeStalledGen({ type: 'token' as const, content: 'A bell rings.' })
+    mockSend.mockImplementation(() => gen)
+
+    await user.type(screen.getByRole('textbox'), 'wait')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(screen.getByText(/A bell rings/)).toBeInTheDocument())
+    expect(document.querySelector('.cursor')).toBeInTheDocument()
+    release()
+    await waitFor(() => expect(document.querySelector('.cursor')).not.toBeInTheDocument())
   })
 
   it('patch_last event replaces the last GM message', async () => {
@@ -330,6 +459,75 @@ describe('App — send-turn SSE event handling', () => {
 })
 
 // ── Session end cleanup ───────────────────────────────────────────────────────
+
+// Character speaker integration
+
+describe('App - character speaker integration', () => {
+  let user: ReturnType<typeof userEvent.setup>
+  const yanyeeku = makeCharacter()
+  const ani = makeCharacter({
+    id: 'ani',
+    name: 'Ani',
+    portrait: '/portraits/ani.png',
+    color: '#60a0d0',
+    rune: 'A',
+  })
+
+  beforeEach(async () => {
+    setup()
+    mockUseChars.mockReturnValue({
+      characters: [yanyeeku, ani],
+      characterMap: { yanyeeku, ani },
+      loading: false,
+      error: null,
+    })
+    user = userEvent.setup()
+    await bootApp(user)
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  async function setActive(name: RegExp) {
+    await user.click(screen.getByTitle(name))
+    await user.click(screen.getByText(/Set Active/))
+  }
+
+  it('persists the active speaker and sends prefixed backend payloads while chat stays clean', async () => {
+    mockSend.mockImplementation(() => makeGen<never>())
+    await setActive(/Yanyeeku/)
+    expect(screen.getByText(/Speaking as/)).toBeInTheDocument()
+    expect(screen.getAllByText('Yanyeeku').length).toBeGreaterThan(1)
+
+    await user.type(screen.getByRole('textbox'), 'I ask Ameiko about the raid.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith('sess-test', '@Yanyeeku: "I ask Ameiko about the raid."'),
+    )
+    expect(screen.getByText('I ask Ameiko about the raid.')).toBeInTheDocument()
+    expect(screen.queryByText(/@Yanyeeku/)).not.toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox'), 'I listen for the bells.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(2))
+    expect(mockSend).toHaveBeenLastCalledWith('sess-test', '@Yanyeeku: "I listen for the bells."')
+  })
+
+  it('switches active speaker and clears active state from the sidebar menu', async () => {
+    await setActive(/Yanyeeku/)
+    expect(screen.getByTitle(/Yanyeeku/)).toHaveClass('active')
+    expect(screen.getAllByText('Yanyeeku').length).toBeGreaterThan(1)
+
+    await setActive(/Ani/)
+    expect(screen.getByTitle(/Yanyeeku/)).not.toHaveClass('active')
+    expect(screen.getByTitle(/Ani/)).toHaveClass('active')
+    expect(screen.getAllByText('Ani').length).toBeGreaterThan(1)
+
+    await user.click(screen.getByTitle(/Ani/))
+    await user.click(screen.getByText(/Clear Active/))
+    expect(screen.getByTitle(/Ani/)).not.toHaveClass('active')
+    expect(screen.queryByText(/Speaking as/)).not.toBeInTheDocument()
+  })
+})
 
 describe('App — session end cleanup', () => {
   let user: ReturnType<typeof userEvent.setup>

@@ -1,11 +1,11 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (487 pytest + 93 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (528 pytest + 194 Vitest + 7 Playwright) cannot reach: real LLM behaviour, streaming feel against a live backend, on-disk side effects, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 
 ```
-pytest && cd ui && npx vitest run
+pytest && cd ui && npm run test && npm run test:e2e
 ```
 
 Then start the stack:
