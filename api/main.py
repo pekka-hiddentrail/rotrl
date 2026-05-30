@@ -198,7 +198,7 @@ def get_api_log(filename: str):
 @app.get("/api/characters")
 def get_characters():
     """Return all character data from ui/public/data/ as a list."""
-    data_dir = _REPO_ROOT / "ui" / "public" / "data"
+    data_dir = (_REPO_ROOT / "ui" / "public" / "data").resolve()
     index_path = data_dir / "characters.json"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="characters.json not found")
@@ -206,7 +206,11 @@ def get_characters():
     ids: list[str] = _json.loads(index_path.read_text(encoding="utf-8"))
     characters = []
     for cid in ids:
-        path = data_dir / f"{cid}.json"
+        if not isinstance(cid, str):
+            raise HTTPException(status_code=400, detail="Invalid character ID")
+        path = (data_dir / f"{cid}.json").resolve()
+        if not path.is_relative_to(data_dir):
+            raise HTTPException(status_code=400, detail="Invalid character ID")
         if not path.exists():
             raise HTTPException(status_code=404, detail=f"{cid}.json not found")
         characters.append(_json.loads(path.read_text(encoding="utf-8")))
