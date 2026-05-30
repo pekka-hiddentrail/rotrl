@@ -14,7 +14,8 @@ from api.session_manager import (
     _FULL_MAX_HISTORY,
     _GROQ_MAX_SYSTEM_CHARS,
     _FORMAT_EXAMPLE,
-    _COMBAT_FULL_SPEC,
+    _COMBAT_SPEC_ONGOING,
+    _COMBAT_SPEC_ROUND1,
     _NARRATIVE_SPEC,
     _ROLL_SPEC,
     _GENERATE_SPEC,
@@ -493,7 +494,7 @@ class TestCombatFullSpec:
             combat_state=CombatState(round=2, combatants=[_goblin_combatant()]),
         )
         content, _ = _call(session)
-        assert _COMBAT_FULL_SPEC in content
+        assert _COMBAT_SPEC_ONGOING in content
 
     def test_full_spec_not_injected_when_no_combat(self):
         """Without active combat the full spec must NOT appear."""
@@ -502,12 +503,12 @@ class TestCombatFullSpec:
             combat_state=None,
         )
         content, _ = _call(session)
-        assert _COMBAT_FULL_SPEC not in content
+        assert _COMBAT_SPEC_ONGOING not in content
 
     def test_full_spec_includes_format_and_round_rule(self):
-        """Sanity-check: spec must contain the row format and the round-0 rule."""
-        assert "hp:" in _COMBAT_FULL_SPEC
-        assert "round: 0" in _COMBAT_FULL_SPEC
+        """Sanity-check: round-1 spec has HP fields; ongoing spec has round-0 rule."""
+        assert "hp:" in _COMBAT_SPEC_ROUND1       # round-1 spec supplies HP for init
+        assert "round: 0" in _COMBAT_SPEC_ONGOING  # ongoing spec carries the clear rule
 
     def test_combat_header_still_shows_round_number(self):
         """[COMBAT ONGOING — round N] header must still carry the actual round."""
@@ -527,7 +528,7 @@ class TestCombatFullSpec:
         )
         content, _ = _call(session)
         assert "Gerhard Pickle" in content
-        assert _COMBAT_FULL_SPEC in content
+        assert _COMBAT_SPEC_ONGOING in content
 
 
 # ── Conditional section specs ─────────────────────────────────────────────────

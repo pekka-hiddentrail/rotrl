@@ -12,7 +12,7 @@ from api.context.skill_lookup import SkillIndex, _parse_skill_file
 
 def _make_skill(base: Path, filename: str, name: str,
                 triggers: list[str], body: str, ref: str = "") -> Path:
-    skills_dir = base / "adventure_path" / "06_rules" / "skills"
+    skills_dir = base / "adventure_path" / "04_rules" / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
     content = f"# {name}\n**Triggers:** {', '.join(triggers)}\n{body}"
     if ref:
@@ -120,7 +120,7 @@ def test_known_skills_lists_all(skill_root):
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 def test_empty_skills_dir(tmp_path):
-    (tmp_path / "adventure_path" / "06_rules" / "skills").mkdir(parents=True)
+    (tmp_path / "adventure_path" / "04_rules" / "skills").mkdir(parents=True)
     idx = SkillIndex(_repo_root=tmp_path)
     assert idx.detect("persuade") is None
     assert idx.known_skills == []
@@ -132,7 +132,7 @@ def test_missing_skills_dir(tmp_path):
 
 
 def test_underscore_files_skipped(tmp_path):
-    skills_dir = tmp_path / "adventure_path" / "06_rules" / "skills"
+    skills_dir = tmp_path / "adventure_path" / "04_rules" / "skills"
     skills_dir.mkdir(parents=True)
     (skills_dir / "_README.md").write_text("# README\n**Triggers:** readme\nbody", encoding="utf-8")
     idx = SkillIndex(_repo_root=tmp_path)

@@ -22,10 +22,10 @@ This file is a working backlog for the RotRL automation project. Items are group
 - [ ] **Generate HTML coverage heatmap** — combine code line coverage and feature AC coverage into one visual; dark = no tests, red = code covered but no AC, green = both
 - [ ] **Define risk register** — identify high-risk areas (LLM compliance, session state loss, data corruption); map each risk to covering tests or flag as gap
 - [ ] **Spike: agent-driven exploratory test harness** — one LLM plays as player (sends PF1e actions via the live SSE API), a second evaluates each GM response against a rubric (no leaked markers, narrative length, no invented lore)
-- [ ] Test the full end-session SSE stream with mocked Groq — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical)*
-- [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high)*
-- [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(high)*
-- [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low)*
+- [ ] Test the full end-session SSE stream with mocked Groq — verify status events arrive in order, recap and boot files are written, and the session is removed from memory. *(critical — error paths covered in `test_end_session.py`; success path not tested)*
+- [ ] Test turn input validation at the API boundary — confirm the error event is returned and no message is appended to session history when input is rejected. *(high — `validate_turn_input()` tested in isolation in `test_boot_prompt.py`; HTTP boundary + history-not-appended not tested)*
+- [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(low — synthetic coverage in `test_recap_header.py` is solid; real-sample gap is narrow)*
+- [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low — single-die case covered in `test_roll_logged`; multi-die breakdown not tested)*
 - [ ] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
 - [ ] Add contract tests for the SSE event shape — assert that every event emitted by boot, turn, and end-session has a `type` field and matches the known union of types. *(low)*
 - [x] **E2E — Playwright UI test suite** — add Playwright to `ui/` (`npm install -D @playwright/test`). Cover the seven key flows with a mocked backend (MSW or a lightweight FastAPI fixture): (1) boot → session badge appears; (2) send turn → GM message streams in; (3) `roll_request` event → dice panel activates; (4) end session → chat clears; (5) Kill button on stuck ending → inline confirm → UI resets to pre-boot; (6) Purge NPCs button → inline confirm → toast notification; (7) character sidebar → sheet modal opens. These are the regression cases that break silently on UI refactors and are invisible to pytest. *(`ui/e2e/app-flows.spec.ts`; `ui/playwright.config.ts`; `npm run test:e2e` — 7 Playwright tests passing.)*
@@ -68,34 +68,34 @@ The adventure is ~80% narrative infrastructure and ~20% mechanical execution. Th
 ### Act II — Shadows in Sandpoint (levels 2–3)
 
 - [ ] **Catacombs of Wrath — dungeon document** — `CATACOMBS.md` created: 7-room prose layout, 5 sinspawn encounters, Runewell chamber with cross-reference to LOCATIONS.md, full treasure and XP tables, Karzoug name drop in Room 2, Sihedron Rune callback in Room 7.
-- [ ] **Sinspawn stat block** — `adventure_path/02_campaign_setting/bestiary/sinspawn.md` created: AC 14, HP 16, claws+bite, sinful bite (Will DC 12 or wrath compulsion), wrathful strike, GM narrative notes.
+- [ ] **Sinspawn stat block** — `adventure_path/05_campaign_setting/bestiary/sinspawn.md` created: AC 14, HP 16, claws+bite, sinful bite (Will DC 12 or wrath compulsion), wrathful strike, GM narrative notes.
 - [ ] **Glassworks investigation sequence** — `GLASSWORKS.md` created: three entry hooks, room-by-room layout (main floor/office/upper floor), Tsuto encounter, Ameiko rescue, journal content, Catacombs entrance discovery, full aftermath.
-- [x] **Tsuto Kaijitsu combat stats** — added to `05_npcs/tsuto_kaijitsu/base.md`: monk 7, CR 6, AC 20, HP 42, full attack line, surrender condition, loot (journal).
+- [x] **Tsuto Kaijitsu combat stats** — added to `01_npcs/tsuto_kaijitsu/base.md`: monk 7, CR 6, AC 20, HP 42, full attack line, surrender condition, loot (journal).
 
 ### Act III — Thistletop (levels 3–4)
 
 - [ ] **Thistletop — dungeon document** — `THISTLETOP.md` created: Nettlewood approach, rope bridge mechanics, full surface level (throne room, barracks, guard post, stables, trapdoor), Thassilonian level (entry passage sinspawn, Lyrie's library, yeth hound corridor, Nualia's sanctum, Runewell chamber), clearing conditions, Ameiko aftermath beat.
-- [ ] **Thistletop goblin roster** — `05_npcs/thistletop_roster/base.md` created: Ripnugget (fighter 4, gecko mount, surrender), Bruthazmus (bugbear ranger 4, Ameiko connection, turning), Orik Vancaskerkin (fighter 4, mercenary, turning conditions), Lyrie Akenja (wizard 4, library intelligence, cooperation conditions), Stickfoot.
+- [ ] **Thistletop goblin roster** — `01_npcs/thistletop_roster/base.md` created: Ripnugget (fighter 4, gecko mount, surrender), Bruthazmus (bugbear ranger 4, Ameiko connection, turning), Orik Vancaskerkin (fighter 4, mercenary, turning conditions), Lyrie Akenja (wizard 4, library intelligence, cooperation conditions), Stickfoot.
 - [ ] **Additional bestiary entries** — `goblin_dog.md` (CR 1, Goblin Pox disease, morale); `yeth_hound.md` (CR 3, Bay DC 13, flight, DR 5/silver). Warchanter variant already complete.
-- [x] **Nualia Tobyn — combat stats** — added to `05_npcs/nualia_tobyn/base.md`: cleric 4/barbarian 3, CR 7, AC 20, HP 62, spell list, aura of madness, demon claw, full combat script, redemption condition, loot (journal bridges to Book II).
+- [x] **Nualia Tobyn — combat stats** — added to `01_npcs/nualia_tobyn/base.md`: cleric 4/barbarian 3, CR 7, AC 20, HP 62, spell list, aura of madness, demon claw, full combat script, redemption condition, loot (journal bridges to Book II).
 
 ### Monster Library
 
-- [ ] **Create `adventure_path/09_monsters/` folder** — centralise all generic monster stat blocks here. Each file named `<slug>.md` (e.g. `goblin.md`, `sinspawn.md`, `yeth_hound.md`). Minimum fields per entry: AC, HP, speed, attacks (name / to-hit / damage), saves, special abilities, morale threshold, XP value, and short GM combat notes. The campaign-specific bestiary files currently scattered in `02_campaign_setting/bestiary/` should move here; named unique NPCs (Nualia, Tsuto) stay in `05_npcs/`. `LocationIndex`-style lazy loading and alias detection can be added later if the GM needs per-encounter monster context injected automatically.
+- [ ] **Create `adventure_path/09_monsters/` folder** — centralise all generic monster stat blocks here. Each file named `<slug>.md` (e.g. `goblin.md`, `sinspawn.md`, `yeth_hound.md`). Minimum fields per entry: AC, HP, speed, attacks (name / to-hit / damage), saves, special abilities, morale threshold, XP value, and short GM combat notes. The campaign-specific bestiary files currently scattered in `05_campaign_setting/bestiary/` should move here; named unique NPCs (Nualia, Tsuto) stay in `01_npcs/`. `LocationIndex`-style lazy loading and alias detection can be added later if the GM needs per-encounter monster context injected automatically.
 
 ### Secondary NPCs
 
-The existing "Sandpoint NPC skeletons" backlog item is correct but needs priority ordering. The 70+ secondary NPCs referenced in SANDPOINT_LOCATIONS.md have no `05_npcs/` files. Do these in tiers:
+The existing "Sandpoint NPC skeletons" backlog item is correct but needs priority ordering. The 70+ secondary NPCs referenced in SANDPOINT_LOCATIONS.md have no `01_npcs/` files. Do these in tiers:
 
 - [ ] **Tier A — encounter anchors** (players will meet these in Act I regardless of what they do): Naffer Vosk (boneyard groundskeeper — relevant when PCs investigate the Tobyn crypt), Brodert Quink (town sage — the only person who can explain Thassilonian runes), Savah Bevaniky (armory — equipment, Act I context), Risa Magravi (Hagfish tavern — rumours, Sczarni colour), Shayliss Vinder (General Store — Ven Vinder subplot). Write `base.md` for each: name, role, one-sentence personality, location anchor, and what they know that's plot-relevant.
 - [ ] **Tier B — district colour** (players will encounter if they explore): Hannah Velerin (healer, White Deer district), Das Korvut (blacksmith, grief subplot), Ven Vinder (General Store owner, protective father), Banny Harker (lumber mill, Act II body discovery), Ibor Thorn (lumber mill partner). Same format as Tier A.
-- [ ] **Tier C — background presence** (can be invented on demand but benefit from anchors): remaining shop owners, militia deputies, festival vendors. Batch these as a single lightweight file `adventure_path/05_npcs/_SANDPOINT_SECONDARY.md` listing name/role/location for each — not full base.md files, just enough to prevent contradiction.
+- [ ] **Tier C — background presence** (can be invented on demand but benefit from anchors): remaining shop owners, militia deputies, festival vendors. Batch these as a single lightweight file `adventure_path/01_npcs/_SANDPOINT_SECONDARY.md` listing name/role/location for each — not full base.md files, just enough to prevent contradiction.
 
 ### Location Coverage
 
-- [ ] **Brodert Quink's home/study** — add `adventure_path/07_locations/quinks_house/base.md`. Players will go here to research Thassilonian runes in Act II. Needs: description (crowded with maps and artifacts), what he can tell them (Sihedron Rune meaning, Thassilon's sin-magic system), and what he doesn't know (the Runewell's current state). The knowledge injection makes this a much richer scene than the LLM improvising a generic scholar.
-- [ ] **The Hagfish** — add `adventure_path/07_locations/hagfish/base.md`. Risa's tavern is the rough-end counterpart to the Rusty Dragon — different social class, Sczarni presence, rumour economy. Players will contrast the two inns early. Aliases: hagfish, risa's, the fish.
-- [ ] **Sandpoint Mercantile League / Valdemar Building** — add `adventure_path/07_locations/sandpoint_mercantile/base.md`. Economic power centre; the Valdemars and Scarnettis matter for faction pressure in Act II.
+- [ ] **Brodert Quink's home/study** — add `adventure_path/03_locations/quinks_house/base.md`. Players will go here to research Thassilonian runes in Act II. Needs: description (crowded with maps and artifacts), what he can tell them (Sihedron Rune meaning, Thassilon's sin-magic system), and what he doesn't know (the Runewell's current state). The knowledge injection makes this a much richer scene than the LLM improvising a generic scholar.
+- [ ] **The Hagfish** — add `adventure_path/03_locations/hagfish/base.md`. Risa's tavern is the rough-end counterpart to the Rusty Dragon — different social class, Sczarni presence, rumour economy. Players will contrast the two inns early. Aliases: hagfish, risa's, the fish.
+- [ ] **Sandpoint Mercantile League / Valdemar Building** — add `adventure_path/03_locations/sandpoint_mercantile/base.md`. Economic power centre; the Valdemars and Scarnettis matter for faction pressure in Act II.
 - [ ] **Remaining high-traffic locations** — audit SANDPOINT_LOCATIONS.md and create `base.md` files for the next 5–8 buildings players are most likely to enter: General Store (Vinder's), Cathedral Rectory, Fatman's Feedbag, Town Hall interior, and the Jail. Each follows the existing template.
 
 ### Skill Files
@@ -106,7 +106,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 ### Session Pacing
 
 - [ ] **Encounter budget per session** — document in ACT_STRUCTURE.md: Act I is approximately 2–3 sessions (festival attack + aftermath + investigation hook). Act II is 3–5 sessions depending on Catacombs depth. Act III is 2–4 sessions for Thistletop. Knowing this prevents the LLM from burning through an act in a single exchange or dragging it over ten.
-- ~~[ ] **Session zero checklist** — create `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/SESSION_ZERO.md`. What the GM needs before session 1: player character files loaded, session 1 boot file prepared, leveling milestones known, faction pressures initialised at 0. This is a pre-flight checklist, not rules content.~~
+- ~~[ ] **Session zero checklist** — create `adventure_path/06_books/BOOK_01_BURNT_OFFERINGS/SESSION_ZERO.md`. What the GM needs before session 1: player character files loaded, session 1 boot file prepared, leveling milestones known, faction pressures initialised at 0. This is a pre-flight checklist, not rules content.~~
 
 ---
 
@@ -153,7 +153,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Combat System
 
-Combat runs through the existing narrative loop — the LLM drives pacing, the system tracks state. Three tiers of fidelity, each independently shippable.
+Combat runs through the existing narrative loop — the LLM drives pacing, the system tracks state. Five tiers of fidelity, each independently shippable. Tier 1 is complete; Tiers 1.1 and 1.5 establish HP authority and the interactive attack flow before Tier 2 adds mechanical depth.
 
 > **Layout note:** when the CombatPanel is visible it occupies the right column. DicePanel moves to the left column (stacked beneath CharacterSidebar), freeing the right for initiative/HP display. Out of combat the layout reverts to current (CharSidebar left · Chat centre · DicePanel right).
 
@@ -161,7 +161,7 @@ Combat runs through the existing narrative loop — the LLM drives pacing, the s
 
 ### Combat Rules Reference
 
-- [ ] **Create `adventure_path/06_rules/combat/` folder** — basic PF1e combat reference files for the GM agent: attack rolls, AC, initiative, HP, actions per round, AoO. Same format as skill files with `<!-- REFERENCE -->` separator so the RAG system can inject relevant sections per turn.
+- [ ] **Create `adventure_path/04_rules/combat/` folder** — basic PF1e combat reference files for the GM agent: attack rolls, AC, initiative, HP, actions per round, AoO. Same format as skill files with `<!-- REFERENCE -->` separator so the RAG system can inject relevant sections per turn.
 
 ### Tier 1 — Combat Tracker Panel (MVP)
 
@@ -203,23 +203,106 @@ combatants:
 
 ---
 
-### Tier 2 — Attack Resolution
+### Tier 1.1 — HP Authority Shift
 
-Extend `%%ROLL%%` to cover attack rolls. The LLM writes a structured attack block; the backend resolves to-hit and damage automatically; `combat_state` HP updates in the same turn.
+Move HP ownership from the LLM to the backend. In Tier 1 the LLM writes HP values every turn
+and inevitably drifts (arithmetic errors, forgetting damage between rounds). Tier 1.1 makes the
+backend the single source of truth so Tier 1.5 attack resolution can update HP reliably.
 
-- [ ] **Attack `%%ROLL%%` subtype** — `type: attack`, fields: `attacker`, `target`, `attack_bonus: +N`, `target_ac: N`, `damage_dice: NdN+N`, `on_hit`, `on_miss`. Backend rolls `d20 + attack_bonus` vs `target_ac`; on hit rolls `damage_dice`; decrements `combat_state` HP for target; pushes `roll_result` + `combat_update` SSE events. DicePanel shows attack roll animation.
-- [ ] **Multi-attack support** — PF1e iterative attacks: up to three `%%ROLL%%` blocks per response with `type: attack` and `sequence: 1/2/3`. Parser allows multiple attack blocks; each resolved independently.
-- [ ] **AoO / immediate reactions** — `type: attack`, `trigger: aoo`. Resolved the same way; flagged in the SSE event so the UI can show "Attack of Opportunity" label.
+> **Authority model after Tier 1.1:**
+> LLM writes: round number, initiative, status (active/unconscious/fled/dead), conditions, new combatants.
+> Backend owns: HP values. LLM never writes HP after round 1 — it reads current HP from injected context.
+
+#### Backend
+
+- [x] **CB1.1-1 — HP stripped from `%%COMBAT%%` format after round 1** — on combat start (first turn `session.combat_state` is None), accept HP values from the LLM to initialise `combat_state`. On subsequent turns, parse and discard HP columns from `%%COMBAT%%` lines; backend retains its own HP values. `_parse_combat_block` gains an `existing_state: Optional[CombatState]` parameter — when provided, it copies HP from matching combatants by name instead of using the LLM-written values.
+- [x] **CB1.1-2 — `%%COMBAT%%` format update in system prompt** — two spec constants: `_COMBAT_SPEC_ROUND1` (with `hp: cur/max` for initialisation) and `_COMBAT_SPEC_ONGOING` (no HP columns; references `%%HP%%` for deltas). `_inject_context` injects `_COMBAT_SPEC_ONGOING` when `combat_state.round > 0`.
+- [x] **CB1.1-3 — HP context injection** — `[CURRENT HP]` block injected into per-turn system content alongside the combat reminder. Lists each combatant with `name: cur/max (status)` so the LLM can narrate accurately without recomputing HP.
+- [x] **CB1.1-4 — `%%HP%%` delta block for non-attack HP changes** — `_HP_BLOCK_RE`, `_parse_hp_deltas`, `_apply_hp_deltas` added. Processed in both section-based and flat-block paths after `%%DELTAS%%` and before `%%COMBAT%%`. Block stripped from player token stream (`"\n%%HP%%"` added to `_END_MARKERS`). Silently ignored when `combat_state` is None.
+
+#### Tests
+
+- [x] **CB1.1-T** — `tests/test_combat_hp.py`: 29 tests. HP inheritance (9 cases: init from LLM, preserve from backend, new combatant, case-insensitive, round-0 unaffected, parse-failure still None, backward-compat); `_parse_hp_deltas` (8 cases); `_apply_hp_deltas` (7 cases: damage, healing-clamp, overkill-clamp, unknown-name, multiple, case-insensitive, None-state); HP context injection (2 cases); stream stripping (1 case); full-turn integration (2 cases). 584 total passing (excl. 2 pre-existing test_end_session failures unrelated to this work).
 
 ---
 
-### Tier 3 — Full Simulator
+### Tier 1.5 — Interactive PC Attack Flow
 
-- [ ] **Abstract grid** — canvas overlay on the chat area (not a full map). 10×10 squares, coloured tokens (PC = blue, enemy = red, ally = green), drag to reposition. Token label = first name only. Grid hidden out of combat.
-- [ ] **AoE templates** — cone (60°), burst (radius N), line. Drawn on grid on hover when LLM writes `%%AOE%%` block. Affected tokens highlighted.
-- [ ] **Condition tracking** — icon strip beneath each combatant row: prone, grappled, blinded, sickened, frightened, entangled. LLM writes `conditions: [prone, grappled]` in combatant line. Each condition has a tooltip with the PF1e mechanical effect.
-- [ ] **Spell slot tracking** — add `spell_slots` map to PC character data; display in CharacterSidebar below HP; decremented by `%%CAST%%` block.
-- [ ] **Full PF1e attack sequence** — full BAB iterative (-5/-10), TWF (-2/-2 main/off), natural attacks (secondary -5), CMB/CMD bull rush / trip / grapple. Each resolved as a sub-roll chain, results accumulated before the LLM sees them.
+The player rolls dice for PC attacks; backend auto-rolls for monsters. LLM writes `%%ATTACK%%`
+blocks to signal which attacks happen this round (with stats). All dice are resolved before the
+LLM is called again — minimising LLM calls during mechanical resolution and eliminating the
+chance of the LLM inventing roll outcomes.
+
+> **Flow:**
+> 1. LLM writes `%%ATTACK%%` block (one line per attack, in initiative order)
+> 2. Backend splits: NPC attacks auto-resolved immediately; PC attacks queued
+> 3. NPC results emitted as `attack_result` SSE events
+> 4. `attack_request` SSE emitted for first PC attack → player rolls to-hit (d20)
+> 5. Hit → `damage_request` SSE → player rolls damage dice
+> 6. Miss / damage resolved → advance queue
+> 7. Queue empty → all results injected into history → LLM called → response streamed
+
+#### `%%ATTACK%%` block format
+
+```
+%%ATTACK%%
+- attacker: Goblin 1   · target: Shalelu   · bonus: +4 · damage: 1d4+2 · type: melee
+- attacker: Thaelion   · target: Goblin 2  · bonus: +5 · damage: 1d8+3 · type: melee
+```
+
+Fields: `attacker` (name), `target` (name), `bonus` (e.g. `+4`, `-1`), `damage` (dice expr), `type` (`melee`|`ranged`|`spell`, default `melee`). Backend identifies PC vs NPC by comparing `attacker` against known PC names from the session. Multiple `-` lines = multiple attacks this round.
+
+#### Backend
+
+- [ ] **CB1.5-1 — `_parse_attack_line` + `_parse_attack_block`** — same separator pattern as `_parse_combatant_line`. `_parse_attack_block(text) → list[dict]`. `_ATTACK_BLOCK_RE` regex (same pattern as `_COMBAT_BLOCK_RE`). Added to both section-based and flat-block paths. `"\n%%ATTACK%%"` added to `_END_MARKERS`; NOT added to `_HAS_SECTION_MARKERS_RE` (same reason as COMBAT — avoids NARRATIVE fallback leak).
+- [ ] **CB1.5-2 — `_roll_dice(expr: str) → tuple[list[int], int]`** — parse `NdN+M` / `NdN` / `NdN-M`; roll with `random.randint`; return `(individual_rolls, total)`. Invalid expr → `([], 0)`.
+- [ ] **CB1.5-3 — `PendingAttack` dataclass + session attack queue** — `PendingAttack(attacker, target, bonus, damage_expr, attack_type, is_pc)` with resolution fields (`hit_roll`, `hit`, `damage_rolls`, `damage_total`). `GameSession` gains `attack_queue: list[PendingAttack]` and `attack_results: list[dict]` (collected this round, injected into history when queue empties).
+- [ ] **CB1.5-4 — NPC auto-resolution** — when `%%ATTACK%%` is parsed, NPC attacks resolved immediately via `_resolve_npc_attack(attack, combat_state)`: roll d20 + bonus vs target AC, roll damage on hit, update `combat_state` HP via `%%HP%%` delta logic, add result to `attack_results`, emit `attack_result` SSE.
+- [ ] **CB1.5-5 — `POST /sessions/{id}/resolve_attack_roll`** — takes `{ rolled: int }`. Compares `rolled + bonus` vs target AC from `combat_state`. Miss: add miss to `attack_results`, advance queue. Hit: set phase to `damage`, emit `damage_request` SSE `{ damage_expr, hit_roll, hit_total }`. Returns JSON `{ hit, phase, queue_done }`.
+- [ ] **CB1.5-6 — `POST /sessions/{id}/resolve_damage_roll`** — takes `{ rolls: [int], total: int }`. Applies damage to `combat_state` HP (via HP delta logic). Adds hit+damage to `attack_results`. Advances queue: if more PC attacks remain, emit next `attack_request` SSE and return `{ queue_done: false }`. If queue is empty, return `{ queue_done: true }`.
+- [ ] **CB1.5-7 — `POST /sessions/{id}/resume_combat`** — called by frontend when `queue_done: true`. Injects `attack_results` into `session.messages` as a structured user turn (`[ATTACK RESULTS — round N]\n...`), clears `attack_queue` and `attack_results`, calls LLM, streams response (SSE, same as `/turn`). This is the only endpoint that triggers an LLM call during combat resolution.
+- [ ] **CB1.5-8 — System prompt update** — add ATTACK RESOLUTION block to `_build_slim_system_prompt` (same conditional injection as the combat spec — only when `combat_state` is active). Format spec + rules: attacker/target must match `%%COMBAT%%` names exactly; bonus is total attack bonus; omit on rounds with no attacks.
+
+#### New SSE events
+
+- `attack_request` — `{ type, attacker, target, bonus, ac, damage_expr, attack_type }` — player must roll to-hit
+- `damage_request` — `{ type, attacker, target, damage_expr, hit_roll, hit_total }` — player must roll damage
+- `attack_result` — `{ type, attacker, target, roll, bonus, total, ac, hit, damage_rolls, damage_total, attack_type, is_pc }` — one per resolved attack
+
+`SseEvent` union in `api.ts` and `AttackResult` interface in `types.ts` updated.
+
+#### Frontend
+
+- [ ] **CB1.5-9 — DicePanel attack flow** — handle `attack_request` SSE: show to-hit banner (`⚔ Goblin 1 attacks Shalelu — roll to hit! Bonus: +4, AC: 17`). On roll, call `/resolve_attack_roll`. Handle `damage_request` SSE: show damage banner (`⚔ HIT! Roll damage: 1d4+2`). On roll, call `/resolve_damage_roll`. When response returns `queue_done: true`, call `/resume_combat` and stream response. Reuse existing DicePanel queue mechanism; add distinct visual style for attack rolls vs skill rolls.
+- [ ] **CB1.5-10 — DicePanel attack history** — `attack_result` events rendered in roll history: `⚔ Goblin 1 → Shalelu: 14+4=18 vs AC 17 — HIT (5 dmg)` / `⚔ Thaelion → Goblin 2: 8+5=13 vs AC 13 — HIT (7 dmg)`. PC and NPC results shown in same list, newest first.
+- [ ] **CB1.5-11 — CombatPanel condition chips** — extend `%%COMBAT%%` combatant line with optional `conditions: [prone, shaken]` field. `Combatant` dataclass gains `conditions: list[str]`. `CombatPanel` renders small coloured chips below each HP bar. 17 PF1e conditions supported; unknown values silently dropped. Tooltip on each chip: one-line mechanical effect.
+
+#### Tests
+
+- [ ] **CB1.5-T** — `tests/test_combat_t15.py`: `_parse_attack_line` (happy path, defaults, bonus parsing); `_roll_dice` (standard exprs, invalid); NPC auto-resolution (hit/miss path, HP updated in combat_state); `PendingAttack` queue lifecycle; `/resolve_attack_roll` hit+miss paths; `/resolve_damage_roll` advances queue; `/resume_combat` injects history + streams LLM; `attack_result` event arrives after `combat_update`; `%%ATTACK%%` stripped from player stream; conditions parsed + serialised.
+
+---
+
+### Tier 2 — Advanced Attack Mechanics
+
+Builds on Tier 1.5. The `%%ATTACK%%` format is already established; Tier 2 adds PF1e mechanical depth.
+
+- [ ] **CB2-1 — Critical hits** — `%%ATTACK%%` line gains optional `crit_range: 18` (default 20) and `crit_mult: 2` fields. Backend: if natural d20 roll ≥ `crit_range`, roll a confirmation attack (same bonus vs same AC); if confirmed, multiply damage by `crit_mult`. `attack_result` event gains `critical: bool`. DicePanel history shows `⚔ CRITICAL HIT (×2)`.
+- [ ] **CB2-2 — Iterative attacks** — `%%ATTACK%%` line gains optional `sequence: 1/2/3` field. Parser groups lines by attacker; `sequence` is informational (bonus already accounts for the -5/-10 penalty). Backend resolves each line independently in order. No new resolve flow needed — same queue.
+- [ ] **CB2-3 — Combat manoeuvres (CMB/CMD)** — `type: manoeuvre` + `manoeuvre: trip|bull_rush|grapple|disarm|sunder`. Backend: roll CMB vs target CMD (from combatant stats — requires `cmd` field added to `%%COMBAT%%` format). On success, inject corresponding condition into target's next `%%COMBAT%%` update. `attack_result` event includes `manoeuvre` and `success` fields.
+- [ ] **CB2-4 — Attack of Opportunity** — `%%ATTACK%%` line gains `trigger: aoo` field. Resolved exactly like a normal attack; `attack_result` event includes `aoo: true`. DicePanel history labels it `⚔ AoO`. No separate flow needed.
+
+---
+
+### Tier 3 — Spells and Area Effects
+
+Extends the combat loop with spell casting, area targeting, and saving throws. No canvas grid —
+mechanical depth over visual positioning.
+
+- [ ] **CB3-1 — `%%CAST%%` block** — `spell: Fireball · level: 3 · dc: 14 · save: Reflex · half_on_save: true · targets: [Goblin 1, Goblin 2, Shalelu]`. Backend resolves a Reflex save per target (d20 + target save bonus vs DC); full damage on fail, half on save. Damage rolled once, applied per-target. Emits `save_result` SSE per target + `combat_update`. `%%CAST%%` stripped from player stream.
+- [ ] **CB3-2 — Spell slot tracking** — add `spell_slots: { [level]: { max: N, used: N } }` to PC character JSON. CharacterSidebar shows pip rows per spell level. `%%CAST%%` decrements the correct level slot; `slot_update` SSE event; CharacterSidebar updates immediately. Slot state persisted in `session.spell_slots` dict keyed by PC name.
+- [ ] **CB3-3 — AoE condition effects** — `%%CAST%%` gains `on_fail_condition: prone` field. Backend applies the condition to failing targets in `combat_state`. Existing condition chip machinery (CB1.5-11) handles display.
+- [ ] **CB3-4 — Concentration tracking** — `%%CAST%%` with `concentration: true` sets a `concentrating_on` field on the caster's combatant entry. If the caster takes damage while concentrating, backend automatically queues a Concentration check (DC = 10 or half damage taken, whichever is higher) as a `roll_request` event — same flow as skill checks.
 
 ---
 
@@ -326,12 +409,12 @@ Do these in order — each step is independently shippable and leaves the system
 ## NPC Lifecycle and Knowledge
 
 - [ ] Write `%%GENERATE%%` summary field to NPC knowledge — the `summary:` field in `%%GENERATE%%` blocks is parsed but silently dropped. Write it as the first entry in the new NPC's `knowledge.md`: `- [world] {summary} — S{session:03d} T000`. Bootstraps the NPC's knowledge file immediately.
-- [ ] **Sandpoint NPC skeletons** — populate `05_npcs/` with skeleton `base.md` files for 50–75% of named Sandpoint NPCs. A skeleton needs: name, role/occupation, one-line physical description, one-line personality, key relationships, and location (which building/district they frequent). No stat blocks, no deep backstory — just enough that the GM never has to invent a bartender from scratch. Source from `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/NPCS.md` and `SANDPOINT_LOCATIONS.md`. Priority order: (1) named NPCs already referenced in session logs or the book's Tier I/II list; (2) location anchors (innkeeper, blacksmith, sheriff's deputy, temple acolytes); (3) recurring faces (market vendors, festival organisers).
+- [ ] **Sandpoint NPC skeletons** — populate `01_npcs/` with skeleton `base.md` files for 50–75% of named Sandpoint NPCs. A skeleton needs: name, role/occupation, one-line physical description, one-line personality, key relationships, and location (which building/district they frequent). No stat blocks, no deep backstory — just enough that the GM never has to invent a bartender from scratch. Source from `adventure_path/06_books/BOOK_01_BURNT_OFFERINGS/NPCS.md` and `SANDPOINT_LOCATIONS.md`. Priority order: (1) named NPCs already referenced in session logs or the book's Tier I/II list; (2) location anchors (innkeeper, blacksmith, sheriff's deputy, temple acolytes); (3) recurring faces (market vendors, festival organisers).
 - [x] Single-word NPC name detection — `_detect_narrative_npcs` now runs two passes: Pass 1 checks every Title Case word (≥4 chars) against `NpcIndex.canonical_for()` (the alias table, which auto-registers each word of every canonical name); Pass 2 is the original two-word heuristic for unknown NPCs. Single references like "Aldern" now resolve to "Aldern Foxglove" without an explicit alias entry. `NpcIndex.canonical_for()` added to `npc_lookup.py`. 9 tests in `test_scene_npc_tracking.py`.
 - [x] Carry `scene_npcs` forward into the next session's boot file — `stream_end_session` appends `## NPCs Active at Session End` to the generated `boot.md`; `create_session` calls `_parse_scene_npcs_from_boot` and pre-populates `session.scene_npcs` on boot. The restored names are logged at session start. 3 tests in `test_scene_npc_tracking.py`.
 - [x] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` — `scene_npcs` added to the `context` SSE event and shown as amber chips in the IntentBar ("scene" label, one chip per NPC). All turns now surface the full tracked scene regardless of what triggered the turn. 3 tests in `test_scene_npc_tracking.py`.
-- [x] Location tracking — `%%GENERATE%%` blocks with `type: location` now create stubs in `adventure_path/07_locations/` (previously logged and skipped). `LocationIndex` singleton (`api/context/location_lookup.py`) detects location aliases and injects profiles per-turn. `scene_locations` persists location context across turns. 8 seed locations written for Act I. 43 tests in `tests/test_location_lookup.py`. *(spec: `specs/location-system.feature`, 9 ACs)*
-- [x] Promote auto-created session NPCs to permanent records via a lightweight review workflow. *(session NPCs now live in dot-prefixed directories under `05_npcs/`; rename the directory to drop the dot to promote. UI "Purge NPCs" button bulk-deletes all dot-prefixed dirs via `DELETE /api/npcs/session`.)*
+- [x] Location tracking — `%%GENERATE%%` blocks with `type: location` now create stubs in `adventure_path/03_locations/` (previously logged and skipped). `LocationIndex` singleton (`api/context/location_lookup.py`) detects location aliases and injects profiles per-turn. `scene_locations` persists location context across turns. 8 seed locations written for Act I. 43 tests in `tests/test_location_lookup.py`. *(spec: `specs/location-system.feature`, 9 ACs)*
+- [x] Promote auto-created session NPCs to permanent records via a lightweight review workflow. *(session NPCs now live in dot-prefixed directories under `01_npcs/`; rename the directory to drop the dot to promote. UI "Purge NPCs" button bulk-deletes all dot-prefixed dirs via `DELETE /api/npcs/session`.)*
 - [x] Update NPC knowledge and memory state after each session, including attitude shifts, known facts, suspicions, and unresolved goals. *(per-turn `%%DELTA%%` blocks written to `session_NNN.md` per NPC; delta files cleared on session boot)*
 - [x] Write structured NPC deltas per turn with multi-line knowledge support. *(`%%DELTAS%%` section uses bracket blocks, one per NPC; `knowledge:` lines collected as a list; `_write_npc_delta` helper extracted)*
 - [x] Auto-create NPC stub when a `%%DELTAS%%` block references an unknown NPC (Layer 2 fallback). *(if `npc_dir_for` returns `None`, `_process_generate_block` is called with stub data before writing the delta)*
@@ -348,7 +431,7 @@ Event-triggered context injection. When the LLM decides a scene condition is met
 
 - [ ] **Monitor event firing in real sessions** — verify the LLM fires events at the right narrative moments and does not double-fire or skip. N=5 turns TTL is a starting point; tune against observed sessions. Also watch whether the CORRECT/WRONG examples in the prompt fully eliminate the double-write behavior over time.
 - [x] **Spec — `%%EVENT%%` block format** — `specs/event-injection.feature` written: 8 ACs, inline syntax `%%EVENT%% <id>`, single event per response, TTL-only expiry.
-- [x] **Event content files** — `adventure_path/08_events/` created with `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Format: metadata header above `<!-- INJECT -->`, injectable content below.
+- [x] **Event content files** — `adventure_path/02_events/` created with `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Format: metadata header above `<!-- INJECT -->`, injectable content below.
 - [x] **`EventIndex`** — `api/context/event_index.py`: `EventEntry` dataclass, `EventIndex` with lazy load, `get()`, `event_map_text()`, `_parse_event_file()`. Singleton + `_get_event_index()` in `session_manager.py`.
 - [x] **Session state** — `ActiveEvent` dataclass (`event_id`, `content`, `turns_remaining`) added. `active_events: list` field on `GameSession`. TTL decremented in `_inject_context`; expired entries removed.
 - [x] **Parser** — `_EVENT_LINE_RE` regex; fires in both section-based and flat-block paths. Duplicate check (no TTL reset), unknown-ID guard (silent ignore).

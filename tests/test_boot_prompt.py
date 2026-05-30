@@ -199,7 +199,7 @@ def test_boot_deletes_session_delta_files(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir = tmp_path / "adventure_path" / "01_npcs" / "test_npc"
     npc_dir.mkdir(parents=True)
     delta = npc_dir / "session_001.md"
     delta.write_text("## Turn 1 — 12:00:00\n**Summary:** old data\n", encoding="utf-8")
@@ -217,7 +217,7 @@ def test_boot_does_not_delete_other_session_deltas(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir = tmp_path / "adventure_path" / "01_npcs" / "test_npc"
     npc_dir.mkdir(parents=True)
     other = npc_dir / "session_002.md"
     other.write_text("## Turn 1 — 12:00:00\n**Summary:** session 2 data\n", encoding="utf-8")
@@ -234,7 +234,7 @@ def test_boot_session_1_resets_knowledge_file(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir = tmp_path / "adventure_path" / "01_npcs" / "test_npc"
     npc_dir.mkdir(parents=True)
     (npc_dir / "knowledge.md").write_text(
         "- [pcs] Old campaign memory — S005 T010\n",
@@ -253,7 +253,7 @@ def test_boot_non_session_1_keeps_knowledge_file(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
     monkeypatch.setattr(sm, "_sessions", {})
 
-    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "test_npc"
+    npc_dir = tmp_path / "adventure_path" / "01_npcs" / "test_npc"
     npc_dir.mkdir(parents=True)
     original = "- [pcs] Keep this memory — S001 T003\n"
     (npc_dir / "knowledge.md").write_text(original, encoding="utf-8")
@@ -715,11 +715,11 @@ def test_format_example_constant_contains_required_sections():
 
 
 def test_combat_full_spec_constant_contains_format_and_rules():
-    """_COMBAT_FULL_SPEC must include the combatant row format and key rules."""
-    from api.session_manager import _COMBAT_FULL_SPEC
-    assert "%%COMBAT%%" in _COMBAT_FULL_SPEC
-    assert "hp:" in _COMBAT_FULL_SPEC
-    assert "round: 0" in _COMBAT_FULL_SPEC
+    """Round-1 spec has HP init fields; ongoing spec carries the round-0 rule."""
+    from api.session_manager import _COMBAT_SPEC_ROUND1, _COMBAT_SPEC_ONGOING
+    assert "%%COMBAT%%" in _COMBAT_SPEC_ROUND1
+    assert "hp:" in _COMBAT_SPEC_ROUND1        # round-1: LLM must supply HP for init
+    assert "round: 0" in _COMBAT_SPEC_ONGOING  # ongoing spec has the clear-combat rule
 
 
 def test_static_prompt_section_specs_absent(tmp_path, monkeypatch):

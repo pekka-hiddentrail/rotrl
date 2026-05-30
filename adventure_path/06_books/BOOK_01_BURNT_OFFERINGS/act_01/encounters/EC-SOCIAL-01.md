@@ -1,4 +1,4 @@
-﻿# EC-SOC-01 - Welcoming Speeches
+# EC-SOC-01 - Welcoming Speeches
 
 **Scene:** S1 - Welcoming Ceremonies
 **Type:** Social / Narrative
@@ -17,6 +17,6 @@ Father Zantus follows with an invocation to Desna - gentle, sincere, unhurried.
 
 ## NPC Files
 
-adventure_path/05_npcs/kendra_deverin/base.md
-adventure_path/05_npcs/belor_hemlock/base.md
-adventure_path/05_npcs/abstalar_zantus/base.md
+adventure_path/01_npcs/kendra_deverin/base.md
+adventure_path/01_npcs/belor_hemlock/base.md
+adventure_path/01_npcs/abstalar_zantus/base.md

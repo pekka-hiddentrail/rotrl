@@ -4,11 +4,11 @@ relevant profile to inject into the current turn's system prompt.
 Design:
 - Zero extra LLM calls: pure text matching, runs in <1 ms
 - Per-turn injection only: never modifies session.system_prompt permanently
-- Data-driven: all location data and aliases live in adventure_path/07_locations/
+- Data-driven: all location data and aliases live in adventure_path/03_locations/
 - No status or knowledge files — locations are static within a session
 
 Folder structure (relative to repo root):
-  adventure_path/07_locations/
+  adventure_path/03_locations/
     _LOCATION_TEMPLATE.md         template (skipped by index)
     <location_slug>/
       base.md   ← canonical profile (git-tracked)
@@ -47,7 +47,7 @@ class LocationMatch:
 
 @dataclass
 class LocationIndex:
-    """Lazy-loaded location index built by scanning adventure_path/07_locations/.
+    """Lazy-loaded location index built by scanning adventure_path/03_locations/.
 
     Instantiate once per process (module-level singleton in session_manager).
     Re-instantiate via _invalidate_location_index() if location files change mid-session.
@@ -61,7 +61,7 @@ class LocationIndex:
         if self._loaded:
             return
 
-        locs_root = self._repo_root / "adventure_path" / "07_locations"
+        locs_root = self._repo_root / "adventure_path" / "03_locations"
         if not locs_root.exists():
             self._loaded = True
             return

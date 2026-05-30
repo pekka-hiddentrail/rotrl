@@ -137,7 +137,7 @@ The AI GM must never:
 
 To prevent drift and to make invented details auditable, the AI GM must maintain an **Emergent Canon Ledger** file:
 
-* **EMERGENT_CANON.md** → [adventure_path/01_world_setting/](adventure_path/01_world_setting/)
+* **EMERGENT_CANON.md** → [adventure_path/07_world_setting/](adventure_path/07_world_setting/)
 
 This ledger is the *single place* where any AI-invented Tier 2 world facts are recorded.
 

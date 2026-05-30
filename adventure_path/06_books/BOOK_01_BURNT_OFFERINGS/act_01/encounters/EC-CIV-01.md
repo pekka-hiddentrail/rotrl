@@ -34,6 +34,6 @@ This flag is checked by the `attack_repelled` event — if true, Aldern Foxglove
 
 <!-- REFERENCE -->
 
-**Civilian rescue beat is also described in:** `adventure_path/08_events/goblin_attack_starts.md`  
-**Aldern follow-up:** `adventure_path/08_events/attack_repelled.md`  
-**NPC file:** `adventure_path/05_npcs/aldern_foxglove/base.md`
+**Civilian rescue beat is also described in:** `adventure_path/02_events/goblin_attack_starts.md`  
+**Aldern follow-up:** `adventure_path/02_events/attack_repelled.md`  
+**NPC file:** `adventure_path/01_npcs/aldern_foxglove/base.md`

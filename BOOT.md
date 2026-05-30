@@ -26,11 +26,11 @@ End Session   →  recap + next-session boot (two blocking LLM calls)
 POST /api/sessions
 │
 ├─ 1. Delete NPC delta files for this session number
-│      adventure_path/05_npcs/*/session_NNN.md → deleted
+│      adventure_path/01_npcs/*/session_NNN.md → deleted
 │      (keeps other sessions' delta files intact)
 │
 ├─ 2. Clear NPC knowledge files (session 1 only)
-│      adventure_path/05_npcs/*/knowledge.md → truncated to ""
+│      adventure_path/01_npcs/*/knowledge.md → truncated to ""
 │      (full campaign reset on session 1 boot)
 │
 ├─ 3. Build system prompt — _build_slim_system_prompt(session_number)
@@ -107,18 +107,18 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 │      ├─ %%GENERATE%% section (processed before %%DELTAS%% so stubs are findable)
 │      │    for each bracket block:
 │      │      if type == "location": log and skip
-│      │      else: create adventure_path/05_npcs/.<slug>/base.md   ← dot-prefix = session NPC
+│      │      else: create adventure_path/01_npcs/.<slug>/base.md   ← dot-prefix = session NPC
 │      │            invalidate NPC index
 │      │            (rename dir to <slug>/ to promote to permanent)
 │      │
 │      ├─ %%DELTAS%% section
 │      │    for each bracket block:
-│      │      → write adventure_path/05_npcs/<slug>/session_NNN.md
+│      │      → write adventure_path/01_npcs/<slug>/session_NNN.md
 │      │           ## Turn N — HH:MM:SS
 │      │           **Disposition:** ...
 │      │           **Location:** ...
 │      │           **Summary:** ...
-│      │      → append to adventure_path/05_npcs/<slug>/knowledge.md
+│      │      → append to adventure_path/01_npcs/<slug>/knowledge.md
 │      │           - [tag] fact — S001 T003
 │      │      → add NPC to session.scene_npcs
 │      │
@@ -187,9 +187,9 @@ POST /api/sessions/{id}/end
 |------|-----------|------|
 | `outputs/*.log.md` | `_log()` | Continuously — every turn |
 | `outputs/api_log/*.json` | `write_api_log()` | After each LLM call |
-| `adventure_path/05_npcs/.<slug>/base.md` | `_process_generate_block()` | When `%%GENERATE%%` names a new NPC (dot-prefix = session NPC, purgeable) |
-| `adventure_path/05_npcs/<slug>/session_NNN.md` | `_write_npc_delta()` | When `%%DELTAS%%` references an NPC |
-| `adventure_path/05_npcs/<slug>/knowledge.md` | `_write_npc_delta()` | When `%%DELTAS%%` includes `knowledge:` lines |
+| `adventure_path/01_npcs/.<slug>/base.md` | `_process_generate_block()` | When `%%GENERATE%%` names a new NPC (dot-prefix = session NPC, purgeable) |
+| `adventure_path/01_npcs/<slug>/session_NNN.md` | `_write_npc_delta()` | When `%%DELTAS%%` references an NPC |
+| `adventure_path/01_npcs/<slug>/knowledge.md` | `_write_npc_delta()` | When `%%DELTAS%%` includes `knowledge:` lines |
 | `sessions/session_NNN/recap.md` | `stream_end_session()` | On End Session |
 | `sessions/session_NNN+1/boot.md` | `stream_end_session()` | On End Session |
 | `outputs/session_NNN_notes.json` | `save_session()` | On End Session or DELETE |
@@ -229,7 +229,7 @@ Everything after %%NARRATIVE%% is stripped before the player sees the response.
 
 ---
 EVENT MAP
-...one line per event ID from 08_events/ with trigger condition...
+...one line per event ID from 02_events/ with trigger condition...
 ```
 
 **Per-turn additions** (appended to a copy of the base prompt by `_inject_context`):

@@ -1,4 +1,4 @@
-﻿# EC-SUP-01 - Aid the Wounded
+# EC-SUP-01 - Aid the Wounded
 
 **Scene:** S6 - Aftermath and Brief Social
 **Type:** Support / Roleplay
@@ -26,6 +26,6 @@ PCs reach Level 2 at first natural rest after this scene. Award when the party r
 
 ## NPC Files
 
-adventure_path/05_npcs/abstalar_zantus/base.md
-adventure_path/05_npcs/belor_hemlock/base.md
-adventure_path/05_npcs/ameiko_kaijitsu/base.md
+adventure_path/01_npcs/abstalar_zantus/base.md
+adventure_path/01_npcs/belor_hemlock/base.md
+adventure_path/01_npcs/ameiko_kaijitsu/base.md

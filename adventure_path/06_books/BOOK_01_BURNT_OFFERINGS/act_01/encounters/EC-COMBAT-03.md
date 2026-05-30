@@ -57,6 +57,6 @@ Per goblin dog: no gear; carcass worth 0 gp (diseased)
 
 <!-- REFERENCE -->
 
-**Event file:** `adventure_path/08_events/cavalry_arrives.md` (injected into LLM)  
+**Event file:** `adventure_path/02_events/cavalry_arrives.md` (injected into LLM)  
 **Follows:** EC-COM-02 (Wave 2)  
 **Leads to:** EC-SUP-01 (Aid the Wounded) and aftermath scene S6

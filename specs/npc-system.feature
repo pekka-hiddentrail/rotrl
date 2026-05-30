@@ -14,13 +14,13 @@
 > so that each NPC's personality, current disposition, and accumulated facts are available
 > for injection without any extra LLM calls.
 
-NPCs live in `adventure_path/05_npcs/`. Canonical NPCs are git-tracked; session NPCs use a dot-prefix and are purged on boot. The `NpcIndex` singleton loads profiles lazily and re-reads volatile files on every call.
+NPCs live in `adventure_path/01_npcs/`. Canonical NPCs are git-tracked; session NPCs use a dot-prefix and are purged on boot. The `NpcIndex` singleton loads profiles lazily and re-reads volatile files on every call.
 
 ---
 
 ## Background
 
-- Given the `adventure_path/05_npcs/` directory contains NPC folders
+- Given the `adventure_path/01_npcs/` directory contains NPC folders
 - And the NpcIndex has been loaded
 
 ---
@@ -34,7 +34,7 @@ NPCs live in `adventure_path/05_npcs/`. Canonical NPCs are git-tracked; session 
 **Scenario:** NpcIndex is initialised at startup
 
 ```gherkin
-Given the 05_npcs/ directory contains folders for ameiko_kaijitsu, belor_hemlock, and _NPC_TEMPLATE
+Given the 01_npcs/ directory contains folders for ameiko_kaijitsu, belor_hemlock, and _NPC_TEMPLATE
 When  the NpcIndex is loaded
 Then  ameiko_kaijitsu and belor_hemlock are in the index
 And   _NPC_TEMPLATE is not in the index
@@ -69,7 +69,7 @@ And   content below "<!-- REFERENCE -->" is never injected into any prompt
 ```gherkin
 Given the %%DELTAS%% section includes a knowledge fact for Ameiko Kaijitsu tagged [pcs]
 When  the section is parsed
-Then  the fact is appended to adventure_path/05_npcs/ameiko_kaijitsu/knowledge.md
+Then  the fact is appended to adventure_path/01_npcs/ameiko_kaijitsu/knowledge.md
 And   the entry is suffixed with "— S001 T003" (session and turn number)
 And   the full knowledge.md is injected on the next turn that detects Ameiko
 ```
@@ -99,7 +99,7 @@ And   only the most recent turn block is injected into the next prompt (not the 
 **Scenario:** A session NPC was created during the previous session
 
 ```gherkin
-Given adventure_path/05_npcs/.unnamed_guard/ exists with "SESSION NPC" in its Flags
+Given adventure_path/01_npcs/.unnamed_guard/ exists with "SESSION NPC" in its Flags
 When  a new session is booted
 Then  the .unnamed_guard/ directory is deleted
 And   no dot-prefixed session NPC directories remain after boot
@@ -118,7 +118,7 @@ And   canonical NPCs (no SESSION NPC flag) are not deleted
 Given the %%GENERATE%% section provides only name="Shalelu" and role="Elven Ranger"
 And   npc_library/ contains appearances.txt, personalities.txt, reactions.txt
 When  the section is parsed
-Then  adventure_path/05_npcs/.shalelu/base.md is created
+Then  adventure_path/01_npcs/.shalelu/base.md is created
 And   missing Appearance is filled from a random entry in appearances.txt
 And   missing Personality is filled from a random entry in personalities.txt
 And   the file matches canonical base.md format

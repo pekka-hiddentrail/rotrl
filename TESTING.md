@@ -159,7 +159,7 @@ Check for all four turns:
 **Chain A — delta write to known NPC**
 1. Boot a session.
 2. Send: `I find Belor Hemlock at the garrison and ask him about the goblin raids.`
-3. Open `adventure_path/05_npcs/belor_hemlock/session_NNN.md`.
+3. Open `adventure_path/01_npcs/belor_hemlock/session_NNN.md`.
 4. ✔ A `%%DELTA%%` block was appended with the current session number and a turn count.
 5. ✔ The `knowledge:` lines contain readable prose about what happened (not garbled JSON).
 6. Send a second turn mentioning Belor: `I press Hemlock on whether Nualia is involved.`
@@ -168,7 +168,7 @@ Check for all four turns:
 **Chain B — auto-stub creation for new NPC**
 1. Send: `I walk over to the elderly woman selling amulets near the fountain and introduce myself. Her name is Marta Hask.`
 2. Wait 5 seconds.
-3. ✔ A directory `.marta_hask/` (or similar slug) exists under `adventure_path/05_npcs/`.
+3. ✔ A directory `.marta_hask/` (or similar slug) exists under `adventure_path/01_npcs/`.
 4. ✔ `base.md` contains at least `name:`, `role:`, and `appearance:` fields with non-empty values.
 5. ✔ Directory has the dot prefix (session NPC).
 
@@ -180,7 +180,7 @@ Check for all four turns:
 5. ✔ Her profile was injected into the system prompt (visible in dev mode as context in the response).
 
 **Chain D — purge session NPCs**
-1. Without an active session, confirm at least one dot-prefixed directory exists under `05_npcs/`.
+1. Without an active session, confirm at least one dot-prefixed directory exists under `01_npcs/`.
 2. Click Purge NPCs.
 3. ✔ Inline confirm appears: "Purge session NPCs? Yes / No".
 4. Click Yes.
@@ -279,7 +279,7 @@ Send one turn for each location using one of its aliases. Confirm intent bar fir
 1. Boot with Dev Mode ON so you can see raw blocks.
 2. Send: `I notice a small apothecary called Bottled Solutions on the main street, run by a gossipy old man named Gerhard Pickle.`
 3. Wait for the GM response. Look for a `%%GENERATE%%` block with `type: location` in the raw output.
-4. If the model wrote one: open `adventure_path/07_locations/` and confirm a new directory (`bottled_solutions/` or similar) was created with a `base.md`.
+4. If the model wrote one: open `adventure_path/03_locations/` and confirm a new directory (`bottled_solutions/` or similar) was created with a `base.md`.
 5. ✔ `base.md` starts with `# Bottled Solutions`.
 6. ✔ `**Aliases:**` line is present and includes at least `bottled solutions`.
 7. Send: `We step inside Bottled Solutions to browse.`
@@ -287,7 +287,7 @@ Send one turn for each location using one of its aliases. Confirm intent bar fir
 
 **Chain G — seed file quality audit (read-only)**
 
-Open each `base.md` in `adventure_path/07_locations/` and verify it meets the format spec:
+Open each `base.md` in `adventure_path/03_locations/` and verify it meets the format spec:
 
 - Starts with `# Canonical Name`
 - `**Aliases:**` line is present and has at least 2 aliases
@@ -539,7 +539,7 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 4. ✔ `## Active Event — goblin_attack_starts` block is present in the system prompt on each of those turns.
 5. Keep sending turns until the block disappears from `messages[0].content`.
 6. ✔ On that same turn, the `context` SSE event (visible in the browser network tab) has `active_events: []`.
-7. Note how many turns the event was active — it should match the `**Expires:**` value in `adventure_path/08_events/goblin_attack_starts.md`.
+7. Note how many turns the event was active — it should match the `**Expires:**` value in `adventure_path/02_events/goblin_attack_starts.md`.
 
 > **Note:** The system prompt is never visible in the chat window — dev mode or not. The only ways to inspect it are the API log JSON (`messages[0].content`) and the session markdown log (`outputs/session_NNN_*.log.md`, inside each `<details>LLM payload</details>` block).
 

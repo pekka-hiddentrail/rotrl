@@ -42,7 +42,7 @@ def _make_base_md(
 
 def _make_index(tmp_path: Path, locations: dict[str, str]) -> LocationIndex:
     """Create a LocationIndex pointing at tmp_path with given {slug: base_md_content} entries."""
-    locs_root = tmp_path / "adventure_path" / "07_locations"
+    locs_root = tmp_path / "adventure_path" / "03_locations"
     locs_root.mkdir(parents=True)
     for slug, content in locations.items():
         loc_dir = locs_root / slug
@@ -64,7 +64,7 @@ class TestIndexLoading:
         assert "Sandpoint Garrison" in known
 
     def test_skips_underscore_prefixed_dirs(self, tmp_path):
-        locs_root = tmp_path / "adventure_path" / "07_locations"
+        locs_root = tmp_path / "adventure_path" / "03_locations"
         locs_root.mkdir(parents=True)
         tmpl_dir = locs_root / "_LOCATION_TEMPLATE"
         tmpl_dir.mkdir()
@@ -73,14 +73,14 @@ class TestIndexLoading:
         assert "Template" not in idx.known_locations
 
     def test_skips_dirs_missing_base_md(self, tmp_path):
-        locs_root = tmp_path / "adventure_path" / "07_locations"
+        locs_root = tmp_path / "adventure_path" / "03_locations"
         locs_root.mkdir(parents=True)
         empty_dir = locs_root / "no_base"
         empty_dir.mkdir()
         idx = LocationIndex(_repo_root=tmp_path)
         assert idx.known_locations == []
 
-    def test_missing_07_locations_dir_is_safe(self, tmp_path):
+    def test_missing_03_locations_dir_is_safe(self, tmp_path):
         idx = LocationIndex(_repo_root=tmp_path)
         assert idx.known_locations == []
         assert idx.detect("garrison") is None
@@ -88,7 +88,7 @@ class TestIndexLoading:
     def test_loaded_flag_prevents_double_scan(self, tmp_path):
         idx = _make_index(tmp_path, {"garrison": _make_base_md("Garrison", "garrison")})
         _ = idx.known_locations  # triggers load
-        locs_root = tmp_path / "adventure_path" / "07_locations"
+        locs_root = tmp_path / "adventure_path" / "03_locations"
         new_dir = locs_root / "cathedral"
         new_dir.mkdir()
         (new_dir / "base.md").write_text(_make_base_md("Cathedral", "cathedral"), encoding="utf-8")
@@ -416,7 +416,7 @@ class TestProcessGenerateBlockLocation:
 
     def test_creates_location_stub(self, tmp_path, monkeypatch):
         monkeypatch.setattr("api.session_manager._REPO_ROOT", tmp_path)
-        (tmp_path / "adventure_path" / "07_locations").mkdir(parents=True)
+        (tmp_path / "adventure_path" / "03_locations").mkdir(parents=True)
 
         from api.session_manager import _process_generate_block
         session = self._make_session(tmp_path)
@@ -424,14 +424,14 @@ class TestProcessGenerateBlockLocation:
         body = "type: location\nname: Bottled Solutions\nrole: apothecary\nappearance: cluttered shop\nlocation: main street\nsummary: run by Gerhard"
         _process_generate_block(body, session)
 
-        stub = tmp_path / "adventure_path" / "07_locations" / "bottled_solutions" / "base.md"
+        stub = tmp_path / "adventure_path" / "03_locations" / "bottled_solutions" / "base.md"
         assert stub.exists()
         content = stub.read_text(encoding="utf-8")
         assert content.startswith("# Bottled Solutions")
 
     def test_skips_if_directory_exists(self, tmp_path, monkeypatch):
         monkeypatch.setattr("api.session_manager._REPO_ROOT", tmp_path)
-        loc_dir = tmp_path / "adventure_path" / "07_locations" / "bottled_solutions"
+        loc_dir = tmp_path / "adventure_path" / "03_locations" / "bottled_solutions"
         loc_dir.mkdir(parents=True)
         existing = loc_dir / "base.md"
         existing.write_text("# Old Content", encoding="utf-8")
@@ -446,7 +446,7 @@ class TestProcessGenerateBlockLocation:
 
     def test_invalidates_location_index_after_creation(self, tmp_path, monkeypatch):
         monkeypatch.setattr("api.session_manager._REPO_ROOT", tmp_path)
-        (tmp_path / "adventure_path" / "07_locations").mkdir(parents=True)
+        (tmp_path / "adventure_path" / "03_locations").mkdir(parents=True)
 
         import api.session_manager as sm
         sm._location_index = MagicMock()  # set a dummy to confirm it gets cleared
@@ -461,7 +461,7 @@ class TestProcessGenerateBlockLocation:
 
     def test_npc_block_still_creates_npc(self, tmp_path, monkeypatch):
         monkeypatch.setattr("api.session_manager._REPO_ROOT", tmp_path)
-        (tmp_path / "adventure_path" / "05_npcs").mkdir(parents=True)
+        (tmp_path / "adventure_path" / "01_npcs").mkdir(parents=True)
         (tmp_path / "adventure_path" / "npc_library").mkdir(parents=True)
 
         import api.session_manager as sm
@@ -474,5 +474,5 @@ class TestProcessGenerateBlockLocation:
             body = "name: Gerhard Pickle\nrole: apothecary\nappearance: short and round"
             _process_generate_block(body, session)
 
-        npc_dir = tmp_path / "adventure_path" / "05_npcs" / ".gerhard_pickle"
+        npc_dir = tmp_path / "adventure_path" / "01_npcs" / ".gerhard_pickle"
         assert npc_dir.exists()

@@ -360,7 +360,10 @@ def _parse_combatant_line(line: str) -> Optional["Combatant"]:
     )
 
 
-def _parse_combat_block(text: str) -> Optional[CombatState]:
+def _parse_combat_block(
+    text: str,
+    existing_state: Optional["CombatState"] = None,
+) -> Optional["CombatState"]:
     """Parse the body of a %%COMBAT%% section into a CombatState.
 
     Return values:
@@ -372,6 +375,12 @@ def _parse_combat_block(text: str) -> Optional[CombatState]:
 
     The distinction between "intentional clear" and "parse failure" prevents a single
     malformed turn from silently wiping live combat state.
+
+    HP authority (Tier 1.1):
+    When *existing_state* is provided (round 2+), HP values for **known** combatants
+    are copied from *existing_state* instead of taken from the LLM block. New combatants
+    (name not in existing_state) are initialised with LLM-provided HP values.
+    Status and other fields are always updated from the LLM block.
     """
     if not text:
         return None
@@ -399,6 +408,17 @@ def _parse_combat_block(text: str) -> Optional[CombatState]:
     # were malformed — do not disturb existing combat state.
     if not found_round or not combatants:
         return None
+
+    # HP authority: for round 2+, inherit HP from backend for known combatants.
+    if existing_state is not None:
+        existing_by_name = {c.name.lower(): c for c in existing_state.combatants}
+        for c in combatants:
+            existing = existing_by_name.get(c.name.lower())
+            if existing is not None:
+                # Keep backend HP; update status and other fields from LLM.
+                c.hp_current = existing.hp_current
+                c.hp_max = existing.hp_max
+            # New combatant (not in existing_state): use LLM-provided HP as-is.
 
     return CombatState(round=round_num, combatants=combatants)
 
@@ -529,6 +549,53 @@ _COMBAT_BLOCK_RE = re.compile(
     r'^%%COMBAT%%[ \t]*\n(.*?)(?=^%%|\Z)',
     re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
+
+# Matches a %%HP%% delta block (Tier 1.1 — non-attack HP changes).
+_HP_BLOCK_RE = re.compile(
+    r'^%%HP%%[ \t]*\n(.*?)(?=^%%|\Z)',
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+
+# One combatant row inside a %%HP%% block.
+_HP_DELTA_LINE_RE = re.compile(
+    r'^\s*-\s*name\s*:\s*(?P<name>[^·•\n]+?)\s*[·•]\s*delta\s*:\s*(?P<delta>[+-]?\d+)',
+    re.IGNORECASE,
+)
+
+
+def _parse_hp_deltas(text: Optional[str]) -> list:
+    """Parse the body of a %%HP%% block into a list of (name, delta) tuples.
+
+    Each line should be:  - name: <Name> · delta: -N   (negative = damage, positive = healing)
+    Lines that don't match are silently skipped.
+    Returns an empty list on empty/None input.
+    """
+    if not text:
+        return []
+    results = []
+    for line in text.splitlines():
+        m = _HP_DELTA_LINE_RE.match(line)
+        if m:
+            try:
+                results.append((m.group("name").strip(), int(m.group("delta"))))
+            except ValueError:
+                pass
+    return results
+
+
+def _apply_hp_deltas(combat_state: Optional["CombatState"], deltas: list) -> None:
+    """Apply a list of (name, delta) HP changes to *combat_state* in-place.
+
+    Clamps each combatant's hp_current to [0, hp_max].
+    Unknown names and None combat_state are silently ignored.
+    """
+    if combat_state is None or not deltas:
+        return
+    by_name = {c.name.lower(): c for c in combat_state.combatants}
+    for name, delta in deltas:
+        combatant = by_name.get(name.lower())
+        if combatant is not None:
+            combatant.hp_current = max(0, min(combatant.hp_current + delta, combatant.hp_max))
 
 _ROLL_BLOCK_RE = re.compile(
     r'\s*%%ROLL%%\s*\n'
@@ -673,16 +740,33 @@ knowledge: [quest] Asks Yanyeeku to fetch him a drink from the tavern
 summary: Abstalar Zantus asked Yanyeeku to fetch him a drink from the tavern.
 ]"""
 
-# Injected each turn when combat is active (round > 0); replaces the previous
-# short reminder so the model has the full format + rules while fighting.
-_COMBAT_FULL_SPEC = """\
-Format:
+# Injected on the turn combat STARTS (session.combat_state is None when _inject_context runs).
+# LLM must supply hp: cur/max for every combatant so the backend can initialise HP values.
+_COMBAT_SPEC_ROUND1 = """\
+Format (round 1 — include hp for backend initialisation):
+%%COMBAT%%
+round: 1
+combatants:
+  - name: <Name> · hp: <cur>/<max> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead
+Rules: sort descending by initiative; round: 0 ends combat and clears the tracker; list ALL combatants."""
+
+# Injected on round 2+. The backend owns HP values; the LLM must NOT write hp: fields for
+# existing combatants (they are ignored). New combatants entering after round 1 still need hp:.
+# Non-attack HP changes (traps, poison, healing) use the %%HP%% block instead.
+_COMBAT_SPEC_ONGOING = """\
+Format (ongoing — backend manages HP; omit hp field for existing combatants):
 %%COMBAT%%
 round: N
 combatants:
-  - name: <Name> · hp: <cur>/<max> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead
+  - name: <Name> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead
+  [NEW combatants only: add hp: <cur>/<max>]
+
+Non-attack HP changes (traps, poison, healing):
+%%HP%%
+- name: <Name> · delta: -N   (negative = damage, positive = healing)
+
 Rules: sort descending by initiative; increment round when all combatants have acted; \
-update HP each turn; round: 0 ends combat and clears the tracker; list ALL combatants every turn."""
+round: 0 ends combat and clears the tracker; list ALL combatants every turn."""
 
 # Per-turn section specs — injected conditionally by _inject_context based on what
 # the turn context signals.  Only pay for specs that are actually relevant this turn.
@@ -896,7 +980,7 @@ def create_session(
         pc_profiles=_build_pc_profiles(_REPO_ROOT / "ui" / "public" / "data"),
     )
 
-    # Boot cleanup — runs against adventure_path/05_npcs/ on every session start.
+    # Boot cleanup — runs against adventure_path/01_npcs/ on every session start.
     #
     # 1. SESSION NPC folders: auto-created stubs are deleted unless the GM has
     #    promoted the NPC by removing the "SESSION NPC" flag from base.md.
@@ -908,7 +992,7 @@ def create_session(
     # 3. knowledge.md: reset only when booting session 1. For all other
     #    session numbers, keep existing knowledge and continue append-only
     #    writes during play.
-    _npcs_root = _REPO_ROOT / "adventure_path" / "05_npcs"
+    _npcs_root = _REPO_ROOT / "adventure_path" / "01_npcs"
     if _npcs_root.exists():
         _delta_filename = f"session_{session_number:03d}.md"
         for _npc_dir in list(_npcs_root.iterdir()):
@@ -1150,9 +1234,9 @@ def _build_turn_directive(npc_match, skill_match, location_matches=None, scene_n
 def _process_generate_block(body: str, session: GameSession) -> None:
     """Create a new NPC or location stub from a %%GENERATE%% block body.
 
-    For type: location — creates a stub in adventure_path/07_locations/ and
+    For type: location — creates a stub in adventure_path/03_locations/ and
     invalidates the location index so the new entry is detectable immediately.
-    For NPC entries — creates a dot-prefixed stub in adventure_path/05_npcs/.
+    For NPC entries — creates a dot-prefixed stub in adventure_path/01_npcs/.
     Silently skipped if the entry already exists or the name field is missing.
     """
     fields = _parse_delta_fields(body)
@@ -1164,7 +1248,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
     if block_type == "location":
         loc_slug = _slugify(block_name)
-        loc_dir  = _REPO_ROOT / "adventure_path" / "07_locations" / loc_slug
+        loc_dir  = _REPO_ROOT / "adventure_path" / "03_locations" / loc_slug
         if loc_dir.exists():
             _log(session, f"\n> *[Location already exists, skipping: {block_name}]*\n")
             return
@@ -1189,7 +1273,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
     npc_slug = _slugify(block_name)
     # Dot-prefix marks this as a session NPC (temporary, purgeable from the UI).
-    npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / f".{npc_slug}"
+    npc_dir  = _REPO_ROOT / "adventure_path" / "01_npcs" / f".{npc_slug}"
     npc_dir.mkdir(parents=True, exist_ok=True)
 
     loc_str   = fields.get("location", "")
@@ -1211,7 +1295,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
 def list_session_npcs() -> list[str]:
     """Return the slug names of all session NPCs (dot-prefixed directories)."""
-    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    npc_base = _REPO_ROOT / "adventure_path" / "01_npcs"
     if not npc_base.exists():
         return []
     return sorted(
@@ -1228,7 +1312,7 @@ def purge_session_npcs() -> int:
     so the next turn no longer injects profiles for purged NPCs.
     """
     import shutil as _shutil
-    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    npc_base = _REPO_ROOT / "adventure_path" / "01_npcs"
     if not npc_base.exists():
         return 0
     count = 0
@@ -1274,7 +1358,7 @@ def _stream_with_narrative_filter(
         return
 
     _NARRATIVE_START = "%%NARRATIVE%%\n"
-    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%")
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%", "\n%%HP%%")
     _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14; also covers "%%COMBAT%%\n" = 12
 
     buf           = ""      # not-yet-emitted accumulation
@@ -1530,15 +1614,23 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         )
         _log(session, f"\n> *[Delta reminder injected for scene NPCs: {_npc_list}]*\n")
 
-    # ── Ongoing combat — full spec injection ──────────────────────────────────
+    # ── Ongoing combat — full spec injection + HP context ─────────────────────
     # Injected when combat is live.  The static prompt keeps only a compact
     # one-liner; the full format + rules are injected here so the model has
     # everything it needs without paying the token cost when not in combat.
+    # Tier 1.1: HP values are backend-owned from round 2 onward.  We inject
+    # current HP so the LLM can narrate accurately without recomputing.
     if session.combat_state is not None and session.combat_state.round > 0:
+        _combat_spec = _COMBAT_SPEC_ONGOING
+        _hp_lines = "  ".join(
+            f"{c.name}: {c.hp_current}/{c.hp_max} ({c.status})\n"
+            for c in session.combat_state.combatants
+        )
         system_content += (
             f"\n\n---\n[COMBAT ONGOING — round {session.combat_state.round}]\n"
             f"You MUST include a `%%COMBAT%%` block this turn.\n"
-            f"{_COMBAT_FULL_SPEC}"
+            f"{_combat_spec}\n\n"
+            f"[CURRENT HP]\n  {_hp_lines}"
         )
         _log(session, f"\n> *[Combat reminder injected: round {session.combat_state.round}]*\n")
 
@@ -1739,11 +1831,22 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # ── %%HP%% (Tier 1.1 — non-attack HP deltas) ─────────────────────────
+        _hp_section = _sections.get("HP", "")
+        if _hp_section and session.combat_state is not None:
+            try:
+                _hp_deltas = _parse_hp_deltas(_hp_section)
+                if _hp_deltas:
+                    _apply_hp_deltas(session.combat_state, _hp_deltas)
+                    _log(session, f"\n> *[HP deltas applied: {_hp_deltas}]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%HP%% processing error: {_e}]*\n")
+
         # ── %%COMBAT%% ────────────────────────────────────────────────────────
         _combat_section = _sections.get("COMBAT", "")
         if _combat_section:
             try:
-                _combat_result = _parse_combat_block(_combat_section)
+                _combat_result = _parse_combat_block(_combat_section, existing_state=session.combat_state)
                 if _combat_result is not None:
                     if _combat_result.round == 0:          # intentional clear signal
                         session.combat_state = None
@@ -1813,11 +1916,22 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # %%HP%% (flat-block fallback path — Tier 1.1)
+        _hp_m = _HP_BLOCK_RE.search(response_text)
+        if _hp_m and session.combat_state is not None:
+            try:
+                _hp_deltas = _parse_hp_deltas(_hp_m.group(1))
+                if _hp_deltas:
+                    _apply_hp_deltas(session.combat_state, _hp_deltas)
+                    _log(session, f"\n> *[HP deltas applied (flat): {_hp_deltas}]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%HP%% processing error: {_e}]*\n")
+
         # %%COMBAT%% (flat-block fallback path)
         _combat_m = _COMBAT_BLOCK_RE.search(response_text)
         if _combat_m:
             try:
-                _combat_result = _parse_combat_block(_combat_m.group(1))
+                _combat_result = _parse_combat_block(_combat_m.group(1), existing_state=session.combat_state)
                 if _combat_result is not None:
                     if _combat_result.round == 0:
                         session.combat_state = None

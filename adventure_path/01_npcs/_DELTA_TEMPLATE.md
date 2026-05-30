@@ -3,10 +3,10 @@
 Delta files are machine-written by the backend after each GM turn.
 They live alongside each NPC's `base.md` and `knowledge.md`:
 
-    adventure_path/05_npcs/<npc_slug>/session_001.md
-    adventure_path/05_npcs/<npc_slug>/session_002.md
+    adventure_path/01_npcs/<npc_slug>/session_001.md
+    adventure_path/01_npcs/<npc_slug>/session_002.md
     ...
-    adventure_path/05_npcs/<npc_slug>/knowledge.md
+    adventure_path/01_npcs/<npc_slug>/knowledge.md
 
 `session_NNN.md` files are **git-ignored** and **deleted on session boot** so each
 playthrough starts from the canonical `base.md` state for turn-by-turn status.

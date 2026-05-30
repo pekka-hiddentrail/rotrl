@@ -57,7 +57,7 @@ Warchanter: whip, dogslicer, shortbow, potion of cure light wounds, 20 gp
 
 <!-- REFERENCE -->
 
-**Event file:** `adventure_path/08_events/goblin_attack_starts.md` (injected into LLM)  
+**Event file:** `adventure_path/02_events/goblin_attack_starts.md` (injected into LLM)  
 **NPC file:** warchanter has no separate NPC file — treat as anonymous  
 **Follows:** EC-EVT-02 (Cathedral Alarm)  
 **Leads to:** EC-COM-02 (Wave 2 Fire Phase) and EC-CIV-01 (Civilian Rescue)

@@ -95,7 +95,7 @@ Persistence is not punishment.
 
 Persistence is memory.
 
-* **PERSISTENCE_LEDGER.md** → [adventure_path/04_persistence/](adventure_path/04_persistence/)
+* **PERSISTENCE_LEDGER.md** → [adventure_path/08_persistence/](adventure_path/08_persistence/)
 
 ## Persistence Self-Check Checklist (Silent)
 

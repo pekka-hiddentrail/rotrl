@@ -4,7 +4,7 @@ This document defines the canonical format for NPC `base.md` files.
 
 NPC folders live under:
 
-    adventure_path/05_npcs/<npc_slug>/
+    adventure_path/01_npcs/<npc_slug>/
 
 Typical contents:
 

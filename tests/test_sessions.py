@@ -108,7 +108,7 @@ def test_boot_invalid_session_returns_400(client, tmp_path, monkeypatch):
 
 def test_purge_session_npcs_removes_dot_dirs(client, monkeypatch, tmp_path):
     import api.session_manager as sm
-    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    npc_base = tmp_path / "adventure_path" / "01_npcs"
     (npc_base / ".temp_guard").mkdir(parents=True)
     (npc_base / ".unnamed_merchant").mkdir()
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
@@ -123,7 +123,7 @@ def test_purge_session_npcs_removes_dot_dirs(client, monkeypatch, tmp_path):
 
 def test_purge_session_npcs_keeps_canonical_dirs(client, monkeypatch, tmp_path):
     import api.session_manager as sm
-    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    npc_base = tmp_path / "adventure_path" / "01_npcs"
     (npc_base / "ameiko_kaijitsu").mkdir(parents=True)
     (npc_base / ".temp_guard").mkdir()
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
@@ -136,7 +136,7 @@ def test_purge_session_npcs_keeps_canonical_dirs(client, monkeypatch, tmp_path):
 
 def test_purge_session_npcs_returns_zero_when_none(client, monkeypatch, tmp_path):
     import api.session_manager as sm
-    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    npc_base = tmp_path / "adventure_path" / "01_npcs"
     npc_base.mkdir(parents=True)
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
 
@@ -147,7 +147,7 @@ def test_purge_session_npcs_returns_zero_when_none(client, monkeypatch, tmp_path
 
 def test_list_session_npcs(client, monkeypatch, tmp_path):
     import api.session_manager as sm
-    npc_base = tmp_path / "adventure_path" / "05_npcs"
+    npc_base = tmp_path / "adventure_path" / "01_npcs"
     (npc_base / ".temp_guard").mkdir(parents=True)
     (npc_base / ".unnamed_merchant").mkdir()
     (npc_base / "ameiko_kaijitsu").mkdir()

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **campaign_setting** folder (02_campaign_setting/) contains all campaign-specific rules, tone, player freedoms, and NPC/faction continuity for **Rise of the Runelords** set in **Varisia, Golarion**.
+The **campaign_setting** folder (05_campaign_setting/) contains all campaign-specific rules, tone, player freedoms, and NPC/faction continuity for **Rise of the Runelords** set in **Varisia, Golarion**.
 
 This layer sits *between* System Authority + World Setting and individual adventures, defining:
 - Campaign narrative scope and progression
@@ -27,7 +27,7 @@ See **[ADVENTURE.md](ADVENTURE.md)** for the full authority hierarchy.
 
 ## Campaign Files
 
-### 1. [CAMPAIGN_OVERVIEW.md](adventure_path/02_campaign_setting/CAMPAIGN_OVERVIEW.md) ✅ ACTIVE (158 lines)
+### 1. [CAMPAIGN_OVERVIEW.md](adventure_path/05_campaign_setting/CAMPAIGN_OVERVIEW.md) ✅ ACTIVE (158 lines)
 
 **Defines:** Campaign structure, narrative phases, core themes, player agency philosophy
 
@@ -48,7 +48,7 @@ See **[ADVENTURE.md](ADVENTURE.md)** for the full authority hierarchy.
 
 ---
 
-### 2. [THEME_AND_TONE.md](adventure_path/02_campaign_setting/THEME_AND_TONE.md) ✅ ACTIVE (218 lines)
+### 2. [THEME_AND_TONE.md](adventure_path/05_campaign_setting/THEME_AND_TONE.md) ✅ ACTIVE (218 lines)
 
 **Defines:** Emotional logic, scene framing, tension escalation, descriptive guidelines
 
@@ -66,7 +66,7 @@ See **[ADVENTURE.md](ADVENTURE.md)** for the full authority hierarchy.
 
 ---
 
-### 3. [PLAYER_AGENCY_RULES.md](adventure_path/02_campaign_setting/PLAYER_AGENCY_RULES.md) ✅ ACTIVE (123 lines)
+### 3. [PLAYER_AGENCY_RULES.md](adventure_path/05_campaign_setting/PLAYER_AGENCY_RULES.md) ✅ ACTIVE (123 lines)
 
 **Defines:** Player freedoms, guardrails against railroading, guaranteed scope of control
 
@@ -91,7 +91,7 @@ See **[ADVENTURE.md](ADVENTURE.md)** for the full authority hierarchy.
 
 ---
 
-### 4. [FACTIONS_AND_POWERS.md](adventure_path/02_campaign_setting/FACTIONS_AND_POWERS.md) ✅ ACTIVE (207 lines)
+### 4. [FACTIONS_AND_POWERS.md](adventure_path/05_campaign_setting/FACTIONS_AND_POWERS.md) ✅ ACTIVE (207 lines)
 
 **Defines:** Organized forces, faction behavior, NPC organization hierarchy
 
@@ -114,7 +114,7 @@ See **[ADVENTURE.md](ADVENTURE.md)** for the full authority hierarchy.
 
 ---
 
-### 5. [NPC_MEMORY_AND_CONTINUITY.md](adventure_path/02_campaign_setting/NPC_MEMORY_AND_CONTINUITY.md) ✅ ACTIVE
+### 5. [NPC_MEMORY_AND_CONTINUITY.md](adventure_path/05_campaign_setting/NPC_MEMORY_AND_CONTINUITY.md) ✅ ACTIVE
 
 **Defines:** NPC persistence, continuity rules, revisit mechanics
 
@@ -141,9 +141,9 @@ When the GM encounters conflicting guidance:
    ↓
 5. World Setting (WORLD_OPERATING_RULES, WORLD_CANON, Golarion lore)
    ↓
-4. ** CAMPAIGN SETTINGS (02_campaign_setting/) **
+4. ** CAMPAIGN SETTINGS (05_campaign_setting/) **
    ↓
-3. Book/Act/Encounter-level instructions (03_books/)
+3. Book/Act/Encounter-level instructions (06_books/)
    ↓
 2. Previously established campaign facts
    ↓
@@ -233,13 +233,13 @@ The campaign assumes a **six-phase escalation**:
 - **Campaign Settings** customize tone/scope *within* those constraints
 - **NOTE:** Campaign tone never overrides GM neutrality or rule application
 
-### World Setting (01_world_setting/)
+### World Setting (07_world_setting/)
 - **World Operating Rules** prevent canon hallucination
 - **World Canon** provides Golarion/Varisia fact
 - **Campaign Settings** specialize that world to RotRL context
 - **NOTE:** Campaign settings assume Rise of the Runelords framing
 
-### Adventures (03_books/)
+### Adventures (06_books/)
 - **Campaign Settings** define the emotional/structural container
 - **Individual adventures** populate specific encounters
 - **NOTE:** Encounter-level rules override campaign-level only where explicitly conflicting
@@ -264,11 +264,11 @@ The campaign assumes a **six-phase escalation**:
 
 ## Quick Links
 
-- [Campaign Overview →](adventure_path/02_campaign_setting/CAMPAIGN_OVERVIEW.md)
-- [Theme and Tone →](adventure_path/02_campaign_setting/THEME_AND_TONE.md)
-- [Player Agency Rules →](adventure_path/02_campaign_setting/PLAYER_AGENCY_RULES.md)
-- [Factions and Powers →](adventure_path/02_campaign_setting/FACTIONS_AND_POWERS.md)
-- [NPC Memory and Continuity →](adventure_path/02_campaign_setting/NPC_MEMORY_AND_CONTINUITY.md)
+- [Campaign Overview →](adventure_path/05_campaign_setting/CAMPAIGN_OVERVIEW.md)
+- [Theme and Tone →](adventure_path/05_campaign_setting/THEME_AND_TONE.md)
+- [Player Agency Rules →](adventure_path/05_campaign_setting/PLAYER_AGENCY_RULES.md)
+- [Factions and Powers →](adventure_path/05_campaign_setting/FACTIONS_AND_POWERS.md)
+- [NPC Memory and Continuity →](adventure_path/05_campaign_setting/NPC_MEMORY_AND_CONTINUITY.md)
 
 ---
 
@@ -290,7 +290,7 @@ The **Swallowtail Festival** opening adventure has been fully implemented with:
   - current_tensions.md: Background conflicts, NPC reaction framework (pressure-based emotions)
   - encounter_01.md: Complete Combat specs (Goblin Cavalry, stat blocks, battlefield mechanics, scaling)
 
-- **Event injection system** (`adventure_path/08_events/`)
+- **Event injection system** (`adventure_path/02_events/`)
   - Four event files covering the complete goblin raid arc (waves 1–3 + aftermath)
   - LLM writes `%%EVENT%% <id>` to trigger scene transitions; content injected for 5 turns
   - Event map (valid IDs + trigger conditions) appended to system prompt at boot
@@ -318,8 +318,8 @@ The **Swallowtail Festival** opening adventure has been fully implemented with:
 - **[README.md](README.md)** — Project overview and GM Agent setup
 - **[QUICKSTART_GM.md](QUICKSTART_GM.md)** — How to launch and play a session
 - **adventure_path/[00_system_authority/](adventure_path/00_system_authority/)** — GM behavioral rules
-- **adventure_path/[01_world_setting/](adventure_path/01_world_setting/)** — Golarion and Varisia lore
-- **adventure_path/[03_books/BOOK_01_BURNT_OFFERINGS/](adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/)** — Swallowtail Festival implementation
+- **adventure_path/[07_world_setting/](adventure_path/07_world_setting/)** — Golarion and Varisia lore
+- **adventure_path/[06_books/BOOK_01_BURNT_OFFERINGS/](adventure_path/06_books/BOOK_01_BURNT_OFFERINGS/)** — Swallowtail Festival implementation
 
 ---
 

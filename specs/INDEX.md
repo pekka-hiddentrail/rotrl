@@ -13,10 +13,10 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [session-end-recap.feature](session-end-recap.feature) | Backend \| Frontend | `@session` `@recap` `@end` `@llm` | 4 | `stream_end_session()`, `recap.md`, `boot.md`, `notes.json` |
 | [llm-providers.feature](llm-providers.feature) | Backend \| Frontend | `@llm` `@groq` `@ollama` `@provider` | 6 | Groq API, Ollama API, rate-limit headers, `stream_options` fallback, `Header.tsx` model dropdown |
 | [context-detection.feature](context-detection.feature) | Backend | `@context` `@npc` `@skill` `@location` | 5 | `NpcIndex`, `SkillIndex`, `context` SSE event |
-| [location-system.feature](location-system.feature) | Backend | `@location` `@index` `@generator` `@context` `@injection` | 9 | `LocationIndex`, `location_lookup.py`, `07_locations/`, `scene_locations`, `%%GENERATE%%` stub |
+| [location-system.feature](location-system.feature) | Backend | `@location` `@index` `@generator` `@context` `@injection` | 9 | `LocationIndex`, `location_lookup.py`, `03_locations/`, `scene_locations`, `%%GENERATE%%` stub |
 | [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 5 | Streaming filter, holdback buffer, `patch_last` event |
 | [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
-| [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `06_rules/skills/` |
+| [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `04_rules/skills/` |
 | [session-logging.feature](session-logging.feature) | Backend \| Frontend | `@logging` `@session-log` `@api-log` `@dice` | 10 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok`, `ApiLogPanel.tsx` |
 | [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button, API Logs button |
 | [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 6 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
@@ -27,6 +27,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 | [event-injection.feature](event-injection.feature) | Backend | `@event` `@injection` `@context` `@parsing` `@session` | 8 | `EventIndex`, `active_events`, `%%EVENT%%` parser, event map in system prompt |
 | [combat-tracker.feature](combat-tracker.feature) | Backend \| Frontend | `@combat` `@parsing` `@session` `@streaming` `@layout` | 10 | `CombatState`, `Combatant`, `_parse_combat_block`, `CombatPanel.tsx`, `HpBar.tsx`, `combat_update` SSE, `DELETE /combat`, per-turn combat reminder |
+| [combat-tier1-1.feature](combat-tier1-1.feature) | Backend | `@combat` `@hp` `@session` `@parsing` | 9 | `_parse_combat_block(existing_state)`, `_parse_hp_deltas`, `_apply_hp_deltas`, `%%HP%%` block, `[CURRENT HP]` context injection, `_COMBAT_SPEC_ROUND1`, `_COMBAT_SPEC_ONGOING` |
 | [player-bubble-speaker.feature](player-bubble-speaker.feature) | Frontend | `@chat` `@bubbles` `@character` `@speaker` `@identity` | 6 | `MessageBubble.tsx`, `types.ts` `MessageSpeaker`, `App.tsx` speaker snapshot, `index.css` |
 | [splash-hints.feature](splash-hints.feature) | Frontend | `@splash` `@hints` `@ui` `@rotation` | 6 | `SplashHint.tsx`, `hints.ts`, `App.tsx`, `index.css` |
 
@@ -63,16 +64,16 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@llm` | LLM provider switching | `Header.tsx` provider toggle, `api/session_manager.py` `_stream_chat()` |
 | `@logging` | Session and API call logs | `api/api_logger.py`, `outputs/` |
 | `@narrative` | Narrative streaming filter | `stream_turn()` holdback buffer, `patch_last` SSE event |
-| `@npc` | NPC database and index | `api/context/npc_lookup.py`, `adventure_path/05_npcs/` |
-| `@location` | Location profile database and index | `api/context/location_lookup.py`, `adventure_path/07_locations/` |
+| `@npc` | NPC database and index | `api/context/npc_lookup.py`, `adventure_path/01_npcs/` |
+| `@location` | Location profile database and index | `api/context/location_lookup.py`, `adventure_path/03_locations/` |
 | `@ollama` | Ollama provider behaviour | `api/session_manager.py` Ollama branch, `num_ctx`/`num_gpu` |
 | `@parsing` | `%%SECTION%%` response parsing | `stream_turn()` section parser, `%%ROLL%%` / `%%GENERATE%%` / `%%DELTAS%%` |
 | `@prompt` | System prompt assembly | `_build_slim_system_prompt()`, `sessions/` boot files |
 | `@recap` | Session end and recap | `stream_end_session()`, `recap.md`, `boot.md` |
 | `@session` | Session lifecycle | `api/session_manager.py`, `GameSession` dataclass |
-| `@skill` | Skill detection and injection | `api/context/skill_lookup.py`, `adventure_path/06_rules/skills/` |
+| `@skill` | Skill detection and injection | `api/context/skill_lookup.py`, `adventure_path/04_rules/skills/` |
 | `@startup` | Dev startup process cleanup | `dev.py`, `start_backend.ps1`, `start_ui.ps1` |
 | `@streaming` | SSE token streaming | `StreamingResponse`, token/done/error/patch_last events |
-| `@event` | Scene-triggered event injection | `api/context/event_index.py`, `adventure_path/08_events/`, `active_events`, `%%EVENT%%` |
+| `@event` | Scene-triggered event injection | `api/context/event_index.py`, `adventure_path/02_events/`, `active_events`, `%%EVENT%%` |
 | `@combat` | Combat tracker panel and state | `api/session_manager.py` `CombatState`, `CombatPanel.tsx`, `HpBar.tsx`, `%%COMBAT%%` block |
 | `@layout` | UI column layout switching | `ui/src/index.css` `.main-content.combat-active`, flex `order` rules |

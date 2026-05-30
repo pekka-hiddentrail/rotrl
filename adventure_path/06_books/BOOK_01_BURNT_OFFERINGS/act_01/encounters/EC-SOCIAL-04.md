@@ -1,4 +1,4 @@
-﻿# EC-SOC-04 - Aldern Foxglove Brief Social
+# EC-SOC-04 - Aldern Foxglove Brief Social
 
 **Scene:** S2 - Festival Social Phase (or S6 Aftermath)
 **Type:** Social / Seed
@@ -23,4 +23,4 @@ Play him as pleasant background. His significance is only visible in hindsight. 
 
 ## NPC File
 
-adventure_path/05_npcs/aldern_foxglove/base.md
+adventure_path/01_npcs/aldern_foxglove/base.md
