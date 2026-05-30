@@ -1,6 +1,6 @@
-# FEATURE — Combat Tier 1.1: HP Authority Shift
+# FEATURE — Combat HP Authority
 
-**ID:** combat-tier1-1
+**ID:** combat-hp
 **Status:** Approved
 **Area:** Backend
 **Tags:** @combat @hp @session @parsing
@@ -12,18 +12,17 @@
 > As the **game system**,
 > I want the backend to own HP values for all combatants,
 > so that LLM arithmetic errors and round-to-round drift cannot corrupt the
-> combat tracker, and so Tier 1.5 attack resolution has a reliable HP store
-> to write into.
+> combat tracker, and so attack resolution has a reliable HP store to write into.
 
 In Tier 1, the LLM writes `hp: cur/max` every turn for every combatant. In
 practice the model miscounts damage, forgets a hit from two rounds ago, or
-silently resets a dying goblin to full health. Tier 1.1 fixes this: the LLM
-initialises HP when a combatant first appears, and the backend persists those
-values. The LLM never computes HP again — it reads current values from the
-injected context and narrates accordingly.
+silently resets a dying goblin to full health. This feature fixes that: the LLM
+initialises HP when a combatant first appears, the backend persists those values,
+and the LLM never computes HP again — it reads current values from the injected
+context and narrates accordingly.
 
-Non-attack HP changes (traps, poison, healing) are handled by a new `%%HP%%`
-delta block that the LLM writes instead of rewriting full HP values.
+Non-attack HP changes (traps, poison, healing) use a `%%HP%%` delta block that
+the LLM writes instead of rewriting full HP values.
 
 ---
 
@@ -189,5 +188,6 @@ And   "%%HP%%", "delta:", and "name:" from the HP block are NOT in any token eve
 - HP clamping rules are identical to `Combatant.__post_init__`: `[0, hp_max]`.
 - Name matching is **case-insensitive** to tolerate LLM capitalisation variance.
 - `%%HP%%` has no effect when `session.combat_state` is `None` (silently ignored).
-- Related: [combat-tracker.feature](combat-tracker.feature) — Tier 1 foundation
-- Related: TODO.md CB1.1-1 through CB1.1-4
+- Attack damage from `%%ATTACK%%` also uses `_apply_hp_deltas` — same code path.
+- Related: [combat-tracker.feature](combat-tracker.feature) — visual tracker foundation
+- Related: [attack-resolution.feature](attack-resolution.feature) — attack HP changes via the same delta path

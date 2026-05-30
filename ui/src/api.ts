@@ -10,6 +10,8 @@ export type SseEvent =
   | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string }
   | { type: 'rate_limits'; rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string }
   | { type: 'combat_update'; combat_state: import('./types').CombatState | null }
+  | { type: 'attack_request'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
+  | { type: 'attack_result'; attacker: string; target: string; roll: number; bonus: number; total: number; ac: number; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean }
 
 export async function* bootSession(
   sessionNumber: number,
@@ -115,6 +117,39 @@ export async function fetchBenchmarks(): Promise<BenchmarkRow[]> {
   if (!res.ok) throw new Error(`Benchmarks fetch failed (${res.status})`)
   const data: { rows: BenchmarkRow[] } = await res.json()
   return data.rows
+}
+
+export async function resolveAttackRoll(
+  sessionId: string,
+  rolled: number,
+): Promise<{ hit: boolean; ac: number; roll: number; bonus: number; total: number; damage_expr: string | null; queue_remaining: number; next_attack: { attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string } | null }> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/resolve_attack_roll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rolled }),
+  })
+  if (!res.ok) throw new Error(`Resolve attack roll failed (${res.status})`)
+  return res.json()
+}
+
+export async function resolveDamageRoll(
+  sessionId: string,
+  rolls: number[],
+  total: number,
+): Promise<{ damage_rolls: number[]; damage_total: number; queue_remaining: number; next_attack: { attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string } | null }> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/resolve_damage_roll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rolls, total }),
+  })
+  if (!res.ok) throw new Error(`Resolve damage roll failed (${res.status})`)
+  return res.json()
+}
+
+export async function* resumeCombat(sessionId: string): AsyncGenerator<SseEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/resume_combat`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Resume combat failed (${res.status})`)
+  yield* parseSseStream(res)
 }
 
 export async function fetchApiLogList(): Promise<string[]> {

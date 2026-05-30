@@ -1,8 +1,9 @@
 """Tests for Combat Tier 1.1 — HP Authority Shift.
 
 Covers: backend HP preservation, new-combatant initialisation, HP context
-injection, %%HP%% delta block parsing and application, player-stream stripping.
-Spec: specs/combat-tier1-1.feature
+injection, %%HP%% delta block parsing and application, player-stream stripping,
+and _get_combatant_ac (shared combat-state lookup utility).
+Spec: specs/combat-hp.feature
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from api.session_manager import (
     _parse_hp_deltas,
     _apply_hp_deltas,
     _inject_context,
+    _get_combatant_ac,
 )
 from .conftest import make_stream_response, parse_sse
 
@@ -385,3 +387,30 @@ class TestHpDeltaIntegration:
 
         shalelu = session.combat_state.combatants[0]
         assert shalelu.hp_current == 7   # preserved — LLM wrote 24 but backend wins
+
+
+# ── _get_combatant_ac ─────────────────────────────────────────────────────────
+
+class TestGetCombatantAc:
+    """Shared lookup utility used by both HP authority and attack resolution."""
+
+    def test_found(self):
+        state = CombatState(round=1, combatants=[
+            Combatant(name="Shalelu", hp_current=18, hp_max=24, ac=17, initiative=14),
+        ])
+        assert _get_combatant_ac("Shalelu", state) == 17
+
+    def test_case_insensitive(self):
+        state = CombatState(round=1, combatants=[
+            Combatant(name="Shalelu", hp_current=18, hp_max=24, ac=17, initiative=14),
+        ])
+        assert _get_combatant_ac("shalelu", state) == 17
+
+    def test_not_found_returns_10(self):
+        state = CombatState(round=1, combatants=[
+            Combatant(name="Shalelu", hp_current=18, hp_max=24, ac=17, initiative=14),
+        ])
+        assert _get_combatant_ac("Ghost", state) == 10
+
+    def test_none_state_returns_10(self):
+        assert _get_combatant_ac("Anyone", None) == 10

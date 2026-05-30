@@ -161,7 +161,8 @@ Combat runs through the existing narrative loop — the LLM drives pacing, the s
 
 ### Combat Rules Reference
 
-- [ ] **Create `adventure_path/04_rules/combat/` folder** — basic PF1e combat reference files for the GM agent: attack rolls, AC, initiative, HP, actions per round, AoO. Same format as skill files with `<!-- REFERENCE -->` separator so the RAG system can inject relevant sections per turn.
+- [x] **Create `adventure_path/04_rules/combat/` folder** — six PF1e combat reference files created: `attack_rolls.md`, `armor_class.md`, `initiative.md`, `hit_points.md`, `actions.md`, `attacks_of_opportunity.md`. Each follows the skill file format with `**Triggers:**` header and `<!-- REFERENCE -->` payload/reader split. Injection wired in when a `CombatRulesIndex` is built (same pattern as `SkillIndex`).
+- [x] **Wire `CombatRulesIndex` injection** — `api/context/combat_lookup.py` built (`CombatRulesIndex`, `CombatRuleMatch`, `_parse_combat_rule_file`); singleton wired in `session_manager.py`; trigger detection runs in `_inject_context` when `combat_state.round > 0`; 22 tests in `test_combat_lookup.py`.
 
 ### Tier 1 — Combat Tracker Panel (MVP)
 
@@ -254,32 +255,31 @@ Fields: `attacker` (name), `target` (name), `bonus` (e.g. `+4`, `-1`), `damage` 
 
 #### Backend
 
-- [ ] **CB1.5-1 — `_parse_attack_line` + `_parse_attack_block`** — same separator pattern as `_parse_combatant_line`. `_parse_attack_block(text) → list[dict]`. `_ATTACK_BLOCK_RE` regex (same pattern as `_COMBAT_BLOCK_RE`). Added to both section-based and flat-block paths. `"\n%%ATTACK%%"` added to `_END_MARKERS`; NOT added to `_HAS_SECTION_MARKERS_RE` (same reason as COMBAT — avoids NARRATIVE fallback leak).
-- [ ] **CB1.5-2 — `_roll_dice(expr: str) → tuple[list[int], int]`** — parse `NdN+M` / `NdN` / `NdN-M`; roll with `random.randint`; return `(individual_rolls, total)`. Invalid expr → `([], 0)`.
-- [ ] **CB1.5-3 — `PendingAttack` dataclass + session attack queue** — `PendingAttack(attacker, target, bonus, damage_expr, attack_type, is_pc)` with resolution fields (`hit_roll`, `hit`, `damage_rolls`, `damage_total`). `GameSession` gains `attack_queue: list[PendingAttack]` and `attack_results: list[dict]` (collected this round, injected into history when queue empties).
-- [ ] **CB1.5-4 — NPC auto-resolution** — when `%%ATTACK%%` is parsed, NPC attacks resolved immediately via `_resolve_npc_attack(attack, combat_state)`: roll d20 + bonus vs target AC, roll damage on hit, update `combat_state` HP via `%%HP%%` delta logic, add result to `attack_results`, emit `attack_result` SSE.
-- [ ] **CB1.5-5 — `POST /sessions/{id}/resolve_attack_roll`** — takes `{ rolled: int }`. Compares `rolled + bonus` vs target AC from `combat_state`. Miss: add miss to `attack_results`, advance queue. Hit: set phase to `damage`, emit `damage_request` SSE `{ damage_expr, hit_roll, hit_total }`. Returns JSON `{ hit, phase, queue_done }`.
-- [ ] **CB1.5-6 — `POST /sessions/{id}/resolve_damage_roll`** — takes `{ rolls: [int], total: int }`. Applies damage to `combat_state` HP (via HP delta logic). Adds hit+damage to `attack_results`. Advances queue: if more PC attacks remain, emit next `attack_request` SSE and return `{ queue_done: false }`. If queue is empty, return `{ queue_done: true }`.
-- [ ] **CB1.5-7 — `POST /sessions/{id}/resume_combat`** — called by frontend when `queue_done: true`. Injects `attack_results` into `session.messages` as a structured user turn (`[ATTACK RESULTS — round N]\n...`), clears `attack_queue` and `attack_results`, calls LLM, streams response (SSE, same as `/turn`). This is the only endpoint that triggers an LLM call during combat resolution.
-- [ ] **CB1.5-8 — System prompt update** — add ATTACK RESOLUTION block to `_build_slim_system_prompt` (same conditional injection as the combat spec — only when `combat_state` is active). Format spec + rules: attacker/target must match `%%COMBAT%%` names exactly; bonus is total attack bonus; omit on rounds with no attacks.
+- [x] **CB1.5-1 — `_parse_attack_line` + `_parse_attack_block`** — `_ATTACK_BLOCK_RE` regex; same separator pattern as `_parse_combatant_line`; `"\n%%ATTACK%%"` added to `_END_MARKERS`; NOT added to `_HAS_SECTION_MARKERS_RE`.
+- [x] **CB1.5-2 — `_roll_dice(expr: str) → tuple[list[int], int]`** — `_DICE_EXPR_RE` regex; `random.randint` per die; invalid expr → `([], 0)`.
+- [x] **CB1.5-3 — `PendingAttack` dataclass + session attack queue** — `PendingAttack` dataclass with hit/damage resolution fields; `GameSession` gains `attack_queue: list[PendingAttack]` and `attack_results: list[dict]`.
+- [x] **CB1.5-4 — NPC auto-resolution** — `_resolve_npc_attack` rolls d20+bonus vs target AC, applies HP delta via `_apply_hp_deltas`, emits `attack_result` SSE immediately; `_get_combatant_ac` and `_is_pc_attacker` helpers; `_build_attack_history_message` formats results for history injection.
+- [x] **CB1.5-5 — `POST /sessions/{id}/resolve_attack_roll`** — `resolve_attack_roll()` function + endpoint; hit path leaves attack in queue for damage; miss path pops queue and returns `next_attack` info.
+- [x] **CB1.5-6 — `POST /sessions/{id}/resolve_damage_roll`** — `resolve_damage_roll()` function + endpoint; applies HP delta, pops queue, returns `next_attack` info.
+- [x] **CB1.5-7 — `POST /sessions/{id}/resume_combat`** — `stream_resume_combat()` appends attack history message, clears `attack_results`, delegates to `_stream_chat()`; endpoint streams SSE.
+- [x] **CB1.5-8 — System prompt update** — ATTACK RESOLUTION section added to `_COMBAT_SPEC_ONGOING`; `conditions:` field documented in format spec.
 
 #### New SSE events
 
 - `attack_request` — `{ type, attacker, target, bonus, ac, damage_expr, attack_type }` — player must roll to-hit
-- `damage_request` — `{ type, attacker, target, damage_expr, hit_roll, hit_total }` — player must roll damage
 - `attack_result` — `{ type, attacker, target, roll, bonus, total, ac, hit, damage_rolls, damage_total, attack_type, is_pc }` — one per resolved attack
 
-`SseEvent` union in `api.ts` and `AttackResult` interface in `types.ts` updated.
+`SseEvent` union in `api.ts`, `AttackResult` + `AttackPhase` in `types.ts` updated.
 
 #### Frontend
 
-- [ ] **CB1.5-9 — DicePanel attack flow** — handle `attack_request` SSE: show to-hit banner (`⚔ Goblin 1 attacks Shalelu — roll to hit! Bonus: +4, AC: 17`). On roll, call `/resolve_attack_roll`. Handle `damage_request` SSE: show damage banner (`⚔ HIT! Roll damage: 1d4+2`). On roll, call `/resolve_damage_roll`. When response returns `queue_done: true`, call `/resume_combat` and stream response. Reuse existing DicePanel queue mechanism; add distinct visual style for attack rolls vs skill rolls.
-- [ ] **CB1.5-10 — DicePanel attack history** — `attack_result` events rendered in roll history: `⚔ Goblin 1 → Shalelu: 14+4=18 vs AC 17 — HIT (5 dmg)` / `⚔ Thaelion → Goblin 2: 8+5=13 vs AC 13 — HIT (7 dmg)`. PC and NPC results shown in same list, newest first.
-- [ ] **CB1.5-11 — CombatPanel condition chips** — extend `%%COMBAT%%` combatant line with optional `conditions: [prone, shaken]` field. `Combatant` dataclass gains `conditions: list[str]`. `CombatPanel` renders small coloured chips below each HP bar. 17 PF1e conditions supported; unknown values silently dropped. Tooltip on each chip: one-line mechanical effect.
+- [x] **CB1.5-9 — DicePanel attack flow** — `attackPhase` prop drives to-hit and damage banners; `onAttackRoll`/`onDamageRoll` callbacks in App.tsx call resolve endpoints; auto-resume when `queue_remaining === 0`; stale-closure guard via refs.
+- [x] **CB1.5-10 — DicePanel attack history** — `attackLog` prop rendered above skill-roll history; ⚔ prefix, hit/miss badge, damage total shown.
+- [x] **CB1.5-11 — CombatPanel condition chips** — `conditions: list[str]` on `Combatant` dataclass; `_parse_combatant_line` parses `conditions: [prone, shaken]` field; `_serialize_combat_state` includes it; `CombatPanel` renders chips with `CONDITION_TOOLTIPS` map (17 PF1e conditions).
 
 #### Tests
 
-- [ ] **CB1.5-T** — `tests/test_combat_t15.py`: `_parse_attack_line` (happy path, defaults, bonus parsing); `_roll_dice` (standard exprs, invalid); NPC auto-resolution (hit/miss path, HP updated in combat_state); `PendingAttack` queue lifecycle; `/resolve_attack_roll` hit+miss paths; `/resolve_damage_roll` advances queue; `/resume_combat` injects history + streams LLM; `attack_result` event arrives after `combat_update`; `%%ATTACK%%` stripped from player stream; conditions parsed + serialised.
+- [x] **CB1.5-T** — `tests/test_combat_t15.py`: 40 tests. `_roll_dice` (6); `_parse_attack_line` (7); `_parse_attack_block` (3); `_get_combatant_ac` (4); `_is_pc_attacker` (2); `_resolve_npc_attack` (3); conditions (4); `resolve_attack_roll` hit+miss+no-queue (3); `resolve_damage_roll` damage+no-pending (2); `/resume_combat` injects+streams+404+409 (3); SSE integration: NPC+PC split events, NPC HP update, stream filter (3). 646 total passing.
 
 ---
 
@@ -407,6 +407,10 @@ Do these in order — each step is independently shippable and leaves the system
 ---
 
 ## NPC Lifecycle and Knowledge
+
+- [ ] **Location generation should follow NPC generation rules** — session-generated locations (from `%%GENERATE%% type: location`) currently create thin stubs in `03_locations/` with just the LLM-provided fields. They should follow the same lifecycle as NPCs: dot-prefix for session stubs (`.location_name/`), `base.md` format matching the location seed files, `LocationIndex` invalidation after stub creation, and a "Purge Locations" path parallel to "Purge NPCs". Currently a session-generated location gets auto-injected as context on subsequent turns but its content is minimal and unreviewed.
+  **Why:** user observed session-generated stubs (e.g. `Festival Square`) being re-injected with thin/LLM-invented content, polluting future turns. NPC lifecycle (dot-prefix → promote → purge) is the established pattern.
+  **How to apply:** model the location stub writer on `_process_generate_block` for NPCs; add dot-prefix logic to `LocationIndex`; add purge endpoint.
 
 - [ ] Write `%%GENERATE%%` summary field to NPC knowledge — the `summary:` field in `%%GENERATE%%` blocks is parsed but silently dropped. Write it as the first entry in the new NPC's `knowledge.md`: `- [world] {summary} — S{session:03d} T000`. Bootstraps the NPC's knowledge file immediately.
 - [ ] **Sandpoint NPC skeletons** — populate `01_npcs/` with skeleton `base.md` files for 50–75% of named Sandpoint NPCs. A skeleton needs: name, role/occupation, one-line physical description, one-line personality, key relationships, and location (which building/district they frequent). No stat blocks, no deep backstory — just enough that the GM never has to invent a bartender from scratch. Source from `adventure_path/06_books/BOOK_01_BURNT_OFFERINGS/NPCS.md` and `SANDPOINT_LOCATIONS.md`. Priority order: (1) named NPCs already referenced in session logs or the book's Tier I/II list; (2) location anchors (innkeeper, blacksmith, sheriff's deputy, temple acolytes); (3) recurring faces (market vendors, festival organisers).

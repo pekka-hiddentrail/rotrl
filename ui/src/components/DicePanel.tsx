@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { AttackPhase, AttackResult } from '../types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,10 @@ interface Props {
   pendingRoll: PendingRoll | null
   activeSpeaker: ActiveSpeaker | null
   onRoll: (expr: string, rolls: number[], total: number) => Promise<{ passed: boolean } | null>
+  attackPhase?: AttackPhase
+  attackLog?: AttackResult[]
+  onAttackRoll?: (rolled: number) => Promise<void>
+  onDamageRoll?: (rolls: number[], total: number) => Promise<void>
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -99,7 +104,7 @@ function signedStr(n: number): string {
 
 let nextId = 0
 
-export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props) {
+export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPhase = null, attackLog = [], onAttackRoll, onDamageRoll }: Props) {
   const [pending, setPending] = useState<number[]>([])
   const [history, setHistory] = useState<RollRecord[]>([])
   const [autoBonus, setAutoBonus] = useState(true)
@@ -159,14 +164,48 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
 
   const handleBannerClick = () => executeRoll([20])
 
+  const handleAttackToHitClick = async () => {
+    const roll = Math.floor(Math.random() * 20) + 1
+    await onAttackRoll?.(roll)
+  }
+
+  const handleDamageRollClick = async () => {
+    if (pending.length === 0) return
+    const rolls = [...pending]
+    const total = rolls.reduce((a, b) => a + b, 0)
+    setPending([])
+    await onDamageRoll?.(rolls, total)
+  }
+
   // Bonus preview shown in the roll-request banner (pure computation — no state needed)
   const bonusPreview = (pendingRoll && autoBonus)
     ? lookupSkillBonus(pendingRoll.skill, activeSpeaker)
     : null
 
+  const isAttackActive = attackPhase !== null
+
   return (
-    <aside className={`dice-panel${pendingRoll ? ' dice-panel-active' : ''}`}>
-      {pendingRoll ? (
+    <aside className={`dice-panel${pendingRoll || isAttackActive ? ' dice-panel-active' : ''}`}>
+      {attackPhase?.phase === 'to_hit' ? (
+        <div className="roll-request-banner attack-banner">
+          <button className="roll-request-prompt" onClick={handleAttackToHitClick} title="Click to roll d20">
+            <div className="roll-request-skill">⚔ {attackPhase.attacker} → {attackPhase.target}</div>
+            <div className="roll-request-dc">vs AC {attackPhase.ac} (bonus: {attackPhase.bonus >= 0 ? '+' : ''}{attackPhase.bonus})</div>
+            <div className="roll-request-hint">click to roll d20</div>
+          </button>
+        </div>
+      ) : attackPhase?.phase === 'damage' ? (
+        <div className="roll-request-banner attack-banner attack-banner--damage">
+          <div className="roll-request-skill">⚔ HIT! {attackPhase.attacker} → {attackPhase.target}</div>
+          <div className="roll-request-dc">Roll damage: {attackPhase.damage_expr}</div>
+          <div className="roll-request-hint">pick dice above, then Roll</div>
+          <button
+            className="btn btn-roll attack-damage-roll-btn"
+            onClick={handleDamageRollClick}
+            disabled={pending.length === 0}
+          >Roll Damage</button>
+        </div>
+      ) : pendingRoll ? (
         <div className="roll-request-banner">
           <button
             className="roll-request-prompt"
@@ -202,6 +241,7 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
       ) : (
         <div className="dice-panel-label">Dice</div>
       )}
+
 
       <div className="dice-grid">
         {DICE.map(sides => (
@@ -239,10 +279,38 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
         Roll
       </button>
 
-      {history.length > 0 && (
+      {(history.length > 0 || attackLog.length > 0) && (
         <>
           <div className="dice-divider" />
           <div className="dice-history">
+            {attackLog.map((r, i) => (
+              <div key={`atk-${i}`} className={`history-row attack-history-row${i === 0 && history.length === 0 ? ' history-latest' : ''}`}>
+                <div className="history-expr attack-label">⚔ {r.is_pc ? 'PC' : 'NPC'}</div>
+                <div className="history-breakdown">
+                  <span className="hist-skill-label">{r.attacker} → {r.target}</span>
+                </div>
+                {r.hit ? (
+                  <div className="history-breakdown">
+                    <span className="hist-num">{r.roll}</span>
+                    <span className="hist-op">{r.bonus >= 0 ? '+' : ''}{r.bonus}</span>
+                    <span className="hist-eq">={r.total}</span>
+                    <span className="hist-dc"> vs AC {r.ac}</span>
+                    <span className="hist-op"> — </span>
+                    <span className="hist-num">{r.damage_total} dmg</span>
+                  </div>
+                ) : (
+                  <div className="history-breakdown">
+                    <span className="hist-num">{r.roll}</span>
+                    <span className="hist-op">{r.bonus >= 0 ? '+' : ''}{r.bonus}</span>
+                    <span className="hist-eq">={r.total}</span>
+                    <span className="hist-dc"> vs AC {r.ac}</span>
+                  </div>
+                )}
+                <span className={`hist-outcome ${r.hit ? 'hist-passed' : 'hist-failed'}`}>
+                  {r.hit ? 'HIT' : 'MISS'}
+                </span>
+              </div>
+            ))}
             {history.map((r, i) => (
               <div key={r.id} className={`history-row${i === 0 ? ' history-latest' : ''}`}>
                 <div className="history-expr">{groupDice(r.dice)}</div>
@@ -290,6 +358,7 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
                 )}
               </div>
             ))}
+            {/* end skill-roll history */}
           </div>
         </>
       )}

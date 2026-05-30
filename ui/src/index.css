@@ -2512,3 +2512,29 @@ body {
   border-radius: 50%;
   flex-shrink: 0;
 }
+
+/* ── Tier 1.5 — Attack banners & condition chips ─────────────────────────── */
+
+.attack-banner { border-color: #b04040; }
+.attack-banner--damage { border-color: #c9a84c; }
+.attack-damage-roll-btn { margin-top: 6px; width: 100%; }
+
+.attack-history-row .attack-label { color: #b04040; font-size: 0.72rem; }
+
+.combatant-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.condition-chip {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #2a1a1a;
+  color: #c9a84c;
+  border: 1px solid #6a3a2a;
+  cursor: default;
+  white-space: nowrap;
+}
