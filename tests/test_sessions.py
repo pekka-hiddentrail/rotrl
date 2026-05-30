@@ -94,6 +94,16 @@ def test_delete_unknown_session_404(client):
     assert resp.status_code == 404
 
 
+def test_boot_invalid_session_returns_400(client, tmp_path, monkeypatch):
+    """Booting a session number with no boot/recap context returns 400."""
+    import api.main as main_mod
+    monkeypatch.setattr(main_mod, "_REPO_ROOT", tmp_path)
+    # tmp_path has no sessions/ directory, so session 99 has no context files.
+    resp = client.post("/api/sessions", json={"session_number": 99, "model": "qwen3:4b"})
+    assert resp.status_code == 400
+    assert "99" in resp.json()["detail"]
+
+
 # ── Purge session NPCs ────────────────────────────────────────────────────────
 
 def test_purge_session_npcs_removes_dot_dirs(client, monkeypatch, tmp_path):

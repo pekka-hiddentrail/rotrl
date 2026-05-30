@@ -76,6 +76,7 @@ export default function App() {
     setMessages([])
     setSession(null)
     setStreaming(true)
+    setPendingRoll(null)
     setDiceKey(k => k + 1)
 
     // 1. Fetch and show the intro card immediately
@@ -98,6 +99,7 @@ export default function App() {
       }
       if (sessionId) setSession({ id: sessionId, sessionNumber, model })
     } catch (e) {
+      setMessages([])
       setError(String(e))
     } finally {
       setStreaming(false)
@@ -153,6 +155,8 @@ export default function App() {
     setSession(null)
     setMessages([])
     setCombatState(null)
+    setPendingRoll(null)
+    setDiceKey(k => k + 1)
   }
 
   const handleEndCombat = async () => {
@@ -206,6 +210,8 @@ export default function App() {
       setSession(null)
       setMessages([])
       setCombatState(null)
+      setPendingRoll(null)
+      setDiceKey(k => k + 1)
     }
   }
 

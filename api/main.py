@@ -77,6 +77,17 @@ def get_intro(session: int = 1):
 
 @app.post("/api/sessions")
 def post_sessions(req: BootRequest):
+    if req.session_number > 1:
+        sessions_dir = _REPO_ROOT / "sessions"
+        boot = sessions_dir / f"session_{req.session_number:03d}" / "boot.md"
+        recap = sessions_dir / f"session_{req.session_number - 1:03d}" / "recap.md"
+        if not boot.exists() and not recap.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"No boot context found for session {req.session_number}. "
+                       f"Expected sessions/session_{req.session_number:03d}/boot.md "
+                       f"or sessions/session_{req.session_number - 1:03d}/recap.md.",
+            )
     try:
         session = create_session(req.session_number, req.model, req.host, req.temperature, req.dev_mode, req.num_ctx, req.num_gpu, req.provider)
     except Exception as e:
