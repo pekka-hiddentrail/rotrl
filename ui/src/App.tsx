@@ -58,6 +58,7 @@ export default function App() {
   const [combatState, setCombatState] = useState<CombatState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
+  const [showEndConfirm, setShowEndConfirm] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
@@ -169,7 +170,14 @@ export default function App() {
     }
   }
 
+  const handleEndClick = () => {
+    if (!session) return
+    if (devMode) { setShowEndConfirm(true); return }
+    void handleEnd()
+  }
+
   const handleEnd = async () => {
+    setShowEndConfirm(false)
     if (!session) return
     const controller = new AbortController()
     endAbortRef.current = controller
@@ -264,7 +272,7 @@ export default function App() {
         }}
         rateLimits={rateLimits}
         onBoot={handleBoot}
-        onEnd={handleEnd}
+        onEnd={handleEndClick}
         onKillEnd={handleKillEnd}
         onViewLog={handleViewLog}
         onOpenApiLogs={() => setShowApiLogs(true)}
@@ -367,6 +375,28 @@ export default function App() {
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />
 
       {toast && <div className="toast">{toast}</div>}
+
+      {showEndConfirm && (
+        <div className="end-confirm-overlay" onClick={() => setShowEndConfirm(false)}>
+          <div className="end-confirm-panel" onClick={e => e.stopPropagation()}>
+            <div className="end-confirm-title">End session?</div>
+            <div className="end-confirm-body">Dev mode — choose how to close this session.</div>
+            <div className="end-confirm-buttons">
+              <button className="end-confirm-btn end-confirm-btn--primary" onClick={() => void handleEnd()}>
+                Generate recap
+                <span className="end-confirm-sub">LLM call — writes recap.md + boot.md</span>
+              </button>
+              <button className="end-confirm-btn end-confirm-btn--secondary" onClick={() => { setShowEndConfirm(false); handleKillEnd() }}>
+                End without recap
+                <span className="end-confirm-sub">No LLM call — session data discarded</span>
+              </button>
+              <button className="end-confirm-btn end-confirm-btn--cancel" onClick={() => setShowEndConfirm(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

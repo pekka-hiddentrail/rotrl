@@ -1,6 +1,6 @@
 # Perception
 
-**Triggers:** perception, look around, look at, look for, search, searching, examine, examining, inspect, notice, spot, listen, hear, hearing, scan, keep watch, watch for, do i see, do i notice, check for traps, check for, peer, peer at, peer into, investigate
+**Triggers:** perception, look, look around, look at, look for, search, searching, examine, examining, inspect, notice, spot, listen, hear, hearing, scan, keep watch, watch for, do i see, do i notice, check for traps, check for, peer, peer at, peer into, investigate
 
 ## Resolution
 

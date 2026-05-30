@@ -39,12 +39,17 @@ POST /api/sessions
 │      │    a. sessions/session_NNN/boot.md          (GM-facing brief)
 │      │    b. sessions/session_NNN-1/recap.md        (prior session recap)
 │      │    c. "(No boot context found…)"             (fallback text)
-│      └─ Assemble: core behavior + party + situation + response structure
-│           + response format example
+│      └─ Assemble: core behavior + GM style + party + situation
+│           + compact marker list (section specs injected per-turn, not here)
 │
-├─ 4. Create GameSession in memory (session_id = 8-char UUID prefix)
+├─ 4. Build PC profiles — _build_pc_profiles(ui/public/data/)
+│      ├─ Read ui/public/data/player_*.json for each character
+│      └─ Build "narrative" (appearance) + "mechanical" (stats) tiers per PC
+│           stored on GameSession.pc_profiles; injected when PC is named in input
 │
-├─ 5. Open log file: outputs/session_NNN_YYYYMMDD_HHMMSS.log.md
+├─ 5. Create GameSession in memory (session_id = 8-char UUID prefix)
+│
+├─ 6. Open log file: outputs/session_NNN_YYYYMMDD_HHMMSS.log.md
 │      Write system prompt into log (inside <details> block)
 │
 └─ yield SSE event: { "type": "done", "session_id": "..." }
@@ -193,41 +198,54 @@ POST /api/sessions/{id}/end
 
 ## System prompt structure
 
-`_build_slim_system_prompt()` assembles the prompt once at boot. It never changes during a session; context injection prepends to a **copy** each turn.
+`_build_slim_system_prompt()` assembles the **static base prompt** once at boot.
+It never changes during a session. `_inject_context()` appends a per-turn copy
+with only the context relevant to the current action.
 
 ```
-You are the Game Master for a Pathfinder 1st Edition campaign: Rise of the Runelords.
+You are the GM for a Pathfinder 1E campaign: Rise of the Runelords.
 Session number: N
 
 CORE BEHAVIOR
 ...5 rules about description, player agency, lore fidelity...
 
 GM STYLE
-...7 style directives — NPC demeanor, location detail, rules rulings, player drift,
-   events, inventory, travel...
+...4 compact directives — NPC demeanor, location detail, rulings, pacing...
 
 PARTY
-  - Yanyeeku (Kitsune Sorcerer / Crossblooded)
+  - Yanyeeku (Kitsune Sorcerer / Nine Tailed Heir)
   - ...
 
 CURRENT SITUATION
 ...contents of sessions/session_NNN/boot.md (or prior recap, or fallback)...
 
-RESPONSE STRUCTURE (strictly enforced)
-%%NARRATIVE%%  — 2–4 paragraphs of prose
-%%ROLL%%       — one bracket block when a check is needed
-%%GENERATE%%   — one block per new NPC/location introduced
-%%DELTAS%%     — one block per active NPC in the scene
+RESPONSE STRUCTURE — per-turn instructions list which sections are active this turn.
+Markers in order: %%NARRATIVE%%  %%ROLL%%  %%GENERATE%%  %%DELTAS%%  %%EVENT%%  %%COMBAT%%
 
-SCENE EVENT (optional — not a section header)
-%%EVENT%% <event_id>   ← ID on the same line; fires once per event; omit if no trigger applies
+SCENE EVENT rules (fires once per trigger)
+%%COMBAT%% compact reference
 
-...complete format example with all four sections + SCENE EVENT line...
+Everything after %%NARRATIVE%% is stripped before the player sees the response.
 
 ---
 EVENT MAP
 ...one line per event ID from 08_events/ with trigger condition...
 ```
+
+**Per-turn additions** (appended to a copy of the base prompt by `_inject_context`):
+
+| Added when | What |
+|---|---|
+| Always | `[SECTIONS ACTIVE THIS TURN]` block with %%NARRATIVE%% + %%GENERATE%% specs |
+| Skill detected | %%ROLL%% spec |
+| NPCs in scene or detected | %%DELTAS%% spec |
+| Turn 1 only | Full format example (`_FORMAT_EXAMPLE` — Gerhard Pickle) |
+| Combat active (round > 0) | Full combat format + rules (`_COMBAT_FULL_SPEC`) |
+| PC name in input | PC narrative profile (appearance) |
+| PC name + skill detected | PC narrative + mechanical profile (HP/AC/saves/spells) |
+| NPC alias detected | NPC profile (base.md + status + knowledge) |
+| Skill trigger detected | Skill rules |
+| Location visited | Location profile |
 
 The total prompt is capped at `_GROQ_MAX_SYSTEM_CHARS = 30,000` characters for Groq.
 

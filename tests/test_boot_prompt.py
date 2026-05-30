@@ -16,8 +16,11 @@ from pathlib import Path
 
 import pytest
 
+import json
+
 from api.session_manager import (
     _build_slim_system_prompt,
+    _build_pc_profiles,
     validate_turn_input,
     validate_generated_text,
 )
@@ -76,13 +79,14 @@ def test_prompt_contains_situation_section(tmp_path, monkeypatch):
     assert "CURRENT SITUATION" in prompt
 
 
-def test_prompt_contains_roll_section_format(tmp_path, monkeypatch):
-    """Prompt must describe the %%ROLL%% section format."""
+def test_prompt_mentions_roll_marker(tmp_path, monkeypatch):
+    """Static prompt lists %%ROLL%% in the marker list but does NOT contain
+    the full spec (dc:, success:, failure:) — that is injected dynamically."""
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
     prompt = _build_slim_system_prompt(1)
     assert "%%ROLL%%" in prompt
-    assert "dc:" in prompt
+    assert "dc:" not in prompt
 
 
 # ── Situation block resolution ────────────────────────────────────────────────
@@ -666,3 +670,178 @@ def test_validate_uses_stripped_length():
     """Padding with whitespace should not fool the length check."""
     text = "   " + "x" * 10 + "   "
     assert validate_generated_text(text, "Boot", min_length=80) is not None
+
+
+# ── Dynamic prompt sections not in static base ────────────────────────────────
+
+def test_static_prompt_does_not_contain_format_example(tmp_path, monkeypatch):
+    """Format example (Gerhard Pickle) must NOT be in the static prompt —
+    it is injected per-turn only on the first player turn."""
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    prompt = _build_slim_system_prompt(1)
+    assert "Gerhard Pickle" not in prompt
+    assert "EXAMPLE OF A CORRECT FULL RESPONSE" not in prompt
+
+
+def test_static_prompt_does_not_contain_combat_tracker_rules(tmp_path, monkeypatch):
+    """Verbose combat rules must NOT be in the static prompt —
+    they are injected per-turn only when combat is active."""
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    prompt = _build_slim_system_prompt(1)
+    # The compact one-liner stays; the rule prose must not be present.
+    assert "Increment round when all combatants have acted" not in prompt
+    assert "Valid statuses: active" not in prompt
+
+
+def test_static_prompt_contains_compact_combat_reference(tmp_path, monkeypatch):
+    """A compact %%COMBAT%% reference must still appear in the static prompt
+    so the model knows the marker exists and when to use it."""
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    prompt = _build_slim_system_prompt(1)
+    assert "%%COMBAT%%" in prompt
+
+
+def test_format_example_constant_contains_required_sections():
+    """_FORMAT_EXAMPLE must include all three section markers the model
+    needs to learn the format from."""
+    from api.session_manager import _FORMAT_EXAMPLE
+    assert "%%NARRATIVE%%" in _FORMAT_EXAMPLE
+    assert "%%GENERATE%%" in _FORMAT_EXAMPLE
+    assert "%%DELTAS%%" in _FORMAT_EXAMPLE
+    assert "Gerhard Pickle" in _FORMAT_EXAMPLE
+
+
+def test_combat_full_spec_constant_contains_format_and_rules():
+    """_COMBAT_FULL_SPEC must include the combatant row format and key rules."""
+    from api.session_manager import _COMBAT_FULL_SPEC
+    assert "%%COMBAT%%" in _COMBAT_FULL_SPEC
+    assert "hp:" in _COMBAT_FULL_SPEC
+    assert "round: 0" in _COMBAT_FULL_SPEC
+
+
+def test_static_prompt_section_specs_absent(tmp_path, monkeypatch):
+    """Verbose section specs (dc:, type: npc|location, Tags:) must NOT be in
+    the static prompt — they are injected per-turn by _inject_context."""
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    prompt = _build_slim_system_prompt(1)
+    assert "dc: <N>" not in prompt
+    assert "type: npc|location" not in prompt
+    assert "Tags: [persistent]" not in prompt
+
+
+# ── _build_pc_profiles ────────────────────────────────────────────────────────
+
+def _make_player_json(data_dir: Path, filename: str, data: dict) -> None:
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / filename).write_text(json.dumps(data), encoding="utf-8")
+
+
+_SAMPLE_PC_JSON = {
+    "name": "Aldric",
+    "race": "Human",
+    "class": "Fighter",
+    "archetype": "Two-Handed Fighter",
+    "appearance": "A broad-shouldered man with a scarred jaw and close-cropped grey hair.",
+    "hp": {"current": 12, "max": 12},
+    "ac": {"total": 16},
+    "initiative": "+1",
+    "speed": "30 ft.",
+    "abilities": [
+        {"name": "STR", "mod": "+3"},
+        {"name": "DEX", "mod": "+1"},
+        {"name": "CON", "mod": "+2"},
+        {"name": "INT", "mod": "+0"},
+        {"name": "WIS", "mod": "+1"},
+        {"name": "CHA", "mod": "-1"},
+    ],
+    "saves": [
+        {"name": "Fortitude", "total": "+4"},
+        {"name": "Reflex",    "total": "+1"},
+        {"name": "Will",      "total": "+2"},
+    ],
+    "spells": {"list": []},
+}
+
+
+class TestBuildPcProfiles:
+    def test_returns_empty_dict_when_dir_absent(self, tmp_path):
+        result = _build_pc_profiles(tmp_path / "nonexistent")
+        assert result == {}
+
+    def test_returns_empty_dict_when_no_json_files(self, tmp_path):
+        (tmp_path / "data").mkdir()
+        result = _build_pc_profiles(tmp_path / "data")
+        assert result == {}
+
+    def test_name_becomes_lowercase_key(self, tmp_path):
+        _make_player_json(tmp_path, "player_01.json", _SAMPLE_PC_JSON)
+        result = _build_pc_profiles(tmp_path)
+        assert "aldric" in result
+
+    def test_narrative_contains_name_and_appearance(self, tmp_path):
+        _make_player_json(tmp_path, "player_01.json", _SAMPLE_PC_JSON)
+        result = _build_pc_profiles(tmp_path)
+        narr = result["aldric"]["narrative"]
+        assert "Aldric" in narr
+        assert "scarred jaw" in narr
+
+    def test_narrative_contains_class_and_archetype(self, tmp_path):
+        _make_player_json(tmp_path, "player_01.json", _SAMPLE_PC_JSON)
+        result = _build_pc_profiles(tmp_path)
+        narr = result["aldric"]["narrative"]
+        assert "Fighter" in narr
+        assert "Two-Handed Fighter" in narr
+
+    def test_mechanical_contains_hp_ac_init_speed(self, tmp_path):
+        _make_player_json(tmp_path, "player_01.json", _SAMPLE_PC_JSON)
+        result = _build_pc_profiles(tmp_path)
+        mech = result["aldric"]["mechanical"]
+        assert "HP: 12" in mech
+        assert "AC: 16" in mech
+        assert "Init: +1" in mech
+        assert "Speed: 30 ft." in mech
+
+    def test_mechanical_contains_saves(self, tmp_path):
+        _make_player_json(tmp_path, "player_01.json", _SAMPLE_PC_JSON)
+        result = _build_pc_profiles(tmp_path)
+        mech = result["aldric"]["mechanical"]
+        assert "Fort +4" in mech
+        assert "Ref +1" in mech
+        assert "Will +2" in mech
+
+    def test_multiple_pcs_keyed_separately(self, tmp_path):
+        _make_player_json(tmp_path, "player_01.json", _SAMPLE_PC_JSON)
+        second = dict(_SAMPLE_PC_JSON, name="Sylara", race="Elf", **{"class": "Wizard"})
+        _make_player_json(tmp_path, "player_02.json", second)
+        result = _build_pc_profiles(tmp_path)
+        assert "aldric" in result
+        assert "sylara" in result
+
+    def test_invalid_json_skipped_gracefully(self, tmp_path):
+        (tmp_path / "player_01.json").write_text("not valid json", encoding="utf-8")
+        _make_player_json(tmp_path, "player_02.json", _SAMPLE_PC_JSON)
+        result = _build_pc_profiles(tmp_path)
+        assert "aldric" in result
+        assert len(result) == 1
+
+    def test_missing_name_skipped(self, tmp_path):
+        nameless = dict(_SAMPLE_PC_JSON)
+        del nameless["name"]
+        _make_player_json(tmp_path, "player_01.json", nameless)
+        result = _build_pc_profiles(tmp_path)
+        assert result == {}
+
+    def test_spells_included_in_mechanical(self, tmp_path):
+        with_spells = dict(_SAMPLE_PC_JSON)
+        with_spells["spells"] = {"list": [
+            {"name": "Magic Missile"}, {"name": "Shield"}, {"name": "Sleep"}
+        ]}
+        _make_player_json(tmp_path, "player_01.json", with_spells)
+        result = _build_pc_profiles(tmp_path)
+        mech = result["aldric"]["mechanical"]
+        assert "Magic Missile" in mech
+        assert "Shield" in mech
