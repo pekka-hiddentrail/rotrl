@@ -1,6 +1,6 @@
 # RotRL: Agentic GM System
 
-A FastAPI + React system that runs Pathfinder 1st Edition adventures with an AI Game Master. The GM agent manages narrative, NPCs, skill checks, and persistent world state. Groq is the primary LLM provider (fast, cloud-hosted); Ollama is supported as an offline fallback.
+A FastAPI + React system that runs Pathfinder 1st Edition adventures with an AI Game Master. The GM agent manages narrative, NPCs, skill checks, combat tracking, and persistent world state. Groq is the primary LLM provider (fast, cloud-hosted); Anthropic (Claude) and Ollama are also supported.
 
 ---
 
@@ -11,6 +11,7 @@ A FastAPI + React system that runs Pathfinder 1st Edition adventures with an AI 
 | [Python](https://python.org/) | 3.9+ | Add to PATH during install |
 | [Node.js](https://nodejs.org/) | 18+ | Includes npm |
 | [Groq API key](https://console.groq.com/) | — | Free tier is sufficient for play |
+| [Anthropic API key](https://console.anthropic.com/) | — | Optional — for Claude models |
 | [Ollama](https://ollama.com/) | latest | Optional — offline fallback only |
 | Git | any | To clone the repo |
 
@@ -39,15 +40,16 @@ pip install -r requirements.txt
 cd ui && npm install && cd ..
 ```
 
-### 4. Set your Groq API key
+### 4. Set your API keys
 
 Create a `.env` file in the project root (it is git-ignored):
 
 ```
 GROQ_API_KEY=gsk_your_key_here
+ANTHROPIC_API_KEY=sk-ant-your_key_here   # optional — only needed for Claude models
 ```
 
-> Get a free key at [console.groq.com](https://console.groq.com/). The `llama-3.1-8b-instant` model is fast and free.
+> Get a free Groq key at [console.groq.com](https://console.groq.com/). The `llama-3.1-8b-instant` model is fast and free. Anthropic keys require a paid account.
 
 ### 5. (Optional) Pull an Ollama model
 
@@ -119,9 +121,10 @@ Navigate to **http://localhost:5173** in your browser.
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
 3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
 4. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
-5. **View Log** — opens the live session log in a new browser tab (shown during an active session)
-6. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
-7. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
+5. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, and status badges. Click **End Combat** to manually clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
+6. **View Log** — opens the live session log in a new browser tab (shown during an active session)
+7. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
+8. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
 
 ### Rate limit badge
 
@@ -138,6 +141,7 @@ The GM response is structured internally into sections that are stripped before 
 | `%%GENERATE%%` | Creates a new NPC stub file on disk |
 | `%%DELTAS%%` | Writes updated disposition/location/knowledge to each NPC's file |
 | `%%EVENT%%` | Signals a scene transition — injects event content into context for N turns |
+| `%%COMBAT%%` | Updates the live initiative tracker (`round`, HP, AC, initiative, status per combatant); `round: 0` clears the panel |
 
 In **dev mode** all markers are visible in the stream so you can see the raw output.
 
@@ -194,7 +198,9 @@ rotrl/
 │           ├── IntentBar.tsx      # NPC/skill context display (fixed bottom)
 │           ├── CharacterSidebar.tsx
 │           ├── CharacterSheet.tsx
-│           └── DicePanel.tsx      # Dice roller — feeds result back to API
+│           ├── DicePanel.tsx      # Dice roller — feeds result back to API
+│           ├── CombatPanel.tsx    # Live initiative tracker (visible during combat)
+│           └── HpBar.tsx          # HP bar with colour thresholds (green/amber/red/grey)
 │
 ├── adventure_path/
 │   ├── 00_system_authority/       # Non-negotiable GM rules — adjudication, PF1e scope
@@ -223,13 +229,15 @@ rotrl/
 │
 ├── specs/                         # Feature specs (Gherkin-style ACs)
 │
+├── COMBAT.md                      # How combat tracking works end-to-end
+├── TESTING.md                     # Manual exploratory testing guide
 ├── outputs/                       # Runtime-generated — git-ignored
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 451 pytest tests
-├── ui/src/components/__tests__/    # 69 Vitest component tests
-├── ui/src/__tests__/               # 19 Vitest App SSE integration tests
+├── tests/                         # 494 pytest tests
+├── ui/src/components/__tests__/    # Vitest component tests
+├── ui/src/__tests__/               # Vitest App SSE integration tests
 │
 ├── dev.py                         # One-command dev startup (pytest → API + UI)
 ├── start_backend.ps1              # Windows: start FastAPI backend
@@ -245,6 +253,7 @@ rotrl/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET`  | `/api/health` | Liveness check — returns `{"status": "ok"}` |
+| `GET`  | `/api/characters` | Return all player characters as a JSON array (reads `ui/public/data/`) |
 | `GET`  | `/api/intro` | Player-facing intro card for a session (intro.md → recap.md fallback) |
 | `POST` | `/api/sessions` | Create session, build system prompt; streams `done` SSE event |
 | `GET`  | `/api/sessions/{id}` | Session info (model, message count) |
@@ -254,6 +263,7 @@ rotrl/
 | `POST` | `/api/sessions/{id}/resolve_roll` | Resolve pending roll: compare `rolled` against DC, record outcome |
 | `POST` | `/api/sessions/{id}/end` | Generate recap + next-session boot; streams status events via SSE |
 | `DELETE` | `/api/sessions/{id}` | Discard session without recap (emergency close) |
+| `DELETE` | `/api/sessions/{id}/combat` | Clear active combat state (End Combat button) |
 | `GET`  | `/api/npcs/session` | List all session NPC slugs (dot-prefixed directories) |
 | `DELETE` | `/api/npcs/session` | Purge all session NPC directories; invalidates the NPC index |
 | `GET`  | `/api/log/api` | List recent LLM call log files (newest first, optional `?limit=N`) |
@@ -267,6 +277,7 @@ All streaming endpoints use Server-Sent Events. Each event is a JSON object with
 | `patch_last` | After processing — replaces last message with cleaned text (non-dev only) |
 | `roll_request` | When a `%%ROLL%%` block is parsed (includes skill, dc, success, failure) |
 | `rate_limits` | After each Groq turn — per-minute RPM/TPM remaining + reset times (Groq only) |
+| `combat_update` | After every turn — carries serialised `CombatState` or `null`; drives CombatPanel visibility |
 | `context` | Debug event for injected NPC/skill context |
 | `status` | Progress messages during end-session generation |
 | `error` | Any recoverable error; 429 daily-limit errors include the Groq message verbatim |
@@ -291,7 +302,7 @@ npm run test:watch                # watch frontend tests during UI work
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest, so use `npm run test` from `ui/` before merging frontend changes.
 
-**Backend:** 453 pytest tests passing across 20 test files:
+**Backend:** 494 pytest tests passing across 21 test files:
 
 | File | Covers |
 |------|--------|
@@ -304,24 +315,25 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
 | `test_npc_lookup_extended.py` | `detect_all`, `lookup`, status/knowledge reads, `_parse_base` |
-| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC/skill/location/event injection, context metadata |
+| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC/skill/location/event injection, context metadata, combat ongoing reminder |
 | `test_end_session.py` | `_parse_turns_from_log`, `_enforce_recap_header`, `stream_end_session` errors |
 | `test_stream_filter.py` | `_stream_with_narrative_filter` — dev pass-through, narrative extraction, split tokens |
 | `test_recap_header.py` | Recap header normalization edge cases |
 | `test_log_parser.py` | Log turn parsing |
 | `test_npc_generator.py` | `generate_base_md`, NPC stub creation |
-| `test_character_data.py` | Character sheet loading |
+| `test_character_data.py` | Character JSON field validation (`/api/characters` endpoint, index file, HP/level/abilities/saves/wealth/weapons/spells per character) |
 | `test_intro.py` | Intro file resolution and fallback |
 | `test_event_injection.py` | `EventIndex` loading, `%%EVENT%%` parsing, TTL expiry, duplicate guard, event map, SSE `active_events`, double-write regression |
 | `test_location_lookup.py` | `LocationIndex` loading, alias detection, `<!-- REFERENCE -->` boundary, profile injection, scene re-injection, session-generated location stubs |
 | `test_dev_startup.py` | `dev.py` startup hardening — `_pid_on_port`, `_port_free`, `_kill_tree`, `_free_port` |
+| `test_combat.py` | `Combatant`/`CombatState` dataclasses, HP clamp + status validation, `_parse_combatant_line`, `_parse_combat_block` (incl. round-0 sentinel and parse-failure semantics), `_serialize_combat_state`, `combat_update` SSE, narrative filter stripping, malformed-block-preserves-state regression, combat-only-no-leak regression, `DELETE /combat` endpoint |
 
-**Frontend:** 88 Vitest tests passing across 4 test files:
+**Frontend:** 93 Vitest tests passing across 4 test files (run separately — `cd ui && npm run test`):
 
 | File | Covers |
 |------|--------|
 | `App.test.tsx` | App-level SSE integration — boot flow, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), error bar, session end cleanup |
-| `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display |
+| `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display, quick-roll from banner (AC-012) |
 | `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
 | `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |
 
@@ -355,6 +367,8 @@ POST /api/sessions/{id}/turn  (repeated each exchange)
        │    %%GENERATE%% → create new NPC stub in adventure_path/05_npcs/.<slug>/
        │    %%DELTAS%%   → write NPC status + knowledge files
        │    %%EVENT%%    → add event to active_events (TTL=5 turns); silently ignored if unknown or duplicate
+       │    %%COMBAT%%   → update session.combat_state (round=0 clears; malformed block preserves existing state)
+       ├─ yield combat_update SSE event (serialised CombatState dict or null)
        └─ yield patch_last (non-dev), append to history
 
 POST /api/sessions/{id}/end
@@ -448,14 +462,15 @@ ollama list                            # confirm model is pulled
 | `stream_options` graceful degradation for older Groq models | ✅ Complete |
 | Event injection system (`%%EVENT%%` tag, TTL-based active events, event map) | ✅ Complete |
 | Per-turn location RAG (`LocationIndex`, alias detection, profile injection, scene persistence) | ✅ Complete |
-| Test suites — 453 pytest + 88 Vitest tests | ✅ Complete |
+| Combat Tracker Tier 1 — `%%COMBAT%%` block parsing, `CombatState`/`Combatant` dataclasses, `CombatPanel` + `HpBar`, layout shift, `combat_update` SSE, `DELETE /combat` endpoint, per-turn GM directive reminder, event-file combat requirements | ✅ Complete |
+| Anthropic (Claude) provider — `claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5` | ✅ Complete |
+| Test suites — 494 pytest + 93 Vitest tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
-| Player characters — Yanyeeku, Revemox, Ani | ✅ Complete |
+| Player characters — Yanyeeku, Vanx, Ani | ✅ Complete |
 | Roll outcome fed into next GM turn directive | 🔴 Not done — GM narrates blind after resolve |
 | Session crash recovery (in-memory sessions lost on restart) | 🔴 Not started |
-| Anthropic (Claude) provider | 🔴 Not started |
 | Acts II–III of Burnt Offerings | 🔴 In progress — sinspawn, Glassworks, Catacombs, Thistletop pending |
 | Player agent (autonomous PC AI) | 🔴 Not started |
 
@@ -466,6 +481,7 @@ ollama list                            # confirm model is pulled
 | Layer | Technology |
 |-------|------------|
 | Primary LLM | [Groq](https://groq.com/) — `llama-3.3-70b-versatile` (quality) · `llama-3.1-8b-instant` (fast) |
+| Alt LLM | [Anthropic](https://anthropic.com/) — `claude-sonnet-4-6` · `claude-opus-4-7` · `claude-haiku-4-5` |
 | Fallback LLM | [Ollama](https://ollama.com/) — local, no internet required |
 | Backend | Python 3.9+, FastAPI, uvicorn |
 | Frontend | Vite 5, React 18, TypeScript |

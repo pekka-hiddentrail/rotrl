@@ -20,3 +20,8 @@ Flee if: their mount is killed, OR 2+ commandos fall. Dogs flee if their rider d
 
 ### Wave 3 ends when
 Commandos routed or killed. All active goblin threats are gone. Write `%%EVENT%% attack_repelled`.
+
+### REQUIRED — Combat tracker
+Write a `%%COMBAT%%` block every turn while this event is active.
+Add Wave 3 combatants (stats above) to the existing combatant list.
+Increment round each turn; update HP to reflect damage this turn.

@@ -138,7 +138,7 @@ You are the Game Master...
 
 
 ### [19:47:08] PLAYER
-Ani wants to talk to father Zantus. Revemox looks at the cathedral.
+Ani wants to talk to father Zantus. Vanx looks at the cathedral.
 
 
 <details><summary>LLM payload — turn 1</summary>

@@ -10,6 +10,11 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
     { value: 'llama-3.3-70b-versatile', label: 'llama-3.3-70b — best quality' },
     { value: 'llama-3.1-8b-instant',    label: 'llama-3.1-8b — fastest' },
   ],
+  anthropic: [
+    { value: 'claude-sonnet-4-6',        label: 'claude-sonnet-4-6 — default' },
+    { value: 'claude-opus-4-7',          label: 'claude-opus-4-7 — quality' },
+    { value: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5 — fast' },
+  ],
 }
 
 interface RateLimits {
@@ -28,12 +33,12 @@ interface Props {
   sessionNumber: number
   model: string
   devMode: boolean
-  provider: 'ollama' | 'groq'
+  provider: 'ollama' | 'groq' | 'anthropic'
   rateLimits: RateLimits | null
   onSessionNumberChange: (n: number) => void
   onModelChange: (m: string) => void
   onDevModeChange: (v: boolean) => void
-  onProviderChange: (p: 'ollama' | 'groq') => void
+  onProviderChange: (p: 'ollama' | 'groq' | 'anthropic') => void
   onBoot: () => void
   onEnd: () => void
   onKillEnd: () => void
@@ -96,14 +101,14 @@ export default function Header({
         {!isBooted && (
           <>
             <div className="provider-toggle" title="LLM backend">
-              {(['ollama', 'groq'] as const).map(p => (
+              {(['ollama', 'groq', 'anthropic'] as const).map(p => (
                 <button
                   key={p}
                   className={`provider-btn${provider === p ? ' active' : ''}`}
                   onClick={() => onProviderChange(p)}
                   disabled={locked}
                 >
-                  {p === 'groq' ? '⚡ Groq' : '🖥 Ollama'}
+                  {p === 'groq' ? '⚡ Groq' : p === 'anthropic' ? '🤖 Claude' : '🖥 Ollama'}
                 </button>
               ))}
             </div>

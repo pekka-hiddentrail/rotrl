@@ -58,7 +58,7 @@ def test_detect_multi_word_trigger(skill_root):
 def test_detect_longest_trigger_wins(skill_root):
     # "look around" (10) beats "spot" (4) — both in Perception
     idx = SkillIndex(_repo_root=skill_root)
-    m = idx.detect("Revemox tries to spot and look around the square.")
+    m = idx.detect("Vanx tries to spot and look around the square.")
     assert m is not None
     assert m.matched_trigger == "look around"
 

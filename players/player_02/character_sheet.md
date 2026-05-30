@@ -1,13 +1,13 @@
 # Character Identity
 
-**Name:** Revemox
+**Name:** Vanx
 **Player:** Player 02
 **Campaign:** Rise of the Runelords
 **Current Level:** 1
 **XP:** 0
 
-**Race:** Half-elf
-**Class / Archetype:** Swashbuckler / Musketeer
+**Race / Subrace:** Vanara
+**Class / Archetype:** Barbarian / Savage Technologist
 **Alignment:** Chaotic Good
 **Deity:** Cayden Cailean
 **Homeland / Origin:** Shackles

@@ -473,7 +473,7 @@ def test_parse_response_sections_all_sections():
     import api.session_manager as sm
     text = (
         "%%NARRATIVE%%\n"
-        "Hannah smiles at Revemox.\n\n"
+        "Hannah smiles at Vanx.\n\n"
         "%%ROLL%%\n"
         "[\n"
         "skill: Diplomacy\n"
@@ -484,7 +484,7 @@ def test_parse_response_sections_all_sections():
         "%%DELTAS%%\n"
         "[\n"
         "npc: Hannah\n"
-        "summary: Greeted Revemox.\n"
+        "summary: Greeted Vanx.\n"
         "]\n\n"
         "%%GENERATE%%\n"
         "[\n"

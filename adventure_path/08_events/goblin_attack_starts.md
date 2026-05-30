@@ -22,3 +22,8 @@ A family is trapped near a food cart with two goblins closing in. No roll requir
 
 ### Wave 1 ends when
 Warchanter is killed or flees. Write `%%EVENT%% fire_phase_begins` when Wave 2 starts.
+
+### REQUIRED — Combat tracker
+Write a `%%COMBAT%%` block every turn while this event is active.
+First combat turn: set `round: 1`. List all Wave 1 combatants with the AC and HP values above.
+Subsequent turns: increment round when all combatants have acted; update HP to reflect damage this turn.

@@ -23,3 +23,8 @@ Sheriff Hemlock arrives mid-wave with 4 militia. He organises civilians toward t
 
 ### Wave 2 ends when
 Rooftop goblins are silenced and immediate fire threat is addressed (or not — casualties apply). Write `%%EVENT%% cavalry_arrives` when Wave 3 starts.
+
+### REQUIRED — Combat tracker
+Write a `%%COMBAT%%` block every turn while this event is active.
+Replace Wave 1 combatants with Wave 2 combatants (stats above); carry forward any PCs or surviving Wave 1 enemies.
+Increment round each turn; update HP to reflect damage this turn.

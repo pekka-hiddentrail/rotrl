@@ -8,6 +8,7 @@ export interface CharacterData {
   name: string
   player: string
   race: string
+  subrace: string
   class: string
   archetype: string
   alignment: string
@@ -37,8 +38,6 @@ export interface CharacterData {
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
-// Fetches /data/characters.json at runtime so the file can be edited without
-// recompiling. Vite serves everything in public/ as-is.
 
 export interface CharactersState {
   characters: CharacterData[]
@@ -53,23 +52,11 @@ export function useCharacters(): CharactersState {
   const [error, setError]           = useState<string | null>(null)
 
   useEffect(() => {
-    // 1. Fetch the index to discover which files exist
-    fetch('/data/characters.json')
+    fetch('/api/characters')
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json() as Promise<string[]>
+        return r.json() as Promise<CharacterData[]>
       })
-      // 2. Fetch every individual character file in parallel
-      .then(ids =>
-        Promise.all(
-          ids.map(id =>
-            fetch(`/data/${id}.json`).then(r => {
-              if (!r.ok) throw new Error(`HTTP ${r.status} for ${id}.json`)
-              return r.json() as Promise<CharacterData>
-            })
-          )
-        )
-      )
       .then(data => {
         setCharacters(data)
         setLoading(false)

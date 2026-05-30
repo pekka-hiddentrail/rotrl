@@ -422,7 +422,7 @@ def test_detect_adds_unknown_name_to_scene_npcs(tmp_path, monkeypatch):
     session = sm.create_session(1, "qwen3:4b", dev_mode=True)
 
     sm._detect_narrative_npcs(
-        "Revemox steps inside, where the shopkeeper, Hannah Harvest, welcomes him.",
+        "Vanx steps inside, where the shopkeeper, Hannah Harvest, welcomes him.",
         session,
     )
 
@@ -435,7 +435,7 @@ def test_detect_does_not_create_stub(tmp_path, monkeypatch):
     sm = _sm_setup(tmp_path, monkeypatch)
     session = sm.create_session(1, "qwen3:4b", dev_mode=True)
 
-    sm._detect_narrative_npcs("Hannah Harvest greets Revemox warmly.", session)
+    sm._detect_narrative_npcs("Hannah Harvest greets Vanx warmly.", session)
 
     npcs_root = tmp_path / "adventure_path" / "05_npcs"
     assert not npcs_root.exists() or not any(npcs_root.iterdir()), \
@@ -449,7 +449,7 @@ def test_detect_skips_already_tracked_name(tmp_path, monkeypatch):
     session = sm.create_session(1, "qwen3:4b", dev_mode=True)
     session.scene_npcs.append("Hannah Harvest")
 
-    sm._detect_narrative_npcs("Hannah Harvest smiles at Revemox.", session)
+    sm._detect_narrative_npcs("Hannah Harvest smiles at Vanx.", session)
 
     assert session.scene_npcs.count("Hannah Harvest") == 1
 
@@ -504,7 +504,7 @@ def test_detect_no_duplicate_on_second_call(tmp_path, monkeypatch):
     sm = _sm_setup(tmp_path, monkeypatch)
     session = sm.create_session(1, "qwen3:4b", dev_mode=True)
 
-    sm._detect_narrative_npcs("Hannah Harvest greets Revemox.", session)
+    sm._detect_narrative_npcs("Hannah Harvest greets Vanx.", session)
     sm._detect_narrative_npcs("Hannah Harvest is still here.", session)
 
     assert session.scene_npcs.count("Hannah Harvest") == 1

@@ -32,7 +32,7 @@ class BootRequest(BaseModel):
     host: str = "http://localhost:11434"
     temperature: float = 0.3
     dev_mode: bool = False
-    provider: str = "ollama"  # "ollama" | "groq"
+    provider: str = "ollama"  # "ollama" | "groq" | "anthropic"
     num_ctx: int = 2048       # context window — smaller = faster (Ollama only)
     num_gpu: int = 999        # GPU layers — 999 = push everything to GPU (Ollama only)
 
@@ -144,6 +144,16 @@ def post_resolve_roll(session_id: str, req: ResolveRollRequest):
     return result
 
 
+@app.delete("/api/sessions/{session_id}/combat")
+def delete_combat(session_id: str):
+    """Clear the active combat state (End Combat button in UI)."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session.combat_state = None
+    return {"combat_state": None}
+
+
 @app.post("/api/sessions/{session_id}/end")
 def end_session(session_id: str):
     """Generate recap + boot files for the next session, then save and close."""
@@ -183,6 +193,28 @@ def get_api_log(filename: str):
         raise HTTPException(status_code=404, detail="Log file not found")
     import json as _json
     return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
+
+
+@app.get("/api/characters")
+def get_characters():
+    """Return all character data from ui/public/data/ as a list."""
+    data_dir = (_REPO_ROOT / "ui" / "public" / "data").resolve()
+    index_path = data_dir / "characters.json"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="characters.json not found")
+    import json as _json
+    ids: list[str] = _json.loads(index_path.read_text(encoding="utf-8"))
+    characters = []
+    for cid in ids:
+        if not isinstance(cid, str):
+            raise HTTPException(status_code=400, detail="Invalid character ID")
+        path = (data_dir / f"{cid}.json").resolve()
+        if not path.is_relative_to(data_dir):
+            raise HTTPException(status_code=400, detail="Invalid character ID")
+        if not path.exists():
+            raise HTTPException(status_code=404, detail=f"{cid}.json not found")
+        characters.append(_json.loads(path.read_text(encoding="utf-8")))
+    return characters
 
 
 @app.get("/api/npcs/session")

@@ -6,7 +6,7 @@
 **Current Level:** 1
 **XP:** 0
 
-**Race:** Kitsune
+**Race / Subrace:** Kitsune
 **Class / Archetype:** Sorcerer / Nine Tailed Heir
 **Alignment:** Neutral Good
 **Deity:** Cayden Cailean

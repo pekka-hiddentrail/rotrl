@@ -15,6 +15,11 @@ import time as _time
 import requests as _requests
 
 try:
+    import anthropic as _anthropic
+except ImportError:
+    _anthropic = None  # type: ignore[assignment]  # optional; required only for "anthropic" provider
+
+try:
     from dotenv import load_dotenv as _load_dotenv
     _load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 except ImportError:
@@ -169,9 +174,10 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
     raise RuntimeError("Groq: exhausted retries")  # pragma: no cover
 
 # Dev mode limits: keep only the last N messages (pairs of user+assistant)
-_DEV_MAX_HISTORY   = 6   # 3 exchanges
-_FULL_MAX_HISTORY  = 30  # 15 exchanges — Ollama (local, no payload limit)
-_GROQ_MAX_HISTORY  = 10  # 5 exchanges  — Groq (cloud, tighter payload limit)
+_DEV_MAX_HISTORY        = 6   # 3 exchanges
+_FULL_MAX_HISTORY       = 30  # 15 exchanges — Ollama (local, no payload limit)
+_GROQ_MAX_HISTORY       = 10  # 5 exchanges  — Groq (cloud, tighter payload limit)
+_ANTHROPIC_MAX_HISTORY  = 20  # 10 exchanges — Anthropic (200K context, generous but bounded)
 _DEV_MAX_TOKENS    = 180  # cap generation length in dev mode
 # Groq: hard ceiling on the system prompt character count.
 # Injected context chunks beyond this point are silently dropped.
@@ -292,6 +298,117 @@ def _extract_knowledge_items(body: str) -> list[str]:
     return items
 
 
+def _parse_combatant_line(line: str) -> Optional["Combatant"]:
+    """Parse a single combatant row from a %%COMBAT%% block.
+
+    Expected format (middle-dot separated fields):
+        - name: Shalelu · hp: 18/24 · ac: 17 · init: 14 · status: active
+    All fields except name are optional and fall back to safe defaults.
+    """
+    line = re.sub(r'^\s*[-•]\s*', '', line)
+    parts = re.split(r'\s*[·•]\s*', line)
+    fields: dict[str, str] = {}
+    for part in parts:
+        if ':' in part:
+            key, _, val = part.partition(':')
+            fields[key.strip().lower()] = val.strip()
+
+    name = fields.get('name', '').strip()
+    if not name:
+        return None
+
+    hp_raw = fields.get('hp', '0/0')
+    hp_parts = hp_raw.split('/')
+    try:
+        hp_current = int(hp_parts[0].strip())
+        hp_max = int(hp_parts[1].strip()) if len(hp_parts) > 1 else hp_current
+    except (ValueError, IndexError):
+        hp_current, hp_max = 0, 0
+
+    try:
+        ac = int(fields.get('ac', '10'))
+    except ValueError:
+        ac = 10
+
+    try:
+        initiative = int(fields.get('init', '0'))
+    except ValueError:
+        initiative = 0
+
+    status = fields.get('status', 'active').lower().strip()
+    return Combatant(
+        name=name,
+        hp_current=hp_current,
+        hp_max=hp_max,
+        ac=ac,
+        initiative=initiative,
+        status=status,
+    )
+
+
+def _parse_combat_block(text: str) -> Optional[CombatState]:
+    """Parse the body of a %%COMBAT%% section into a CombatState.
+
+    Return values:
+    - ``CombatState(round=0, combatants=[])`` — LLM wrote ``round: 0``; caller should
+      clear ``session.combat_state``.  This is the *intentional clear signal*.
+    - ``None`` — block is empty/None, or ``round`` was missing/0 with no combatants
+      parsed (i.e. a formatting error).  Caller should **not** change existing state.
+    - ``CombatState(round≥1, combatants=[...])`` — valid update; caller should store it.
+
+    The distinction between "intentional clear" and "parse failure" prevents a single
+    malformed turn from silently wiping live combat state.
+    """
+    if not text:
+        return None
+
+    round_num = 0
+    found_round = False
+    combatants: list[Combatant] = []
+
+    for line in text.splitlines():
+        round_m = re.match(r'^\s*round\s*:\s*(\d+)', line, re.IGNORECASE)
+        if round_m:
+            round_num = int(round_m.group(1))
+            found_round = True
+            continue
+        if re.match(r'^\s*[-•]\s*name:', line, re.IGNORECASE):
+            c = _parse_combatant_line(line)
+            if c is not None:
+                combatants.append(c)
+
+    # Intentional clear: LLM explicitly wrote round: 0
+    if found_round and round_num == 0:
+        return CombatState(round=0, combatants=[])
+
+    # Parse failure: no valid round found, or round > 0 but all combatant rows
+    # were malformed — do not disturb existing combat state.
+    if not found_round or not combatants:
+        return None
+
+    return CombatState(round=round_num, combatants=combatants)
+
+
+def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
+    """Convert a CombatState to a JSON-serialisable dict, or None."""
+    if state is None:
+        return None
+    return {
+        "round": state.round,
+        "combatants": [
+            {
+                "name": c.name,
+                "hp_current": c.hp_current,
+                "hp_max": c.hp_max,
+                "ac": c.ac,
+                "initiative": c.initiative,
+                "status": c.status,
+            }
+            for c in state.combatants
+        ],
+    }
+
+
 def _parse_response_sections(text: str) -> dict[str, str]:
     """Split a section-formatted LLM response into named sections.
 
@@ -393,6 +510,12 @@ def _write_npc_delta(fields: dict, session: GameSession) -> None:
         _log(session, f"\n> *[Knowledge written: {npc_name} ({len(k_items)} item(s))]*\n")
 
 
+# Matches a %%COMBAT%% block in the old flat-block format (fallback path).
+_COMBAT_BLOCK_RE = re.compile(
+    r'^%%COMBAT%%[ \t]*\n(.*?)(?=^%%|\Z)',
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+
 _ROLL_BLOCK_RE = re.compile(
     r'\s*%%ROLL%%\s*\n'
     r'(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n'
@@ -409,12 +532,34 @@ _ROLL_BLOCK_RE = re.compile(
 
 
 @dataclass
-@dataclass
 class ActiveEvent:
     """An event currently injecting content into the system prompt."""
     event_id: str
     content: str
     turns_remaining: int
+
+
+@dataclass
+class Combatant:
+    """A single combatant in the active combat tracker."""
+    name: str
+    hp_current: int
+    hp_max: int
+    ac: int
+    initiative: int
+    status: str = "active"  # "active" | "unconscious" | "fled" | "dead"
+
+    def __post_init__(self) -> None:
+        self.hp_current = max(0, min(self.hp_current, self.hp_max))
+        if self.status not in ("active", "unconscious", "fled", "dead"):
+            self.status = "active"
+
+
+@dataclass
+class CombatState:
+    """Current combat round and combatant list."""
+    round: int
+    combatants: list  # list[Combatant]
 
 
 @dataclass
@@ -425,7 +570,7 @@ class GameSession:
     host: str
     temperature: float
     dev_mode: bool = False
-    provider: str = "ollama"   # "ollama" | "groq"
+    provider: str = "ollama"   # "ollama" | "groq" | "anthropic"
     num_ctx: int = 2048
     num_gpu: int = 999
     system_prompt: str = ""
@@ -443,6 +588,9 @@ class GameSession:
     scene_locations: list = field(default_factory=list)
     # Events currently active — each has content injected for turns_remaining turns.
     active_events: list = field(default_factory=list)  # list[ActiveEvent]
+    # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
+    # Cleared to None when round == 0 or all combatants are inactive.
+    combat_state: Optional[CombatState] = None
 
 
 _sessions: dict[str, GameSession] = {}
@@ -613,6 +761,21 @@ CORRECT:   %%EVENT%% goblin_attack_starts
 WRONG:     %%EVENT%%                              ← missing ID
 WRONG:     %%EVENT%%\n%%EVENT%% goblin_attack_starts  ← do NOT write twice
 WRONG:     %%EVENT%% goblin_attack_starts (Note: ...) ← no trailing text
+
+COMBAT TRACKER — write each turn when combat is in progress
+%%COMBAT%%
+round: <N>
+combatants:
+  - name: <Name> · hp: <current>/<max> · ac: <AC> · init: <initiative> · status: <active|unconscious|fled|dead>
+  [one row per combatant, sorted by initiative descending]
+
+Rules:
+- Start on the first turn combat begins (round 1). Increment round each time ALL combatants have acted.
+- Write round: 0 on the turn combat ends (enemies fled, surrendered, or all down). This clears the panel.
+- Omit %%COMBAT%% entirely when not in combat.
+- Update hp values each turn to reflect damage taken this turn.
+- Valid statuses: active (can act), unconscious (down, dying), fled (escaped), dead (destroyed).
+- List ALL combatants every turn — do not drop resolved ones until combat ends.
 
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
@@ -1018,8 +1181,8 @@ def _stream_with_narrative_filter(
         return
 
     _NARRATIVE_START = "%%NARRATIVE%%\n"
-    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%")
-    _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%")
+    _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14; also covers "%%COMBAT%%\n" = 12
 
     buf           = ""      # not-yet-emitted accumulation
     in_narrative  = False
@@ -1127,6 +1290,8 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         max_hist = _DEV_MAX_HISTORY
     elif session.provider == "groq":
         max_hist = _GROQ_MAX_HISTORY
+    elif session.provider == "anthropic":
+        max_hist = _ANTHROPIC_MAX_HISTORY
     else:
         max_hist = _FULL_MAX_HISTORY
     history = session.messages[-max_hist:] if len(session.messages) > max_hist else session.messages
@@ -1219,6 +1384,18 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         )
         _log(session, f"\n> *[Delta reminder injected for scene NPCs: {_npc_list}]*\n")
 
+    # ── Ongoing combat reminder ────────────────────────────────────────────────
+    # Injected unconditionally when combat is live so the model keeps writing
+    # %%COMBAT%% blocks even after the triggering event has expired.
+    if session.combat_state is not None and session.combat_state.round > 0:
+        system_content += (
+            f"\n\n---\n[COMBAT ONGOING — round {session.combat_state.round}]\n"
+            "You MUST include a `%%COMBAT%%` block this turn. "
+            "Increment round when all combatants have acted. "
+            "Update HP values to reflect damage taken this turn."
+        )
+        _log(session, f"\n> *[Combat reminder injected: round {session.combat_state.round}]*\n")
+
     context_info: dict = {
         "npc":           npc_match.canonical_name    if npc_match else None,
         "npc_trigger":   npc_match.matched_alias     if npc_match else None,
@@ -1278,7 +1455,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         _log(session, f"\n**[{role}]**\n```\n{msg['content']}\n```\n")
     _log(session, "</details>\n")
 
-    # Build the exact payload that will be posted — mirrored from _stream_groq / _stream_ollama
+    # Build the exact payload that will be posted — mirrored from each provider's function
     if session.provider == "groq":
         _raw_request: dict = {
             "model":          session.model,
@@ -1287,6 +1464,16 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             "temperature":    session.temperature,
             "max_tokens":     1024,
             "stream_options": {"include_usage": True},
+        }
+    elif session.provider == "anthropic":
+        _system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
+        _raw_request = {
+            "model":       session.model,
+            "system":      _system_msg,
+            "messages":    [m for m in messages if m["role"] != "system"],
+            "stream":      True,
+            "temperature": session.temperature,
+            "max_tokens":  1024,
         }
     else:
         _raw_request = {
@@ -1301,11 +1488,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     _llm_error: Optional[str] = None
     _usage: dict = {}
     try:
-        _raw = (
-            _stream_groq(session, messages, accumulated, _usage, _timing)
-            if session.provider == "groq"
-            else _stream_ollama(session, messages, options, accumulated, _timing)
-        )
+        if session.provider == "groq":
+            _raw = _stream_groq(session, messages, accumulated, _usage, _timing)
+        elif session.provider == "anthropic":
+            _raw = _stream_anthropic(session, messages, accumulated, _usage, _timing)
+        else:
+            _raw = _stream_ollama(session, messages, options, accumulated, _timing)
         yield from _stream_with_narrative_filter(_raw, session.dev_mode)
     except Exception as _llm_exc:
         _llm_error = str(_llm_exc)
@@ -1403,6 +1591,22 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # ── %%COMBAT%% ────────────────────────────────────────────────────────
+        _combat_section = _sections.get("COMBAT", "")
+        if _combat_section:
+            try:
+                _combat_result = _parse_combat_block(_combat_section)
+                if _combat_result is not None:
+                    if _combat_result.round == 0:          # intentional clear signal
+                        session.combat_state = None
+                        _log(session, "\n> *[Combat state updated: cleared]*\n")
+                    else:                                   # valid update
+                        session.combat_state = _combat_result
+                        _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
+                # None → parse failure; leave session.combat_state unchanged
+            except Exception as _e:
+                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
+
     else:
         # ── Fallback: old flat-block format ───────────────────────────────────
         display_text = response_text
@@ -1461,6 +1665,21 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # %%COMBAT%% (flat-block fallback path)
+        _combat_m = _COMBAT_BLOCK_RE.search(response_text)
+        if _combat_m:
+            try:
+                _combat_result = _parse_combat_block(_combat_m.group(1))
+                if _combat_result is not None:
+                    if _combat_result.round == 0:
+                        session.combat_state = None
+                        _log(session, "\n> *[Combat state updated (flat): cleared]*\n")
+                    else:
+                        session.combat_state = _combat_result
+                        _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
+
     # ── Single patch_last if anything was stripped ────────────────────────────
     # Emitting one event after all stripping avoids the UI briefly flashing
     # intermediate states (e.g. showing delta markup while the roll block is gone).
@@ -1473,6 +1692,9 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     # Roll request comes after the clean text is in place
     if roll_data:
         yield f"data: {json.dumps({'type': 'roll_request', **roll_data})}\n\n"
+
+    # Combat state — always emitted (null when no combat) so UI can show/hide panel.
+    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
 
     session.messages.append({"role": "assistant", "content": history_text})
     _log(session, f"\n### [{_ts()}] GM")
@@ -1573,6 +1795,48 @@ def _stream_groq(
                     timing_out["first_token_ms"] = int((_time.monotonic() - timing_out["start"]) * 1000)
                 accumulated.append(content)
                 yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
+
+
+def _stream_anthropic(
+    session: GameSession,
+    messages: list,
+    accumulated: list[str],
+    usage_out: dict,
+    timing_out: dict,
+) -> Generator[str, None, None]:
+    if _anthropic is None:
+        raise RuntimeError(
+            "anthropic package is not installed. Run: pip install anthropic"
+        )
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY environment variable is not set. "
+            "Get a key at https://console.anthropic.com"
+        )
+    # Anthropic SDK requires system prompt at top level, not as a message.
+    system_text = next((m["content"] for m in messages if m["role"] == "system"), "")
+    non_system = [m for m in messages if m["role"] != "system"]
+
+    client = _anthropic.Anthropic(api_key=api_key)
+    with client.messages.stream(
+        model=session.model,
+        system=system_text,
+        messages=non_system,
+        temperature=session.temperature,
+        max_tokens=1024,
+    ) as stream:
+        for text in stream.text_stream:
+            if text:
+                if "first_token_ms" not in timing_out:
+                    timing_out["first_token_ms"] = int((_time.monotonic() - timing_out["start"]) * 1000)
+                accumulated.append(text)
+                yield f"data: {json.dumps({'type': 'token', 'content': text})}\n\n"
+        # Capture usage from the final message object.
+        final = stream.get_final_message()
+        if final and final.usage:
+            usage_out["prompt_tokens"] = final.usage.input_tokens
+            usage_out["completion_tokens"] = final.usage.output_tokens
 
 
 # ── Session-end recap generation ──────────────────────────────────────────────
@@ -1707,6 +1971,21 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
         }
         resp = _groq_post(api_key, payload, stream=False)
         return (resp.json()["choices"][0]["message"] or {}).get("content", "").strip()
+    elif session.provider == "anthropic":
+        if _anthropic is None:
+            raise RuntimeError("anthropic package is not installed. Run: pip install anthropic")
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set.")
+        client = _anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=session.model,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+            temperature=0.5,
+            max_tokens=2048,
+        )
+        return (msg.content[0].text if msg.content else "").strip()
     else:
         resp = _requests.post(
             f"{session.host}/api/chat",

@@ -107,12 +107,10 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
   const addDie = (sides: number) => setPending(p => [...p, sides])
   const clearPending = () => setPending([])
 
-  const doRoll = async () => {
-    if (pending.length === 0) return
-
-    const rolls = pending.map(rollDie)
+  const executeRoll = async (dice: number[]) => {
+    const rolls = dice.map(rollDie)
     const rawTotal = rolls.reduce((a, b) => a + b, 0)
-    const expr = groupDice(pending)
+    const expr = groupDice(dice)
 
     let modifier: number | null = null
     let modifierLabel: string | null = null
@@ -134,7 +132,7 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
     const recordId = nextId++
     const record: RollRecord = {
       id: recordId,
-      dice: [...pending],
+      dice,
       rolls,
       rawTotal,
       modifier,
@@ -146,13 +144,20 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
     }
 
     setHistory(h => [record, ...h].slice(0, 10))
-    setPending([])
 
     const result = await onRoll(expr, rolls, total)
     if (result !== null) {
       setHistory(h => h.map(r => r.id === recordId ? { ...r, passed: result.passed } : r))
     }
   }
+
+  const doRoll = async () => {
+    if (pending.length === 0) return
+    await executeRoll([...pending])
+    setPending([])
+  }
+
+  const handleBannerClick = () => executeRoll([20])
 
   // Bonus preview shown in the roll-request banner (pure computation — no state needed)
   const bonusPreview = (pendingRoll && autoBonus)
@@ -163,21 +168,27 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll }: Props)
     <aside className={`dice-panel${pendingRoll ? ' dice-panel-active' : ''}`}>
       {pendingRoll ? (
         <div className="roll-request-banner">
-          <div className="roll-request-skill">{pendingRoll.skill}</div>
-          <div className="roll-request-dc">DC {pendingRoll.dc}</div>
-          <div className="roll-request-hint">roll d20</div>
+          <button
+            className="roll-request-prompt"
+            onClick={handleBannerClick}
+            title="Click to roll d20"
+          >
+            <div className="roll-request-skill">{pendingRoll.skill}</div>
+            <div className="roll-request-dc">DC {pendingRoll.dc}</div>
+            <div className="roll-request-hint">click to roll d20</div>
 
-          {bonusPreview?.kind === 'matched' && (
-            <div className="roll-bonus-preview roll-bonus-matched">
-              {signedStr(bonusPreview.modifier)} from {pendingRoll.skill}
-            </div>
-          )}
-          {bonusPreview?.kind === 'no-character' && (
-            <div className="roll-bonus-preview roll-bonus-note">No active character</div>
-          )}
-          {bonusPreview?.kind === 'unmapped' && (
-            <div className="roll-bonus-preview roll-bonus-note">No mapped bonus</div>
-          )}
+            {bonusPreview?.kind === 'matched' && (
+              <div className="roll-bonus-preview roll-bonus-matched">
+                {signedStr(bonusPreview.modifier)} from {pendingRoll.skill}
+              </div>
+            )}
+            {bonusPreview?.kind === 'no-character' && (
+              <div className="roll-bonus-preview roll-bonus-note">No active character</div>
+            )}
+            {bonusPreview?.kind === 'unmapped' && (
+              <div className="roll-bonus-preview roll-bonus-note">No mapped bonus</div>
+            )}
+          </button>
 
           <label className="roll-bonus-toggle">
             <input

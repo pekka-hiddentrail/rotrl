@@ -26,8 +26,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 | [event-injection.feature](event-injection.feature) | Backend | `@event` `@injection` `@context` `@parsing` `@session` | 8 | `EventIndex`, `active_events`, `%%EVENT%%` parser, event map in system prompt |
+| [combat-tracker.feature](combat-tracker.feature) | Backend \| Frontend | `@combat` `@parsing` `@session` `@streaming` `@layout` | 10 | `CombatState`, `Combatant`, `_parse_combat_block`, `CombatPanel.tsx`, `HpBar.tsx`, `combat_update` SSE, `DELETE /combat`, per-turn combat reminder |
 
-**Total: 118 acceptance criteria across 18 feature files**
+**Total: 128 acceptance criteria across 19 feature files**
 
 ---
 
@@ -71,3 +72,5 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@startup` | Dev startup process cleanup | `dev.py`, `start_backend.ps1`, `start_ui.ps1` |
 | `@streaming` | SSE token streaming | `StreamingResponse`, token/done/error/patch_last events |
 | `@event` | Scene-triggered event injection | `api/context/event_index.py`, `adventure_path/08_events/`, `active_events`, `%%EVENT%%` |
+| `@combat` | Combat tracker panel and state | `api/session_manager.py` `CombatState`, `CombatPanel.tsx`, `HpBar.tsx`, `%%COMBAT%%` block |
+| `@layout` | UI column layout switching | `ui/src/index.css` `.main-content.combat-active`, flex `order` rules |
