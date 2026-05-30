@@ -869,6 +869,12 @@ def create_session(
                 if _knowledge_path.exists():
                     _knowledge_path.write_text("", encoding="utf-8")
 
+    # Directories were deleted above — clear the in-memory index so the next
+    # turn builds it fresh from disk.  Without this, a deleted session NPC
+    # remains in the stale index and _process_generate_block() silently skips
+    # recreating its directory on the very next turn.
+    _invalidate_npc_index()
+
     # Restore scene_npcs from the previous session's boot.md if present.
     _boot_path = _REPO_ROOT / "sessions" / f"session_{session_number:03d}" / "boot.md"
     _restored_npcs = _parse_scene_npcs_from_boot(_boot_path)

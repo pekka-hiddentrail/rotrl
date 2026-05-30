@@ -23,7 +23,9 @@ export async function* bootSession(
     body: JSON.stringify({ session_number: sessionNumber, model, dev_mode: devMode, provider }),
   })
   if (!res.ok) {
-    const detail = await res.text()
+    const body = await res.text()
+    let detail = body
+    try { detail = (JSON.parse(body) as { detail?: string }).detail ?? body } catch { /* keep raw */ }
     throw new Error(`Boot failed (${res.status}): ${detail}`)
   }
   yield* parseSseStream(res)

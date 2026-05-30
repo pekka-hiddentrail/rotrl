@@ -60,34 +60,47 @@ python dev.py --skip-tests
 6. ✔ No `%%` markers appear in the chat — only narrative prose.
 
 **Chain B — narrative quality baseline**
-Send these four inputs in sequence and read each response critically:
 
-1. `We arrive at the Swallowtail Festival. I look around the square.`
-2. `I approach Ameiko at the Rusty Dragon and ask if she's seen anything strange lately.`
-3. `I tell Ameiko about the goblin I spotted near the north gate.`
-4. `I head to the cathedral and speak with Father Zantus about the festival consecration.`
+1. Boot session 1 with Dev Mode OFF (Groq, `llama-3.3-70b-versatile`).
+2. Send these four inputs in sequence and read each response critically:
 
-Check after each:
+**Turn 1:** `We arrive at the Swallowtail Festival. I look around the square.`
+- ✔ Intent bar shows a location chip: `Festival Grounds` (alias `square`).
+- ✔ Response describes the festival scene without inventing locations outside Sandpoint canon.
+
+**Turn 2:** `I approach Ameiko at the Rusty Dragon and ask if she's seen anything strange lately.`
+- ✔ Intent bar shows NPC chip `Ameiko Kaijitsu` + location chip `The Rusty Dragon`.
+- ✔ Response uses canonical spelling `Ameiko Kaijitsu` throughout.
+
+**Turn 3:** `I tell Ameiko about the goblin I spotted near the north gate.`
+- ✔ Intent bar shows `Ameiko Kaijitsu` (scene location `The Rusty Dragon` re-injected silently — no chip change needed).
+- ✔ Response keeps Ameiko's established tone and does not jump scenes.
+
+**Turn 4:** `I head to the cathedral and speak with Father Zantus about the consecration.`
+- ✔ Intent bar shows location chip `Sandpoint Cathedral` (alias `cathedral`) + NPC chip `Abstalar Zantus`.
+- ✔ Response uses canonical spelling `Abstalar Zantus`.
+
+Check for all four turns:
 - Response is ≤ 3 paragraphs.
-- NPC names match canonical spellings (`Ameiko Kaijitsu`, `Abstalar Zantus`).
-- No invented geography (no locations that don't exist in Sandpoint canon).
-- Intent bar updates with the NPC name detected in the turn.
+- No `%%` markers visible in the chat (stripped by section filter in non-dev mode).
+- No invented Sandpoint geography.
 
 **Chain C — roll request trigger**
 1. Send: `I try to persuade the guard to let us into the garrison after hours.`
 2. ✔ Pending roll banner appears on the dice panel showing "Diplomacy" and a DC.
-3. ✔ Dice panel background changes colour.
+3. ✔ Dice panel border turns amber and a subtle shadow appears (`dice-panel-active` CSS class).
 4. Click d20, click Roll.
 5. ✔ PASSED or FAILED badge appears in history.
-6. ✔ A follow-up GM message describes the outcome.
+6. ✔ The pre-written success or failure sentence from the `%%ROLL%%` block appears as a GM message — no new LLM call is made.
 7. **Judge:** is the DC between 12 and 20? A DC 5 Diplomacy check for after-hours garrison entry is a bug.
 
-**Chain D — combat and mechanical grounding**
+**Chain D — combat narrative quality**
 1. Send: `A goblin leaps out from behind the barrel and attacks me with a dogslicer!`
-2. ✔ GM describes the attack with a roll result or calls for a roll.
-3. ✔ No narrative hand-waving of mechanical outcomes ("you easily dodge").
+2. ✔ GM narrates the attack with a stated mechanical result — damage dealt, AC miss, or a pending roll banner (via `%%ROLL%%` block). Not vague prose.
+3. ✔ No soft hand-waving: "you easily dodge", "you're fine", "it seems to miss" are quality failures.
 4. Send: `I attack back with my longsword.`
-5. ✔ GM either calls for an attack roll (`%%ROLL%%`) or resolves with a stated result.
+5. ✔ GM either emits a `%%ROLL%%` block (pending banner appears on the dice panel) or resolves with a specific stated result — not both, not neither.
+6. **Judge:** does each exchange have mechanical weight, or does the GM narrate combat at a summary level without involving the dice system?
 
 ---
 
@@ -581,3 +594,12 @@ http://localhost:8000/api/log/api/../../api/session_manager.py
 1. End a session while CombatPanel is visible (click **End Session**).
 2. ✔ After recap completes, CombatPanel is gone and DicePanel is back in the right column.
 3. ✔ Same behaviour when using the **Kill Session** (X) button.
+
+**Chain G — %%ROLL%% request during combat**
+1. With a live CombatPanel active, send: `I swing at the nearest goblin with my longsword.`
+2. ✔ If the GM emits a `%%ROLL%%` block, the pending roll banner appears on the dice panel showing the skill name and DC.
+3. Click d20, click Roll.
+4. ✔ `POST /api/sessions/{id}/resolve_roll` fires (visible in Network tab) with the total.
+5. ✔ The pre-written outcome text from the `%%ROLL%%` `success:` or `failure:` field appears as a GM message in the chat — no new LLM call.
+6. ✔ Pending roll banner is dismissed.
+7. **Note:** Roll requests come exclusively through the `%%ROLL%%` structured block — the GM never calls for rolls in narrative prose. Spec: `specs/dice-panel.feature` AC-004/AC-005.

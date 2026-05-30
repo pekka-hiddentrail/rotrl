@@ -323,6 +323,65 @@ def test_boot_deletes_session_npc_folder(tmp_path, monkeypatch):
     assert not stub.exists(), "SESSION NPC folder must be deleted on boot"
 
 
+def test_boot_cleanup_invalidates_npc_index(tmp_path, monkeypatch):
+    """Boot cleanup must invalidate the in-memory NPC index.
+
+    Regression: without _invalidate_npc_index() at the end of the cleanup loop,
+    the stale index still reports the deleted session NPC as 'existing', causing
+    _process_generate_block() to skip recreating its directory on the next turn.
+    """
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(sm, "_sessions", {})
+    monkeypatch.setattr(sm, "_npc_index", None)
+
+    # Warm the index with a session NPC that boot will delete.
+    _make_npc_dir(tmp_path, ".marta_hask",
+                  "# Marta Hask\n**Flags:** SESSION NPC — auto-generated session_001\n")
+    _ = sm._get_npc_index()  # load the stale entry into memory
+    assert sm._get_npc_index().npc_dir_for("Marta Hask") is not None
+
+    # Boot: cleanup deletes the directory.
+    sm.create_session(1, "qwen3:4b", dev_mode=True)
+
+    # Index must be invalidated — fresh rebuild should NOT find Marta Hask.
+    assert sm._get_npc_index().npc_dir_for("Marta Hask") is None, (
+        "Stale NPC index not cleared on boot — session NPC will fail to be recreated"
+    )
+
+
+def test_session_npc_recreated_after_reboot(tmp_path, monkeypatch):
+    """_process_generate_block() creates a new stub after boot purges the old one.
+
+    Regression: stale index caused _process_generate_block() to silently return
+    without creating the directory, leaving Chain B with no NPC stub on second run.
+    """
+    import api.session_manager as sm
+    monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sm, "_OUTPUTS_DIR", tmp_path / "outputs")
+    monkeypatch.setattr(sm, "_sessions", {})
+    monkeypatch.setattr(sm, "_npc_index", None)
+
+    # Simulate a prior session having created .marta_hask/
+    _make_npc_dir(tmp_path, ".marta_hask",
+                  "# Marta Hask\n**Flags:** SESSION NPC — auto-generated session_001\n")
+    _ = sm._get_npc_index()  # load stale index
+    assert sm._get_npc_index().npc_dir_for("Marta Hask") is not None
+
+    # Boot: cleanup purges it.
+    session = sm.create_session(1, "qwen3:4b", dev_mode=True)
+    assert not (tmp_path / "adventure_path" / "05_npcs" / ".marta_hask").exists()
+
+    # Now simulate the LLM emitting a %%GENERATE%% block for the same NPC.
+    sm._process_generate_block(
+        "type: npc\nname: Marta Hask\nrole: amulet vendor\n", session
+    )
+
+    new_stub = tmp_path / "adventure_path" / "05_npcs" / ".marta_hask" / "base.md"
+    assert new_stub.exists(), "Session NPC directory must be recreated after boot purge"
+
+
 def test_boot_keeps_promoted_npc(tmp_path, monkeypatch):
     """An NPC whose Flags no longer contain SESSION NPC is kept on boot."""
     import api.session_manager as sm
