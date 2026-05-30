@@ -10,22 +10,44 @@ import pytest
 from fastapi.testclient import TestClient
 
 _REAL_OUTPUTS = Path(__file__).resolve().parent.parent / "outputs"
+_BENCHMARK_CSV = _REAL_OUTPUTS / "token_benchmarks.csv"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_outputs():
-    """Remove api_log files and session logs written to the real outputs/ directory.
+    """Remove only api_log files and session logs that were created DURING this test run.
 
-    Runs once after the full test session.  Acts as a safety net — the client
-    fixture redirects writes to tmp_path, so normally nothing lands here.
+    Snapshots existing files before tests start so real session data written
+    before the test run is preserved (prompt_trend.csv depends on these files).
+
+    Exception: API logs referenced in token_benchmarks.csv are always preserved
+    so the benchmark UI can link back to the raw request/response.
     """
-    yield
     api_log_dir = _REAL_OUTPUTS / "api_log"
+    before_logs = set(api_log_dir.glob("*.json")) if api_log_dir.exists() else set()
+    before_sessions = set(_REAL_OUTPUTS.glob("*.log.md"))
+
+    yield
+
+    # Collect log filenames referenced by any benchmark row — must not delete these.
+    import csv as _csv
+    benchmark_logs: set[str] = set()
+    if _BENCHMARK_CSV.exists():
+        try:
+            with _BENCHMARK_CSV.open(newline="", encoding="utf-8") as fh:
+                for row in _csv.DictReader(fh):
+                    if row.get("log_file"):
+                        benchmark_logs.add(row["log_file"])
+        except Exception:
+            pass
+
     if api_log_dir.exists():
         for f in api_log_dir.glob("*.json"):
-            f.unlink(missing_ok=True)
+            if f not in before_logs and f.name not in benchmark_logs:
+                f.unlink(missing_ok=True)
     for f in _REAL_OUTPUTS.glob("*.log.md"):
-        f.unlink(missing_ok=True)
+        if f not in before_sessions:
+            f.unlink(missing_ok=True)
 
 
 # ── SSE helper ────────────────────────────────────────────────────────────────
@@ -111,6 +133,26 @@ def booted_session(client, monkeypatch):
     events = parse_sse(resp)
     done = next(e for e in events if e["type"] == "done")
     return client, done["session_id"]
+
+
+@pytest.fixture()
+def benchmark_client():
+    """TestClient that writes to the REAL outputs/ directory (not tmp_path).
+
+    For token benchmark tests only.  Sessions are cleared between tests but
+    NPC/skill indexes are left as-is (we want the live repo data).
+    """
+    import api.session_manager as sm
+
+    original_sessions = dict(sm._sessions)
+    sm._sessions.clear()
+
+    from api.main import app
+    with TestClient(app, raise_server_exceptions=True) as c:
+        yield c
+
+    sm._sessions.clear()
+    sm._sessions.update(original_sessions)
 
 
 @pytest.fixture()

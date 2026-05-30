@@ -241,6 +241,25 @@ def delete_session_npcs():
     return {"purged": count}
 
 
+@app.get("/api/benchmarks")
+def get_benchmarks():
+    """Return all token benchmark rows from outputs/token_benchmarks.csv as JSON."""
+    import csv as _csv
+    csv_path = _REPO_ROOT / "outputs" / "token_benchmarks.csv"
+    if not csv_path.exists():
+        return JSONResponse({"rows": []})
+    rows: list[dict] = []
+    with csv_path.open(newline="", encoding="utf-8") as fh:
+        for row in _csv.DictReader(fh):
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens", "system_chars"):
+                try:
+                    row[k] = int(row[k])
+                except (ValueError, KeyError):
+                    row[k] = 0
+            rows.append(row)
+    return JSONResponse({"rows": rows})
+
+
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: str):
     """Discard session without generating recap (emergency close)."""

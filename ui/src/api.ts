@@ -97,6 +97,26 @@ export async function logRoll(
   })
 }
 
+export interface BenchmarkRow {
+  timestamp: string
+  provider: string
+  model: string
+  session: string
+  turn: string | number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  system_chars: number
+  log_file: string
+}
+
+export async function fetchBenchmarks(): Promise<BenchmarkRow[]> {
+  const res = await fetch(`${BASE}/benchmarks`)
+  if (!res.ok) throw new Error(`Benchmarks fetch failed (${res.status})`)
+  const data: { rows: BenchmarkRow[] } = await res.json()
+  return data.rows
+}
+
 export async function fetchApiLogList(): Promise<string[]> {
   const res = await fetch(`${BASE}/log/api`)
   if (!res.ok) throw new Error(`API log list failed (${res.status})`)
