@@ -4,6 +4,15 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 **Every time this file is updated, sections with the most open items should be at the top; sections that are fully checked off should be at the bottom. Within each section, open items come first, done items in the middle, and "obsolete" items at the bottom.**
 
+## Markup rules (follow these exactly when adding items)
+
+- `- [ ] Item text` — open task
+- `- [x] Item text` — completed task
+- `- ~~[ ] Item text~~` — obsolete / cancelled task
+- Sub-bullets under a task use the same `- [ ]` format, indented two spaces
+- **Never** use plain `-` bullets for tasks — everything actionable must have a checkbox
+- Bold the item title when it has a longer description below it
+
 ---
 
 ## Adventure Content
@@ -63,6 +72,11 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Quality and Testing
 
+- [ ] **Add pytest-cov to backend** — generate per-file line coverage report; identify untested paths in streaming and fallback parsers
+- [ ] **Build feature coverage matrix** — map each of the 128 spec ACs to the test(s) that cover it; flag ACs with zero test coverage
+- [ ] **Generate HTML coverage heatmap** — combine code line coverage and feature AC coverage into one visual; dark = no tests, red = code covered but no AC, green = both
+- [ ] **Define risk register** — identify high-risk areas (LLM compliance, session state loss, data corruption); map each risk to covering tests or flag as gap
+- [ ] **Spike: agent-driven exploratory test harness** — one LLM plays as player (sends PF1e actions via the live SSE API), a second evaluates each GM response against a rubric (no leaked markers, narrative length, no invented lore)
 - [ ] **E2E — Playwright UI test suite** — add Playwright to `ui/` (`npm install -D @playwright/test`). Cover the seven key flows with a mocked backend (MSW or a lightweight FastAPI fixture): (1) boot → session badge appears; (2) send turn → GM message streams in; (3) `roll_request` event → dice panel activates; (4) end session → chat clears; (5) Kill button on stuck ending → inline confirm → UI resets to pre-boot; (6) Purge NPCs button → inline confirm → toast notification; (7) character sidebar → sheet modal opens. These are the regression cases that break silently on UI refactors and are invisible to pytest.
 - [ ] **Vitest — Character data and sheet AC coverage** — add tests for `character-system.feature` AC-001 through AC-006 and remaining AC-010/AC-011 integration: static JSON loading/failure, HP bar colors, sheet modal close behavior, stat/spell tooltips, spell grouping, active speaker persistence, and backend/chat prefixing in `App`.
 - [ ] **Vitest — Header/session controls AC coverage** — add tests for `session-controls.feature` AC-001 through AC-008 plus `llm-providers.feature` AC-001/AC-005: provider/model switching, pre/post-boot control visibility, boot disabled state, View Log target, purge inline confirm/toast, rate-limit badge, and Kill inline confirm/abort reset.
@@ -102,12 +116,12 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 - [ ] **R1d — Tests for `_process_response`** *(ship with R1c)* — three cases: (1) section format happy path — correct display_text and roll_data returned; (2) flat fallback — roll block stripped from display_text; (3) no markers — raw text returned unchanged. Plus extend `test_turns.py` golden-path test: mock Groq, assert SSE event order is `context → token(s) → patch_last → roll_request`.
 - [ ] **R1e — Complete orchestrator: `_stream_chat` → ~40 lines** *(ship after R1c is stable in play)* — `_inject_context` is already wired; replace the remaining inline response-parsing block with a call to `_process_response`. Validate with R1d integration test.
 - [ ] **R3 — Provider dispatch is duplicated** — Groq/Ollama branching in payload building, streaming, `_call_blocking`, and token options. Adding a third provider means touching all four. Propose per-provider modules with `build_payload` / `iter_stream` functions sharing a common signature.
-- [ ] **R4 — `_NAME_EXCLUDE_WORDS` maintenance burden** — 40+ hardcoded words. Load from `adventure_path/00_system_authority/name_exclude_words.txt` (one per line, `#` comments). Fall back to hardcoded set if file absent. GM-tunable without touching Python.
+- [x] **R4 — `_NAME_EXCLUDE_WORDS` maintenance burden** — words now loaded from `adventure_path/00_system_authority/name_exclude_words.txt` (one per line, `#` comments, blank lines ignored). Falls back to hardcoded set if file absent or empty. GM-tunable without touching Python. 6 tests in `tests/test_config_tunables.py`.
 - [ ] **R5 — Global lazy indexes** — `_npc_index` / `_skill_index` are module globals mutated by `_invalidate_npc_index()`. Encapsulate in an `IndexRegistry` with `get_npc()`, `get_skill()`, `invalidate_npc()`. Makes state explicit and tests easier to write.
 - [ ] **R6 — Timestamp formats scattered** — `%H:%M:%S`, `%Y%m%d_%H%M%S`, `%Y-%m-%d %H:%M:%S` appear in six-plus places. Add `_ts_file()` and `_ts_human()` helpers alongside the existing `_ts()`.
 - [ ] **R7 — `_write_npc_delta` mixes concerns** — does Layer 2 stub creation, status block append, knowledge append, scene_npcs update, and three log calls. Extract `_append_status_block()` and `_append_knowledge_items()`; keep `_write_npc_delta` as orchestrator.
 - [ ] **R8 — Duplicate `%%ROLL%%` parsing** — roll logic written once for the section path and once for the flat fallback path. Normalise the fallback to a section dict first, then run the same downstream parser.
-- [ ] **F6 — Configurable tunables via env vars** — `_GROQ_MAX_HISTORY`, `_GROQ_MAX_SYSTEM_CHARS`, `_GROQ_RETRY_BASE`, `_DEV_MAX_HISTORY`, `_FULL_MAX_HISTORY` are hardcoded. Read from env with fallback: `int(os.getenv("GROQ_MAX_HISTORY", "10"))` etc.
+- [x] **F6 — Configurable tunables via env vars** — `_DEV_MAX_HISTORY`, `_FULL_MAX_HISTORY`, `_GROQ_MAX_HISTORY`, `_ANTHROPIC_MAX_HISTORY`, `_DEV_MAX_TOKENS`, `_GROQ_MAX_SYSTEM_CHARS`, `_GROQ_RETRY_BASE` now read from `ROTRL_*` env vars with original values as defaults. 8 tests in `tests/test_config_tunables.py`.
 - [x] **R1a — Extract `_inject_context(session) -> tuple[str, dict]`** — steps 1–5 of `_stream_chat` extracted: history trimming, Groq truncation, NPC/skill/location detection, `scene_npcs` accumulation, delta-reminder path. Returns `(system_content, context_info)`; `context_info["history"]` carries the trimmed message list. Wired into `_stream_chat` immediately — orchestrator now calls `_inject_context` and unpacks the result. *(Note: signature changes in M4 — function will write to `session.context_blocks` instead of returning a string.)*
 - [x] **R1b — Tests for `_inject_context`** — 30 tests in `tests/test_inject_context.py` covering all five pipeline steps: history trimming per provider/mode, Groq truncation, NPC/skill/location match → profile injection + scene_npcs update, dedup of location-vs-name matches, delta-reminder when scene_npcs active but no new context, and full `context_info` key structure.
 - [x] **B1 — Silent exception swallows** — all `except Exception: pass` in section-processing loop replaced with `except Exception as _e: _log(session, ...)`.
@@ -140,6 +154,10 @@ Combat runs through the existing narrative loop — the LLM drives pacing, the s
 > **Layout note:** when the CombatPanel is visible it occupies the right column. DicePanel moves to the left column (stacked beneath CharacterSidebar), freeing the right for initiative/HP display. Out of combat the layout reverts to current (CharSidebar left · Chat centre · DicePanel right).
 
 ---
+
+### Combat Rules Reference
+
+- [ ] **Create `adventure_path/06_rules/combat/` folder** — basic PF1e combat reference files for the GM agent: attack rolls, AC, initiative, HP, actions per round, AoO. Same format as skill files with `<!-- REFERENCE -->` separator so the RAG system can inject relevant sections per turn.
 
 ### Tier 1 — Combat Tracker Panel (MVP)
 
@@ -203,6 +221,12 @@ Extend `%%ROLL%%` to cover attack rolls. The LLM writes a structured attack bloc
 
 ## GM and Session Flow
 
+- [ ] **Audit and trim system prompt — target sub-1500 tokens** — current base prompt is 2000+ tokens on every turn; cut or move anything the model follows reliably without seeing it every turn
+- [ ] Move example response block (Gerhard Pickle / Bottled Solutions) below `<!-- REFERENCE -->` — ~200 tokens every turn; only needs to load at boot
+- [ ] Collapse `%%GENERATE%%` / `%%DELTAS%%` field descriptions — `← omit if unsure` inline comments and full field lists are verbose; tighten to a minimal spec
+- [ ] Compress `%%ROLL%%` and `%%COMBAT%%` block specs — model knows the format; reduce to a one-liner reference
+- [ ] Move GM STYLE bullet list to the boot file — applies once at session start, no need to repeat every turn
+- [ ] Move knowledge tag list (`[persistent] [pcs] [quest] …`) to a reference section — model rarely gets this wrong
 - [ ] Make sure the DCs for rolls are from NPC stats AND supplemented by the skill file.
 - [ ] Make player identity loading consistent across code paths; current boot logic still expects some optional files in different locations than the repo uses.
 - [ ] Route boot and recap generation to `llama-3.3-70b-versatile` and normal turns to `llama-3.1-8b-instant` — add a per-call-type model override in `_stream_groq`.
@@ -243,10 +267,10 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## NPC Lifecycle and Knowledge
 
-- [ ] Carry `scene_npcs` forward into the next session's boot file — `session.scene_npcs` is in-memory only and lost when the session ends. On `stream_end_session`, append the active NPC list to `sessions/session_NNN+1/boot.md` so the next session starts with those NPCs already in context. Without this the GM starts cold every session regardless of what was in-flight.
-- [ ] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` somewhere visible (log or UI) so the GM can verify the model caught them.
+- [x] Carry `scene_npcs` forward into the next session's boot file — `stream_end_session` appends `## NPCs Active at Session End` to the generated `boot.md`; `create_session` calls `_parse_scene_npcs_from_boot` and pre-populates `session.scene_npcs` on boot. The restored names are logged at session start. 3 tests in `test_scene_npc_tracking.py`.
+- [x] Surface the list of detected-but-not-yet-stubbed names from `scene_npcs` — `scene_npcs` added to the `context` SSE event and shown as amber chips in the IntentBar ("scene" label, one chip per NPC). All turns now surface the full tracked scene regardless of what triggered the turn. 3 tests in `test_scene_npc_tracking.py`.
 - [ ] Write `%%GENERATE%%` summary field to NPC knowledge — the `summary:` field in `%%GENERATE%%` blocks is parsed but silently dropped. Write it as the first entry in the new NPC's `knowledge.md`: `- [world] {summary} — S{session:03d} T000`. Bootstraps the NPC's knowledge file immediately.
-- [ ] Single-word NPC name detection — `_detect_narrative_npcs` regex requires two Title Case words (`r'\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b'`). Known NPCs with single-word canonical names (e.g., "Aldern", "Lonjiku") are never auto-tracked. Fix: add an exact-match pass against `_get_npc_index().known_npcs` canonical names; keep the two-word heuristic for unknown-NPC suspicion only.
+- [x] Single-word NPC name detection — `_detect_narrative_npcs` now runs two passes: Pass 1 checks every Title Case word (≥4 chars) against `NpcIndex.canonical_for()` (the alias table, which auto-registers each word of every canonical name); Pass 2 is the original two-word heuristic for unknown NPCs. Single references like "Aldern" now resolve to "Aldern Foxglove" without an explicit alias entry. `NpcIndex.canonical_for()` added to `npc_lookup.py`. 9 tests in `test_scene_npc_tracking.py`.
 - [ ] **Sandpoint NPC skeletons** — populate `05_npcs/` with skeleton `base.md` files for 50–75% of named Sandpoint NPCs. A skeleton needs: name, role/occupation, one-line physical description, one-line personality, key relationships, and location (which building/district they frequent). No stat blocks, no deep backstory — just enough that the GM never has to invent a bartender from scratch. Source from `adventure_path/03_books/BOOK_01_BURNT_OFFERINGS/NPCS.md` and `SANDPOINT_LOCATIONS.md`. Priority order: (1) named NPCs already referenced in session logs or the book's Tier I/II list; (2) location anchors (innkeeper, blacksmith, sheriff's deputy, temple acolytes); (3) recurring faces (market vendors, festival organisers).
 - [x] Location tracking — `%%GENERATE%%` blocks with `type: location` now create stubs in `adventure_path/07_locations/` (previously logged and skipped). `LocationIndex` singleton (`api/context/location_lookup.py`) detects location aliases and injects profiles per-turn. `scene_locations` persists location context across turns. 8 seed locations written for Act I. 43 tests in `tests/test_location_lookup.py`. *(spec: `specs/location-system.feature`, 9 ACs)*
 - [x] Promote auto-created session NPCs to permanent records via a lightweight review workflow. *(session NPCs now live in dot-prefixed directories under `05_npcs/`; rename the directory to drop the dot to promote. UI "Purge NPCs" button bulk-deletes all dot-prefixed dirs via `DELETE /api/npcs/session`.)*
@@ -260,6 +284,10 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## Character Data and UI Content
 
+- [ ] Hide sidebar (left) and dice panel (right) when not in a session — both panels are visible on the splash screen but serve no purpose before boot
+- [ ] Make sidebar character icons bigger
+- [ ] Splash portrait click opens character sheet — same behaviour as "Open Sheet" in session
+- [ ] Add fun rotating hints to splash screen — PF1e flavour or adventure-specific
 - [ ] Open the "character action menu" to the right side of the character avatar.
 - [ ] Normalize all player JSON files to one agreed UI schema and keep them synchronized with the markdown sheets.
 - [ ] Audit Ani's data and other player records for internal inconsistencies before relying on them in UI or prompts.
@@ -277,6 +305,10 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## Nice-to-Have
 
+- [ ] **Redesign dice panel** — panel is too large relative to its usage; decide on visibility model and condense the layout
+- [ ] Dice panel option A — always visible but collapsed to a thin strip, expands on click
+- [ ] Dice panel option B — show only when a `roll_request` event is active, hide otherwise
+- [ ] **Add clear-history button to dice panel** — small button to wipe the local roll log; no backend call needed (history is UI state only)
 - [ ] Build a small admin view for inspecting session state, NPC memory, and pending continuity updates.
 - [ ] Add diff-friendly generated outputs so session-to-session changes are easier to review.
 - [ ] Stream the recap text to the chat window during End Session — `stream_end_session` already emits status events but the recap prose is written silently to disk. Yielding it as tokens would let the player read it as it generates, the same way turns stream.
@@ -286,7 +318,7 @@ Do these in order — each step is independently shippable and leaves the system
 
 ## Runtime and Tooling
 
-- [ ] **View Log — surface API call logs in the UI** — the current "View Log" button opens the session markdown log (`GET /api/sessions/{id}/log`). Extend or add a second view so the GM can browse `outputs/api_log/` from the UI without leaving the browser: a file list (newest first) and a JSON viewer for the selected entry. Key fields to surface prominently: `first_token_ms`, `duration_ms`, `section_format_ok`, `usage.total_tokens`, and `status`. The endpoints (`GET /api/log/api` and `GET /api/log/api/{filename}`) already exist. Decide whether to replace the current log button, add a tab, or open a separate panel.
+- [x] **View Log — surface API call logs in the UI** — "API Logs" button added to post-boot header; opens `ApiLogPanel.tsx` overlay (right-side slide-in, Escape/backdrop to close). List view shows timestamp, provider, session, and turn parsed from filename. Detail view has a summary bar (status · section_format_ok · first_token_ms · duration_ms · total_tokens) plus full JSON in a scrollable code block. 22 Vitest tests in `ApiLogPanel.test.tsx`. *(spec: `specs/session-logging.feature` AC-009/AC-010)*
 - [ ] Document the exact local startup and recovery workflow for Windows, including port cleanup and Ollama checks.
 - [ ] Session crash recovery — sessions are purely in-memory; a server restart during play loses `session.messages`, `scene_npcs`, `pending_roll`. After each turn, write a recovery snapshot to `outputs/sessions/{session_id}_snapshot.json`. On startup, detect orphaned snapshots and offer recovery.
 - [x] **Add Anthropic (Claude) as a provider** — `anthropic>=0.34.0` in `requirements.txt`; `_stream_anthropic` + `_call_blocking` Anthropic path in `session_manager.py`; `ANTHROPIC_API_KEY` from env; `_ANTHROPIC_MAX_HISTORY=20`; `anthropic` branch in provider dispatch and history-trim; UI: "🤖 Claude" button + `claude-sonnet-4-6` / `claude-opus-4-7` / `claude-haiku-4-5-20251001` dropdown in `Header.tsx`; `provider` state union widened in `App.tsx`.

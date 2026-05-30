@@ -17,8 +17,8 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 5 | Streaming filter, holdback buffer, `patch_last` event |
 | [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `06_rules/skills/` |
-| [session-logging.feature](session-logging.feature) | Backend | `@logging` `@session-log` `@api-log` `@dice` | 7 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok` |
-| [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button |
+| [session-logging.feature](session-logging.feature) | Backend \| Frontend | `@logging` `@session-log` `@api-log` `@dice` | 10 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok`, `ApiLogPanel.tsx` |
+| [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button, API Logs button |
 | [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 6 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
 | [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 11 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration |
 | [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 11 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
@@ -28,7 +28,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [event-injection.feature](event-injection.feature) | Backend | `@event` `@injection` `@context` `@parsing` `@session` | 8 | `EventIndex`, `active_events`, `%%EVENT%%` parser, event map in system prompt |
 | [combat-tracker.feature](combat-tracker.feature) | Backend \| Frontend | `@combat` `@parsing` `@session` `@streaming` `@layout` | 10 | `CombatState`, `Combatant`, `_parse_combat_block`, `CombatPanel.tsx`, `HpBar.tsx`, `combat_update` SSE, `DELETE /combat`, per-turn combat reminder |
 
-**Total: 128 acceptance criteria across 19 feature files**
+**Total: 130 acceptance criteria across 19 feature files**
 
 ---
 

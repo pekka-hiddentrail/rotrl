@@ -5,6 +5,7 @@ interface IntentState {
   skill_trigger: string | null
   location: string | null
   location_npcs: string[]
+  scene_npcs: string[]
 }
 
 interface Props {
@@ -81,6 +82,15 @@ export default function IntentBar({ intent, lastInput, streaming }: Props) {
             </span>
           )}
         </>
+      )}
+
+      {intent && intent.scene_npcs.length > 0 && (
+        <span className="intent-scene-npcs" title="NPCs currently tracked in this scene">
+          <span className="intent-tag-kind">scene</span>
+          {intent.scene_npcs.map(name => (
+            <span key={name} className="intent-scene-npc-chip">{name}</span>
+          ))}
+        </span>
       )}
     </div>
   )

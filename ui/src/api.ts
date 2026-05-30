@@ -5,7 +5,7 @@ export type SseEvent =
   | { type: 'status'; message: string }
   | { type: 'done'; session_id?: string; recap_path?: string; boot_path?: string; saved_to?: string }
   | { type: 'error'; message: string }
-  | { type: 'context'; npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; location: string | null; location_npcs: string[] }
+  | { type: 'context'; npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; location: string | null; location_npcs: string[]; scene_npcs: string[] }
   | { type: 'patch_last'; content: string }
   | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string }
   | { type: 'rate_limits'; rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string }
@@ -93,6 +93,19 @@ export async function logRoll(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ expr, rolls, total }),
   })
+}
+
+export async function fetchApiLogList(): Promise<string[]> {
+  const res = await fetch(`${BASE}/log/api`)
+  if (!res.ok) throw new Error(`API log list failed (${res.status})`)
+  const data: { files: { name: string; size_bytes: number }[] } = await res.json()
+  return data.files.map(f => f.name)
+}
+
+export async function fetchApiLogEntry(filename: string): Promise<unknown> {
+  const res = await fetch(`${BASE}/log/api/${encodeURIComponent(filename)}`)
+  if (!res.ok) throw new Error(`API log fetch failed (${res.status})`)
+  return res.json()
 }
 
 async function* parseSseStream(response: Response, signal?: AbortSignal): AsyncGenerator<SseEvent> {

@@ -6,6 +6,7 @@ import ChatWindow from './components/ChatWindow'
 import InputBar from './components/InputBar'
 import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
+import ApiLogPanel from './components/ApiLogPanel'
 import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
@@ -49,12 +50,13 @@ export default function App() {
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
   const [sheetCharId, setSheetCharId] = useState<string | null>(null)
   const [lastInput, setLastInput] = useState('')
-  const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null } | null>(null)
+  const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; scene_npcs: string[] } | null>(null)
   const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
   const [diceKey, setDiceKey] = useState(0)
   const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
   const [combatState, setCombatState] = useState<CombatState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [showApiLogs, setShowApiLogs] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
@@ -114,7 +116,7 @@ export default function App() {
     try {
       for await (const event of sendTurn(session.id, sentInput)) {
         if (event.type === 'token') appendToken(event.content)
-        if (event.type === 'context') setIntent(event)
+        if (event.type === 'context') setIntent({ ...event, scene_npcs: event.scene_npcs ?? [] })
         if (event.type === 'patch_last') {
           setMessages(prev => {
             const last = prev[prev.length - 1]
@@ -248,6 +250,7 @@ export default function App() {
         onEnd={handleEnd}
         onKillEnd={handleKillEnd}
         onViewLog={handleViewLog}
+        onOpenApiLogs={() => setShowApiLogs(true)}
         onPurgeNpcs={handlePurgeNpcs}
       />
 
@@ -338,6 +341,10 @@ export default function App() {
 
       {sheetCharId && characterMap[sheetCharId] && (
         <CharacterSheet character={characterMap[sheetCharId]} onClose={() => setSheetCharId(null)} />
+      )}
+
+      {showApiLogs && (
+        <ApiLogPanel onClose={() => setShowApiLogs(false)} />
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />

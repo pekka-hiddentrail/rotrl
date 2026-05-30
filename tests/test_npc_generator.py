@@ -454,8 +454,15 @@ def test_detect_skips_already_tracked_name(tmp_path, monkeypatch):
     assert session.scene_npcs.count("Hannah Harvest") == 1
 
 
-def test_detect_skips_known_index_npc(tmp_path, monkeypatch):
-    """A name already in the NPC index is not added to scene_npcs."""
+def test_detect_adds_known_npc_via_single_word(tmp_path, monkeypatch):
+    """A known NPC mentioned by single word (alias) IS added to scene_npcs.
+
+    Pass 1 of _detect_narrative_npcs checks single Title Case words against the
+    alias table. "Kendra" resolves to "Kendra Deverin", so she is tracked even
+    when her full name appears (the word "Kendra" triggers the match first).
+    This ensures known NPCs mentioned only by first name are not silently dropped
+    from scene tracking.
+    """
     import api.session_manager as sm
     sm = _sm_setup(tmp_path, monkeypatch)
     _make_npc_dir(tmp_path, "kendra_deverin",
@@ -464,7 +471,9 @@ def test_detect_skips_known_index_npc(tmp_path, monkeypatch):
 
     sm._detect_narrative_npcs("Kendra Deverin smiles from the steps.", session)
 
-    assert "Kendra Deverin" not in session.scene_npcs
+    # Kendra resolved to her canonical name via the alias table (Pass 1)
+    assert "Kendra Deverin" in session.scene_npcs
+    assert session.scene_npcs.count("Kendra Deverin") == 1  # not duplicated by Pass 2
 
 
 def test_detect_skips_exclude_words(tmp_path, monkeypatch):

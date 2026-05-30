@@ -91,7 +91,7 @@ def _get_event_index() -> EventIndex:
 
 _GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 _GROQ_MAX_RETRIES = 4
-_GROQ_RETRY_BASE = 5.0  # seconds — doubled each attempt
+_GROQ_RETRY_BASE = float(os.getenv("ROTRL_GROQ_RETRY_BASE", "5.0"))  # seconds — doubled each attempt
 
 
 def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.Response:
@@ -174,16 +174,16 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
     raise RuntimeError("Groq: exhausted retries")  # pragma: no cover
 
 # Dev mode limits: keep only the last N messages (pairs of user+assistant)
-_DEV_MAX_HISTORY        = 6   # 3 exchanges
-_FULL_MAX_HISTORY       = 30  # 15 exchanges — Ollama (local, no payload limit)
-_GROQ_MAX_HISTORY       = 10  # 5 exchanges  — Groq (cloud, tighter payload limit)
-_ANTHROPIC_MAX_HISTORY  = 20  # 10 exchanges — Anthropic (200K context, generous but bounded)
-_DEV_MAX_TOKENS    = 180  # cap generation length in dev mode
+_DEV_MAX_HISTORY        = int(os.getenv("ROTRL_DEV_MAX_HISTORY",       "6"))   # 3 exchanges
+_FULL_MAX_HISTORY       = int(os.getenv("ROTRL_FULL_MAX_HISTORY",      "30"))  # 15 exchanges — Ollama
+_GROQ_MAX_HISTORY       = int(os.getenv("ROTRL_GROQ_MAX_HISTORY",      "10"))  # 5 exchanges  — Groq
+_ANTHROPIC_MAX_HISTORY  = int(os.getenv("ROTRL_ANTHROPIC_MAX_HISTORY", "20"))  # 10 exchanges — Anthropic
+_DEV_MAX_TOKENS         = int(os.getenv("ROTRL_DEV_MAX_TOKENS",        "180")) # cap generation length in dev mode
 # Groq: hard ceiling on the system prompt character count.
 # Injected context chunks beyond this point are silently dropped.
 # ~30 000 chars ≈ 7 500 tokens — keeps all early context (base + Critical +
 # Act Overview + Adjudication) and trims only the later/lower-priority chunks.
-_GROQ_MAX_SYSTEM_CHARS = 30_000
+_GROQ_MAX_SYSTEM_CHARS = int(os.getenv("ROTRL_GROQ_MAX_SYSTEM_CHARS", "30000"))
 
 # Regex that matches a %%ROLL%% … %%END%% block anywhere in GM output.
 #
@@ -246,29 +246,43 @@ _EVENT_LINE_RE = re.compile(r'^%%EVENT%%\s+([A-Za-z]\w*)', re.MULTILINE)
 # Requires ≥3 chars per word so sentence-starting words like "As", "He", "In"
 # never produce a match.
 _NARRATIVE_NAME_RE = re.compile(r'\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b')
+# Single Title Case word (≥4 chars) — used only against the known alias table.
+_NARRATIVE_SINGLE_RE = re.compile(r'\b([A-Z][a-z]{3,})\b')
 
 # Words that appear capitalised in prose but are NOT person names.
 # If EITHER word of a candidate pair is in this set, the pair is skipped.
-_NAME_EXCLUDE_WORDS: frozenset[str] = frozenset({
-    # Titles / honorifics
+# Loaded from adventure_path/00_system_authority/name_exclude_words.txt at import time;
+# falls back to the hardcoded set if the file is absent or unreadable.
+_NAME_EXCLUDE_WORDS_FALLBACK: frozenset[str] = frozenset({
     "mayor", "sheriff", "father", "mother", "brother", "sister",
     "lord", "lady", "master", "captain", "sergeant", "doctor",
     "mister", "mistress", "dame", "sir",
     "baron", "duke", "earl", "count", "prince", "princess", "king", "queen",
-    # Place-type words
     "square", "hall", "street", "road", "lane", "alley", "avenue",
     "cathedral", "temple", "church", "shrine",
     "inn", "tavern", "lodge",
     "gate", "bridge", "market", "district", "quarter",
     "tower", "keep", "castle", "fort",
-    # Campaign / setting proper nouns that are not NPC names
     "rise", "runelords", "varisia", "sandpoint", "desna",
     "festival", "swallowtail", "lost", "coast",
     "burnt", "offerings", "pathfinder",
-    # Common sentence-start words
     "what", "who", "where", "when", "why", "how",
     "this", "that", "these", "those",
 })
+
+def _load_name_exclude_words() -> frozenset[str]:
+    _path = _REPO_ROOT / "adventure_path" / "00_system_authority" / "name_exclude_words.txt"
+    try:
+        words = {
+            line.strip().lower()
+            for line in _path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        }
+        return frozenset(words) if words else _NAME_EXCLUDE_WORDS_FALLBACK
+    except Exception:
+        return _NAME_EXCLUDE_WORDS_FALLBACK
+
+_NAME_EXCLUDE_WORDS: frozenset[str] = _load_name_exclude_words()
 
 
 def _parse_delta_fields(body: str) -> dict[str, str]:
@@ -855,11 +869,19 @@ def create_session(
                 if _knowledge_path.exists():
                     _knowledge_path.write_text("", encoding="utf-8")
 
+    # Restore scene_npcs from the previous session's boot.md if present.
+    _boot_path = _REPO_ROOT / "sessions" / f"session_{session_number:03d}" / "boot.md"
+    _restored_npcs = _parse_scene_npcs_from_boot(_boot_path)
+    if _restored_npcs:
+        session.scene_npcs = _restored_npcs
+
     _sessions[session.id] = session
 
     mode_label = "dev" if dev_mode else "full"
     _log(session, f"# Session {session_number:03d} — {started.strftime('%Y-%m-%d %H:%M:%S')}")
     _log(session, f"Model: `{model}` | Mode: {mode_label} | Temp: {temperature}\n")
+    if _restored_npcs:
+        _log(session, f"> *[Scene NPCs restored from boot.md: {', '.join(_restored_npcs)}]*\n")
     _log(session, "## System Prompt\n")
     _log(session, f"```\n{system_prompt}\n```\n")
     _log(session, "---\n")
@@ -1243,19 +1265,33 @@ def _stream_with_narrative_filter(
 
 
 def _detect_narrative_npcs(text: str, session: GameSession) -> None:
-    """Scan completed narrative text for unrecognised proper names.
+    """Scan completed narrative text for NPC names.
+
+    Two passes:
+    1. Single Title Case word (≥4 chars) — matched against the known alias table.
+       If a single word like "Aldern" resolves to a canonical NPC, track it.
+    2. Two Title Case words — heuristic for unknown NPCs not yet in the index.
 
     Adds candidates to session.scene_npcs so the NEXT turn's directive requests
-    a %%DELTAS%% block.  Layer 2 then creates the stub when the model writes
-    that delta block.  No stub is created here — detection and creation are
-    intentionally separated to avoid false-positive junk folders.
+    a %%DELTAS%% block.  Layer 2 creates the stub when the model writes the delta.
+    No stub is created here — detection and creation are intentionally separated.
     """
+    # Pass 1 — single word matched against known alias table
+    for _m in _NARRATIVE_SINGLE_RE.finditer(text):
+        _word = _m.group(1)
+        if _word.lower() in _NAME_EXCLUDE_WORDS:
+            continue
+        _canonical = _get_npc_index().canonical_for(_word)
+        if _canonical and _canonical not in session.scene_npcs:
+            session.scene_npcs.append(_canonical)
+            _log(session, f"\n> *[Known NPC detected by single name \"{_word}\": {_canonical} — added to scene tracking]*\n")
+
+    # Pass 2 — two Title Case words (unknown-NPC heuristic)
     for _m in _NARRATIVE_NAME_RE.finditer(text):
         _first, _last = _m.group(1), _m.group(2)
         if _first.lower() in _NAME_EXCLUDE_WORDS or _last.lower() in _NAME_EXCLUDE_WORDS:
             continue
         _full_name = f"{_first} {_last}"
-        # Already tracked or already in the index — nothing to add
         if _full_name in session.scene_npcs:
             continue
         if _get_npc_index().npc_dir_for(_full_name) is not None:
@@ -1406,6 +1442,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         "loc":           loc_canonical,
         "loc_trigger":   loc_trigger,
         "active_events": active_event_ids,
+        "scene_npcs":    list(session.scene_npcs),
         "history":       history,
     }
 
@@ -1430,6 +1467,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         "loc":           context_info["loc"],
         "loc_trigger":   context_info["loc_trigger"],
         "active_events": context_info["active_events"],
+        "scene_npcs":    context_info["scene_npcs"],
     }) + "\n\n"
 
     messages = [{"role": "system", "content": system_content}] + history
@@ -1841,6 +1879,33 @@ def _stream_anthropic(
 
 # ── Session-end recap generation ──────────────────────────────────────────────
 
+def _parse_scene_npcs_from_boot(boot_path: Path) -> list[str]:
+    """Extract NPC names from the '## NPCs Active at Session End' section of boot.md.
+
+    Returns an empty list if the section is absent or the file cannot be read.
+    This section is written by stream_end_session so the next session can restore
+    scene_npcs without the GM starting cold.
+    """
+    try:
+        text = boot_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    names: list[str] = []
+    in_section = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "## NPCs Active at Session End":
+            in_section = True
+            continue
+        if in_section:
+            if stripped.startswith("## "):  # next section — stop
+                break
+            m = re.match(r"^-\s+(.+)", stripped)
+            if m:
+                names.append(m.group(1).strip())
+    return names
+
+
 def _parse_turns_from_log(log_path: Path) -> list[dict]:
     """Extract only PLAYER and GM turns from the session log.
     Strips system prompt, context injections, LLM payload blocks, and separators.
@@ -2117,6 +2182,13 @@ Be factual and precise. Base everything strictly on the transcript."""
     recap_path = sessions_dir / f"session_{n:03d}" / "recap.md"
     recap_path.parent.mkdir(parents=True, exist_ok=True)
     recap_path.write_text(recap_text, encoding="utf-8")
+
+    # Append active scene_npcs so create_session can restore them next boot.
+    if session.scene_npcs:
+        boot_text += (
+            "\n\n## NPCs Active at Session End\n"
+            + "\n".join(f"- {name}" for name in session.scene_npcs)
+        )
 
     boot_path = sessions_dir / f"session_{next_n:03d}" / "boot.md"
     boot_path.parent.mkdir(parents=True, exist_ok=True)

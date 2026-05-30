@@ -194,6 +194,61 @@ And   status is "error"
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-009 — API log browser panel lists recent calls
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** GM opens the API log browser during a session
+
+```gherkin
+Given a session is active
+When  the GM clicks "API Logs" in the post-boot header
+Then  an in-app overlay panel opens (does not open a new browser tab)
+And   the panel shows a list of recent API call log files, newest first
+And   each row shows: timestamp, provider, session number, turn number, and a status badge (ok / error)
+And   the current chat and session remain accessible behind the overlay
+
+Given no API log files exist in outputs/api_log/
+When  the GM opens the API log browser
+Then  the panel shows an empty-state message "No API logs yet"
+```
+
+**Notes:**
+- List is populated by `GET /api/log/api` (up to 50 entries, newest first).
+- Timestamp, provider, session number, and turn number are parsed from the filename:
+  `YYYYMMDD_HHMMSS_mmm_{provider}_s{NNN}_t{TTT}_{session[:8]}.json`
+- The overlay closes when the GM clicks outside it or presses Escape.
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-010 — API log detail view surfaces key metrics
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** GM selects an API log entry
+
+```gherkin
+Given the API log browser panel is open and at least one entry is listed
+When  the GM clicks an entry row
+Then  the detail view replaces the list within the panel
+And   a summary bar at the top shows: status, section_format_ok, first_token_ms, duration_ms, and usage.total_tokens
+And   section_format_ok is rendered as a green "✓ structured" badge or a red "✗ flat" badge (null rendered as "—")
+And   first_token_ms and duration_ms are shown in milliseconds
+And   the full raw JSON is shown in a scrollable code block below the summary bar
+And   a "← Back" button returns to the file list
+
+Given the GM clicks an entry and the fetch returns an error
+Then  an inline error message is shown in place of the detail view
+And   the "← Back" button is still available
+```
+
+**Notes:**
+- Detail is fetched by `GET /api/log/api/{filename}`.
+- `usage.total_tokens` shown as `—` when `usage` is null (Ollama turns).
+- The summary bar field order: **status · section_format_ok · first_token_ms · duration_ms · total_tokens**.
+
+---
+
 ## Out of Scope
 
 - Log rotation or archiving (outputs/ is git-ignored and manually managed)
