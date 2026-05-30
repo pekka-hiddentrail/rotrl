@@ -122,9 +122,10 @@ Navigate to **http://localhost:5173** in your browser.
 3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
 4. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
 5. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, and status badges. Click **End Combat** to manually clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
-6. **View Log** — opens the live session log in a new browser tab (shown during an active session)
-7. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
-8. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
+6. **View Log** — opens the live session markdown log in a new browser tab (shown during an active session)
+7. **API Logs** — opens an in-app overlay listing recent LLM call log files. Click any entry to see a summary bar (`status` · `section_format_ok` · `first_token_ms` · `duration_ms` · `total_tokens`) plus the full JSON payload. Escape or click outside to close
+8. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
+9. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
 
 ### Rate limit badge
 
@@ -152,7 +153,7 @@ In **dev mode** all markers are visible in the stream so you can see the raw out
 | `outputs/*.log.md` | At session boot | Timestamped markdown: system prompt, every exchange, dice rolls |
 | `outputs/api_log/*.json` | Per turn | Full LLM request + response payload. Key fields: `first_token_ms` (ms to first streamed token), `section_format_ok` (true if `%%MARKER%%` sections present), `duration_ms`, `usage.total_tokens`, `status` |
 | `sessions/session_NNN/recap.md` | On End Session | Player-facing recap for the next session's intro card |
-| `sessions/session_NNN+1/boot.md` | On End Session | GM-facing continuity brief for the next session's system prompt |
+| `sessions/session_NNN+1/boot.md` | On End Session | GM-facing continuity brief for the next session's system prompt. Includes a `## NPCs Active at Session End` section — read by `create_session` to restore `scene_npcs` on next boot |
 | `adventure_path/05_npcs/<slug>/session_NNN.md` | Per turn (per NPC) | NPC disposition, location, knowledge written after each interaction |
 | `adventure_path/05_npcs/.<slug>/` | On `%%GENERATE%%` | Session-NPC stub directory (dot-prefix = temporary). Rename to `<slug>/` to promote to permanent. Purge all via **Purge NPCs** or `DELETE /api/npcs/session`. |
 
@@ -195,12 +196,13 @@ rotrl/
 │           ├── Header.tsx         # Logo + controls (column layout); rate-limit badge
 │           ├── ChatWindow.tsx     # Message list + thinking indicator
 │           ├── InputBar.tsx       # Player input textarea
-│           ├── IntentBar.tsx      # NPC/skill context display (fixed bottom)
+│           ├── IntentBar.tsx      # NPC/skill context + scene NPC chips (fixed bottom)
 │           ├── CharacterSidebar.tsx
 │           ├── CharacterSheet.tsx
 │           ├── DicePanel.tsx      # Dice roller — feeds result back to API
 │           ├── CombatPanel.tsx    # Live initiative tracker (visible during combat)
-│           └── HpBar.tsx          # HP bar with colour thresholds (green/amber/red/grey)
+│           ├── HpBar.tsx          # HP bar with colour thresholds (green/amber/red/grey)
+│           └── ApiLogPanel.tsx    # In-app API call log browser (list + JSON detail view)
 │
 ├── adventure_path/
 │   ├── 00_system_authority/       # Non-negotiable GM rules — adjudication, PF1e scope
@@ -212,6 +214,7 @@ rotrl/
 │   ├── 06_rules/skills/           # Skill files — trigger words + rules text for RAG
 │   ├── 07_locations/              # Location profiles (read by LocationIndex at runtime)
 │   ├── 08_events/                 # Event files — fired by %%EVENT%% tag, injected for N turns
+│   ├── 09_monsters/               # Generic monster stat blocks (AC, HP, attacks, morale, XP)
 │   └── 90_shared_references/      # Shared reference tables
 │
 ├── players/
@@ -278,7 +281,7 @@ All streaming endpoints use Server-Sent Events. Each event is a JSON object with
 | `roll_request` | When a `%%ROLL%%` block is parsed (includes skill, dc, success, failure) |
 | `rate_limits` | After each Groq turn — per-minute RPM/TPM remaining + reset times (Groq only) |
 | `combat_update` | After every turn — carries serialised `CombatState` or `null`; drives CombatPanel visibility |
-| `context` | Debug event for injected NPC/skill context |
+| `context` | Injected NPC/skill/location context for the turn; includes `scene_npcs` list (all NPCs currently tracked in scene) |
 | `status` | Progress messages during end-session generation |
 | `error` | Any recoverable error; 429 daily-limit errors include the Groq message verbatim |
 | `done` | End of stream; includes `session_id` on boot |
@@ -302,7 +305,7 @@ npm run test:watch                # watch frontend tests during UI work
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest, so use `npm run test` from `ui/` before merging frontend changes.
 
-**Backend:** 494 pytest tests passing across 21 test files:
+**Backend:** 528 pytest tests passing across 24 test files:
 
 | File | Covers |
 |------|--------|
@@ -327,8 +330,10 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_location_lookup.py` | `LocationIndex` loading, alias detection, `<!-- REFERENCE -->` boundary, profile injection, scene re-injection, session-generated location stubs |
 | `test_dev_startup.py` | `dev.py` startup hardening — `_pid_on_port`, `_port_free`, `_kill_tree`, `_free_port` |
 | `test_combat.py` | `Combatant`/`CombatState` dataclasses, HP clamp + status validation, `_parse_combatant_line`, `_parse_combat_block` (incl. round-0 sentinel and parse-failure semantics), `_serialize_combat_state`, `combat_update` SSE, narrative filter stripping, malformed-block-preserves-state regression, combat-only-no-leak regression, `DELETE /combat` endpoint |
+| `test_config_tunables.py` | F6 env-var-configurable tunables (default values, type checks, override reads); R4 `_load_name_exclude_words` (file loading, comment/blank-line stripping, fallback on missing/empty file, case normalisation) |
+| `test_scene_npc_tracking.py` | `NpcIndex.canonical_for` (explicit alias, auto-word alias, unknown word, case-insensitive); single-word `_detect_narrative_npcs` Pass 1 (known alias → scene_npcs, dedup, exclude-word skip, unknown word ignored); `scene_npcs` in `context_info` (present, empty list, copy semantics); boot persistence (`_parse_scene_npcs_from_boot`, `stream_end_session` appends section, `create_session` restores) |
 
-**Frontend:** 93 Vitest tests passing across 4 test files (run separately — `cd ui && npm run test`):
+**Frontend:** 115 Vitest tests passing across 5 test files (run separately — `cd ui && npm run test`):
 
 | File | Covers |
 |------|--------|
@@ -336,6 +341,7 @@ npm run test:watch                # watch frontend tests during UI work
 | `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display, quick-roll from banner (AC-012) |
 | `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
 | `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |
+| `ApiLogPanel.test.tsx` | API log browser: list view (empty state, row rendering, filename parsing, close behaviours), detail view (status/format/latency/token badges, JSON block, back navigation, error path) |
 
 ---
 
@@ -349,6 +355,7 @@ POST /api/sessions
        ├─ delete this session's NPC delta files (session_NNN.md per NPC)
        ├─ clear NPC knowledge files (session 1 only — full reset)
        ├─ _build_slim_system_prompt() — reads players/, sessions/session_NNN/boot.md
+       ├─ _parse_scene_npcs_from_boot() — restores scene_npcs from boot.md if section present
        └─ yields: done SSE event with session_id   (no LLM call)
 
 POST /api/sessions/{id}/turn  (repeated each exchange)
@@ -378,6 +385,7 @@ POST /api/sessions/{id}/end
        ├─ _enforce_recap_header() → canonical header
        ├─ write sessions/session_NNN/recap.md
        ├─ blocking LLM call → GM-facing boot brief for next session
+       ├─ append ## NPCs Active at Session End to boot text (if scene_npcs non-empty)
        └─ write sessions/session_NNN+1/boot.md
 ```
 
@@ -387,7 +395,7 @@ No vector database. Every turn, keyword lookups and active-event TTL checks run 
 
 1. **NPC lookup** — `NpcIndex` scans for alias matches against `adventure_path/05_npcs/*/base.md`. Matching NPC's profile (minus `<!-- REFERENCE -->` section) is prepended to system content.
 2. **Skill lookup** — `SkillIndex` scans for trigger words against `adventure_path/06_rules/skills/*.md`. Longest-match trigger wins; skill rules are prepended.
-3. **Scene NPCs** — NPCs accumulated in `session.scene_npcs` (from `%%DELTAS%%` writes + `_detect_narrative_npcs` scan) have their current status injected so the GM knows their last known state.
+3. **Scene NPCs** — NPCs accumulated in `session.scene_npcs` (from `%%DELTAS%%` writes + `_detect_narrative_npcs` scan) have their current status injected so the GM knows their last known state. `_detect_narrative_npcs` runs two passes: Pass 1 matches single Title Case words (≥4 chars) against the NPC alias table (`NpcIndex.canonical_for`) so first-name-only references like "Aldern" resolve correctly; Pass 2 is the two-word heuristic for unknown NPCs. The full `scene_npcs` list is included in every `context` SSE event and shown as chips in the IntentBar.
 4. **Active events** — `session.active_events` TTL is decremented; expired events are removed. Remaining events' content is injected as `## Active Event — {id}` blocks. Events are added when the LLM writes `%%EVENT%% <id>` and the corresponding `08_events/<id>.md` file exists.
 5. **Event map** (system prompt, not per-turn) — `EventIndex.event_map_text()` builds a compact block listing all valid event IDs and their trigger conditions, injected once at boot. Zero-cost if `08_events/` is empty.
 
@@ -464,7 +472,13 @@ ollama list                            # confirm model is pulled
 | Per-turn location RAG (`LocationIndex`, alias detection, profile injection, scene persistence) | ✅ Complete |
 | Combat Tracker Tier 1 — `%%COMBAT%%` block parsing, `CombatState`/`Combatant` dataclasses, `CombatPanel` + `HpBar`, layout shift, `combat_update` SSE, `DELETE /combat` endpoint, per-turn GM directive reminder, event-file combat requirements | ✅ Complete |
 | Anthropic (Claude) provider — `claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5` | ✅ Complete |
-| Test suites — 494 pytest + 93 Vitest tests | ✅ Complete |
+| API call log browser UI (`ApiLogPanel`) — list + detail view, summary metrics bar | ✅ Complete |
+| Env-var-configurable tunables (`ROTRL_*`) for history limits, token cap, retry base | ✅ Complete |
+| `name_exclude_words.txt` — NPC name filter loaded from file, GM-editable without code changes | ✅ Complete |
+| Single-word NPC detection — `_detect_narrative_npcs` Pass 1 resolves aliases (`NpcIndex.canonical_for`) | ✅ Complete |
+| `scene_npcs` in `context` SSE event — chips shown in IntentBar each turn | ✅ Complete |
+| `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
+| Test suites — 528 pytest + 115 Vitest tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |

@@ -289,6 +289,17 @@ class NpcIndex:
 
     # ── Introspection ─────────────────────────────────────────────────────────
 
+    def canonical_for(self, word: str) -> str | None:
+        """Return canonical NPC name if *word* matches any registered alias, else None.
+
+        Uses the same alias table as detect_all(). Single-word lookups only.
+        The NPC index auto-registers each word of every canonical name (≥4 chars)
+        as a fallback alias, so "Aldern" resolves to "Aldern Foxglove" without
+        any explicit alias entry in base.md.
+        """
+        self._ensure_loaded()
+        return self._aliases.get(word.lower())
+
     @property
     def known_npcs(self) -> list[str]:
         self._ensure_loaded()

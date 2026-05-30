@@ -89,6 +89,7 @@ And   no second boot request can be sent
 Given a session is active with session_number=2 and model="llama-3.3-70b-versatile"
 Then  the header shows a session badge: "Session 2 · llama-3.3-70b-versatile"
 And   the header shows a "View Log" button
+And   the header shows an "API Logs" button
 And   the header shows an "End Session" button
 And   the header does NOT show a "Purge NPCs" button
 And   the pre-boot configuration inputs are hidden
@@ -192,3 +193,5 @@ Then  the inline confirm collapses and ending continues
 - Groq default model: `llama-3.3-70b-versatile`; Ollama default: `qwen3:4b`
 - End Session button also disabled while streaming or while `ending` state is true
 - Header layout: logo centered at top, controls row centered below (column flex layout)
+- "View Log" opens the session markdown log (`/api/sessions/{id}/log`) in a new tab (AC-005)
+- "API Logs" opens the in-app JSON log browser overlay (AC-009/AC-010 in session-logging.feature)

@@ -43,6 +43,7 @@ interface Props {
   onEnd: () => void
   onKillEnd: () => void
   onViewLog: () => void
+  onOpenApiLogs: () => void
   onPurgeNpcs: () => void
 }
 
@@ -59,7 +60,7 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 
 export default function Header({
   session, streaming, ending, sessionNumber, model, devMode, provider, rateLimits,
-  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onKillEnd, onViewLog, onPurgeNpcs,
+  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onPurgeNpcs,
 }: Props) {
   const [confirmingPurge, setConfirmingPurge] = useState(false)
   const [confirmingKill, setConfirmingKill] = useState(false)
@@ -191,6 +192,9 @@ export default function Header({
             )}
             <button onClick={onViewLog} disabled={ending} className="btn btn-secondary">
               View Log
+            </button>
+            <button onClick={onOpenApiLogs} disabled={ending} className="btn btn-secondary">
+              API Logs
             </button>
             {ending ? (
               <>

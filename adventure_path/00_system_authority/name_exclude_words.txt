@@ -1,0 +1,81 @@
+# Words that appear capitalised in prose but are NOT person names.
+# If EITHER word of a candidate Title Case pair is in this list, the pair is skipped.
+# One word per line. Lines starting with # are comments. Blank lines are ignored.
+# Edit freely — no code changes needed to add or remove words.
+
+# Titles / honorifics
+mayor
+sheriff
+father
+mother
+brother
+sister
+lord
+lady
+master
+captain
+sergeant
+doctor
+mister
+mistress
+dame
+sir
+baron
+duke
+earl
+count
+prince
+princess
+king
+queen
+
+# Place-type words
+square
+hall
+street
+road
+lane
+alley
+avenue
+cathedral
+temple
+church
+shrine
+inn
+tavern
+lodge
+gate
+bridge
+market
+district
+quarter
+tower
+keep
+castle
+fort
+
+# Campaign / setting proper nouns that are not NPC names
+rise
+runelords
+varisia
+sandpoint
+desna
+festival
+swallowtail
+lost
+coast
+burnt
+offerings
+pathfinder
+
+# Common sentence-start / function words
+what
+who
+where
+when
+why
+how
+this
+that
+these
+those
