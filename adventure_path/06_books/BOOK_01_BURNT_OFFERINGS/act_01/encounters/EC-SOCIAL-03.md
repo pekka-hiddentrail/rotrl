@@ -1,4 +1,4 @@
-﻿# EC-SOC-03 - Casual NPC Interaction
+# EC-SOC-03 - Casual NPC Interaction
 
 **Scene:** S2 - Festival Social Phase
 **Type:** Social / Open
@@ -12,10 +12,10 @@ Ameiko Kaijitsu - Near a food booth. Warm, direct. Running a booth; makes cuttin
 
 ## NPC Files
 
-adventure_path/05_npcs/kendra_deverin/base.md
-adventure_path/05_npcs/belor_hemlock/base.md
-adventure_path/05_npcs/abstalar_zantus/base.md
-adventure_path/05_npcs/ameiko_kaijitsu/base.md
+adventure_path/01_npcs/kendra_deverin/base.md
+adventure_path/01_npcs/belor_hemlock/base.md
+adventure_path/01_npcs/abstalar_zantus/base.md
+adventure_path/01_npcs/ameiko_kaijitsu/base.md
 
 ## GM Notes
 

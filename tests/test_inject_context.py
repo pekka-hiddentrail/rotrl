@@ -13,6 +13,13 @@ from api.session_manager import (
     _GROQ_MAX_HISTORY,
     _FULL_MAX_HISTORY,
     _GROQ_MAX_SYSTEM_CHARS,
+    _FORMAT_EXAMPLE,
+    _COMBAT_SPEC_ONGOING,
+    _COMBAT_SPEC_ROUND1,
+    _NARRATIVE_SPEC,
+    _ROLL_SPEC,
+    _GENERATE_SPEC,
+    _DELTAS_SPEC,
 )
 
 
@@ -118,7 +125,7 @@ class TestGroqTruncation:
         session = _make_session(provider="ollama", system_prompt=long)
         content, _ = _call(session)
         assert "omitted" not in content
-        assert content == long  # no modification without any injected context
+        assert content.startswith(long)  # base prompt intact; sections block appended
 
 
 # ── NPC detection ─────────────────────────────────────────────────────────────
@@ -424,3 +431,230 @@ class TestCombatReminder:
         assert "[COMBAT ONGOING" in content
         # Combat section must come AFTER the directive
         assert content.index("[COMBAT ONGOING") > content.index("[GM DIRECTIVE FOR THIS TURN")
+
+
+# ── Turn-1 format example injection ──────────────────────────────────────────
+
+class TestFormatExampleInjection:
+    def test_example_injected_on_first_player_turn(self):
+        """With exactly 1 message (the turn just appended), example must appear."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "We arrive at the festival."}],
+        )
+        content, _ = _call(session)
+        assert "Gerhard Pickle" in content
+        assert _FORMAT_EXAMPLE in content
+
+    def test_example_not_injected_on_second_turn(self):
+        """After the first exchange (3 messages), example must NOT appear."""
+        session = _make_session(
+            messages=[
+                {"role": "user", "content": "First turn."},
+                {"role": "assistant", "content": "GM response."},
+                {"role": "user", "content": "Second turn."},
+            ],
+        )
+        content, _ = _call(session)
+        assert "Gerhard Pickle" not in content
+
+    def test_example_not_injected_with_no_messages(self):
+        """0 messages means no turn has been submitted yet — no example."""
+        session = _make_session(messages=[])
+        content, _ = _call(session)
+        assert "Gerhard Pickle" not in content
+
+    def test_example_appears_after_base_prompt(self):
+        """Example block must be appended, not prepended."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "Hello."}],
+            system_prompt="BASE",
+        )
+        content, _ = _call(session)
+        assert content.startswith("BASE")
+        assert content.index("Gerhard Pickle") > content.index("BASE")
+
+    def test_example_present_alongside_npc_context(self):
+        """Turn-1 example and NPC context injection must both appear."""
+        npc = _npc_match()
+        session = _make_session(
+            messages=[{"role": "user", "content": "I talk to Ameiko."}],
+        )
+        content, _ = _call(session, npc_idx=_npc_idx_with_match(npc))
+        assert "Gerhard Pickle" in content
+        assert "[CONTEXT FOR THIS TURN]" in content
+
+
+# ── Combat full-spec injection ────────────────────────────────────────────────
+
+class TestCombatFullSpec:
+    def test_full_spec_injected_when_combat_active(self):
+        """When round > 0 the full combat spec (format + rules) is injected."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "I attack."}],
+            combat_state=CombatState(round=2, combatants=[_goblin_combatant()]),
+        )
+        content, _ = _call(session)
+        assert _COMBAT_SPEC_ONGOING in content
+
+    def test_full_spec_not_injected_when_no_combat(self):
+        """Without active combat the full spec must NOT appear."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "We explore."}],
+            combat_state=None,
+        )
+        content, _ = _call(session)
+        assert _COMBAT_SPEC_ONGOING not in content
+
+    def test_full_spec_includes_format_and_round_rule(self):
+        """Sanity-check: round-1 spec has HP fields; ongoing spec has round-0 rule."""
+        assert "hp:" in _COMBAT_SPEC_ROUND1       # round-1 spec supplies HP for init
+        assert "round: 0" in _COMBAT_SPEC_ONGOING  # ongoing spec carries the clear rule
+
+    def test_combat_header_still_shows_round_number(self):
+        """[COMBAT ONGOING — round N] header must still carry the actual round."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "I swing again."}],
+            combat_state=CombatState(round=5, combatants=[_goblin_combatant()]),
+        )
+        content, _ = _call(session)
+        assert "[COMBAT ONGOING — round 5]" in content
+
+    def test_full_spec_injected_on_first_turn_with_combat(self):
+        """Turn-1 example AND full combat spec both appear when combat starts
+        on the very first player turn (unlikely but must be handled)."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "Goblins attack!"}],
+            combat_state=CombatState(round=1, combatants=[_goblin_combatant()]),
+        )
+        content, _ = _call(session)
+        assert "Gerhard Pickle" in content
+        assert _COMBAT_SPEC_ONGOING in content
+
+
+# ── Conditional section specs ─────────────────────────────────────────────────
+
+class TestConditionalSectionSpecs:
+    def test_sections_block_always_injected(self):
+        """[SECTIONS ACTIVE THIS TURN] block is present on every turn."""
+        session = _make_session(messages=[{"role": "user", "content": "We look around."}])
+        content, _ = _call(session)
+        assert "[SECTIONS ACTIVE THIS TURN]" in content
+
+    def test_narrative_spec_always_injected(self):
+        """%%NARRATIVE%% spec is always included."""
+        session = _make_session(messages=[{"role": "user", "content": "We look around."}])
+        content, _ = _call(session)
+        assert _NARRATIVE_SPEC in content
+
+    def test_generate_spec_always_injected(self):
+        """%%GENERATE%% spec is always included."""
+        session = _make_session(messages=[{"role": "user", "content": "We explore the square."}])
+        content, _ = _call(session)
+        assert _GENERATE_SPEC in content
+
+    def test_roll_spec_injected_when_skill_detected(self):
+        """%%ROLL%% spec appears when a skill match is detected."""
+        skill = _skill_match("Perception", "look around")
+        session = _make_session(messages=[{"role": "user", "content": "I try to look around."}])
+        content, _ = _call(session, skill_idx=_skill_idx_with_match(skill))
+        assert _ROLL_SPEC in content
+
+    def test_roll_spec_not_injected_without_skill(self):
+        """%%ROLL%% spec is absent when no skill is detected."""
+        session = _make_session(messages=[{"role": "user", "content": "I wave at the mayor."}])
+        content, _ = _call(session)
+        assert _ROLL_SPEC not in content
+
+    def test_deltas_spec_injected_when_scene_npcs_present(self):
+        """%%DELTAS%% spec appears when scene_npcs is non-empty."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "I look at the crowd."}],
+            scene_npcs=["Kendra Deverin"],
+        )
+        content, _ = _call(session)
+        assert _DELTAS_SPEC in content
+
+    def test_deltas_spec_injected_when_npc_detected(self):
+        """%%DELTAS%% spec appears when an NPC is detected in input."""
+        npc = _npc_match("Abstalar Zantus", "zantus")
+        session = _make_session(messages=[{"role": "user", "content": "Talk to Zantus."}])
+        content, _ = _call(session, npc_idx=_npc_idx_with_match(npc))
+        assert _DELTAS_SPEC in content
+
+    def test_deltas_spec_not_injected_with_no_npcs(self):
+        """%%DELTAS%% spec is absent when no NPCs are in scene and none detected."""
+        session = _make_session(
+            messages=[{"role": "user", "content": "We admire the decorations."}],
+            scene_npcs=[],
+        )
+        content, _ = _call(session)
+        assert _DELTAS_SPEC not in content
+
+
+# ── PC profile injection ──────────────────────────────────────────────────────
+
+_SAMPLE_NARRATIVE = "## PC — Harsk (Dwarf Ranger)\nAppearance: Short and stocky with a red beard.\nPersonality: Grim and taciturn."
+_SAMPLE_MECHANICAL = "## PC Stats — Harsk\nHP: 12  AC: 16  Init: +2  Speed: 20 ft\nSaves: Fort +4 / Ref +4 / Will +1"
+
+
+def _session_with_pc(**kwargs) -> GameSession:
+    return _make_session(
+        pc_profiles={
+            "harsk": {
+                "narrative": _SAMPLE_NARRATIVE,
+                "mechanical": _SAMPLE_MECHANICAL,
+            }
+        },
+        **kwargs,
+    )
+
+
+class TestPcProfileInjection:
+    def test_narrative_profile_injected_when_pc_named(self):
+        """Narrative profile is injected when PC's name appears in last_user."""
+        session = _session_with_pc(
+            messages=[{"role": "user", "content": "Harsk moves towards the stall."}]
+        )
+        content, _ = _call(session)
+        assert _SAMPLE_NARRATIVE in content
+
+    def test_narrative_profile_not_injected_when_pc_not_named(self):
+        """Narrative profile is absent when PC's name does not appear in last_user."""
+        session = _session_with_pc(
+            messages=[{"role": "user", "content": "We look at the cathedral."}]
+        )
+        content, _ = _call(session)
+        assert _SAMPLE_NARRATIVE not in content
+
+    def test_mechanical_profile_injected_when_pc_named_and_skill_detected(self):
+        """Mechanical profile is added when PC is named AND a skill is detected."""
+        skill = _skill_match("Perception", "look")
+        session = _session_with_pc(
+            messages=[{"role": "user", "content": "Harsk tries to look for threats."}]
+        )
+        content, _ = _call(session, skill_idx=_skill_idx_with_match(skill))
+        assert _SAMPLE_NARRATIVE in content
+        assert _SAMPLE_MECHANICAL in content
+
+    def test_mechanical_profile_not_injected_without_skill(self):
+        """Mechanical profile is absent when PC is named but no skill is detected."""
+        session = _session_with_pc(
+            messages=[{"role": "user", "content": "Harsk waves at the crowd."}]
+        )
+        content, _ = _call(session)
+        assert _SAMPLE_NARRATIVE in content
+        assert _SAMPLE_MECHANICAL not in content
+
+    def test_only_first_matched_pc_injected(self):
+        """When multiple PCs are named, only the first matched one is injected."""
+        profiles = {
+            "harsk": {"narrative": "## PC — Harsk\nFirst PC.", "mechanical": "Stats A"},
+            "seoni": {"narrative": "## PC — Seoni\nSecond PC.", "mechanical": "Stats B"},
+        }
+        session = _make_session(
+            pc_profiles=profiles,
+            messages=[{"role": "user", "content": "Harsk and Seoni both act."}],
+        )
+        content, _ = _call(session)
+        # The first key match wins; exactly one narrative block injected
+        assert content.count("## PC —") == 1

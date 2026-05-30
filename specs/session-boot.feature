@@ -73,7 +73,7 @@ Then  the intro card shows the content of sessions/session_001/intro.md
 **Scenario:** Stale session NPCs from a prior session are cleaned up
 
 ```gherkin
-Given dot-prefixed NPC directories exist under adventure_path/05_npcs/ (e.g. .gulden/)
+Given dot-prefixed NPC directories exist under adventure_path/01_npcs/ (e.g. .gulden/)
 And   their base.md contains the SESSION NPC flag
 When  a new session is booted
 Then  those dot-prefixed directories are deleted

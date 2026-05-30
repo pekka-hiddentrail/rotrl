@@ -1,6 +1,6 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (528 pytest + 194 Vitest + 7 Playwright) cannot reach: real LLM behaviour, streaming feel against a live backend, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (571 pytest + 194 Vitest + 7 Playwright) cannot reach: real LLM behaviour, streaming feel against a live backend, on-disk side effects, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 
@@ -18,7 +18,7 @@ python dev.py --skip-tests
 
 ## 1. Session Boot
 
-**What automated tests cover:** prompt assembly, file loading, boot endpoint, intro card SSE.
+**What automated tests cover:** prompt assembly, file loading, boot endpoint, intro card SSE; static base prompt does not contain the format example or verbose combat rules; `_FORMAT_EXAMPLE` and `_COMBAT_FULL_SPEC` constants have the right shape.
 
 **Chains to run:**
 
@@ -42,6 +42,52 @@ python dev.py --skip-tests
 5. ✔ Pending roll banner is gone.
 6. ✔ Intent bar is empty.
 7. ✔ Chat window is empty (no ghost messages from previous session).
+
+**Chain D — prompt size and format example (API log inspection)**
+
+Verifies that the static base prompt is smaller and that the example appears exactly on turn 1.
+
+1. Boot a session (Dev Mode OFF, Groq).
+2. Send turn 1: `We arrive at the Swallowtail Festival.`
+3. Open `outputs/api_log/` and find the JSON for this first turn.
+4. Read `raw_request.messages[0].content` (the system message sent to the LLM).
+5. ✔ The system message contains `Gerhard Pickle` — the format example was injected on turn 1.
+6. ✔ `total_tokens` (from `usage`) is below 1500 for a normal boot.md. If it's over 2000, the trim did not apply.
+7. Send turn 2: `I look around the square.`
+8. Open the JSON for turn 2.
+9. ✔ `raw_request.messages[0].content` does **not** contain `Gerhard Pickle` — example absent after turn 1.
+10. ✔ `total_tokens` for turn 2 is noticeably lower than turn 1 (~250 tokens less).
+
+> **Note:** Use the in-app **API Logs** button (header, post-boot) to browse log files without leaving the browser.
+
+**Chain E — combat spec appears only during combat**
+
+1. Boot a session. Send two non-combat turns.
+2. Open the API log for turn 2.
+3. ✔ `raw_request.messages[0].content` does NOT contain `round: N` as a combat spec — combat rules absent.
+4. Send a turn that triggers combat: `A goblin leaps at me!` — play through until the LLM writes a `%%COMBAT%%` block (CombatPanel appears).
+5. Open the API log for the next turn (the one where combat is active).
+6. ✔ `raw_request.messages[0].content` contains the full combat spec including `sort descending by initiative` and `round: 0 ends combat`.
+7. ✔ The `[COMBAT ONGOING — round N]` header is present with the correct round number.
+
+**Chain F — conditional section specs and PC profile injection (API log inspection)**
+
+Verifies that %%ROLL%% and %%DELTAS%% specs are gated, and PC narrative profile appears when the character is named.
+
+1. Boot a session. Send a pure observation turn with no NPC or skill: `I admire the butterflies.`
+2. Open the API log for this turn.
+3. ✔ `raw_request.messages[0].content` contains `[SECTIONS ACTIVE THIS TURN]`.
+4. ✔ `%%GENERATE%%` spec is present (always injected).
+5. ✔ `%%ROLL%%` spec (`dc: <N>`) is **absent** — no skill detected.
+6. ✔ `%%DELTAS%%` spec (`Tags: [persistent]`) is **absent** — no NPCs in scene yet.
+7. Send a turn that names a skill: `Yanyeeku tries to Perception check the rooftops.`
+8. Open the API log for this turn.
+9. ✔ `%%ROLL%%` spec is **present**.
+10. ✔ Yanyeeku's narrative profile (`## PC — Yanyeeku`) is present in the system message.
+11. ✔ Yanyeeku's mechanical profile (`## PC Stats — Yanyeeku`) is also present (skill detected).
+12. Send a plain social turn that names Yanyeeku but no skill: `Yanyeeku greets the mayor.`
+13. ✔ `## PC — Yanyeeku` (narrative) is present.
+14. ✔ `## PC Stats — Yanyeeku` (mechanical) is **absent** — no skill detected this turn.
 
 ---
 
@@ -113,7 +159,7 @@ Check for all four turns:
 **Chain A — delta write to known NPC**
 1. Boot a session.
 2. Send: `I find Belor Hemlock at the garrison and ask him about the goblin raids.`
-3. Open `adventure_path/05_npcs/belor_hemlock/session_NNN.md`.
+3. Open `adventure_path/01_npcs/belor_hemlock/session_NNN.md`.
 4. ✔ A `%%DELTA%%` block was appended with the current session number and a turn count.
 5. ✔ The `knowledge:` lines contain readable prose about what happened (not garbled JSON).
 6. Send a second turn mentioning Belor: `I press Hemlock on whether Nualia is involved.`
@@ -122,7 +168,7 @@ Check for all four turns:
 **Chain B — auto-stub creation for new NPC**
 1. Send: `I walk over to the elderly woman selling amulets near the fountain and introduce myself. Her name is Marta Hask.`
 2. Wait 5 seconds.
-3. ✔ A directory `.marta_hask/` (or similar slug) exists under `adventure_path/05_npcs/`.
+3. ✔ A directory `.marta_hask/` (or similar slug) exists under `adventure_path/01_npcs/`.
 4. ✔ `base.md` contains at least `name:`, `role:`, and `appearance:` fields with non-empty values.
 5. ✔ Directory has the dot prefix (session NPC).
 
@@ -134,7 +180,7 @@ Check for all four turns:
 5. ✔ Her profile was injected into the system prompt (visible in dev mode as context in the response).
 
 **Chain D — purge session NPCs**
-1. Without an active session, confirm at least one dot-prefixed directory exists under `05_npcs/`.
+1. Without an active session, confirm at least one dot-prefixed directory exists under `01_npcs/`.
 2. Click Purge NPCs.
 3. ✔ Inline confirm appears: "Purge session NPCs? Yes / No".
 4. Click Yes.
@@ -233,7 +279,7 @@ Send one turn for each location using one of its aliases. Confirm intent bar fir
 1. Boot with Dev Mode ON so you can see raw blocks.
 2. Send: `I notice a small apothecary called Bottled Solutions on the main street, run by a gossipy old man named Gerhard Pickle.`
 3. Wait for the GM response. Look for a `%%GENERATE%%` block with `type: location` in the raw output.
-4. If the model wrote one: open `adventure_path/07_locations/` and confirm a new directory (`bottled_solutions/` or similar) was created with a `base.md`.
+4. If the model wrote one: open `adventure_path/03_locations/` and confirm a new directory (`bottled_solutions/` or similar) was created with a `base.md`.
 5. ✔ `base.md` starts with `# Bottled Solutions`.
 6. ✔ `**Aliases:**` line is present and includes at least `bottled solutions`.
 7. Send: `We step inside Bottled Solutions to browse.`
@@ -241,7 +287,7 @@ Send one turn for each location using one of its aliases. Confirm intent bar fir
 
 **Chain G — seed file quality audit (read-only)**
 
-Open each `base.md` in `adventure_path/07_locations/` and verify it meets the format spec:
+Open each `base.md` in `adventure_path/03_locations/` and verify it meets the format spec:
 
 - Starts with `# Canonical Name`
 - `**Aliases:**` line is present and has at least 2 aliases
@@ -493,7 +539,7 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 4. ✔ `## Active Event — goblin_attack_starts` block is present in the system prompt on each of those turns.
 5. Keep sending turns until the block disappears from `messages[0].content`.
 6. ✔ On that same turn, the `context` SSE event (visible in the browser network tab) has `active_events: []`.
-7. Note how many turns the event was active — it should match the `**Expires:**` value in `adventure_path/08_events/goblin_attack_starts.md`.
+7. Note how many turns the event was active — it should match the `**Expires:**` value in `adventure_path/02_events/goblin_attack_starts.md`.
 
 > **Note:** The system prompt is never visible in the chat window — dev mode or not. The only ways to inspect it are the API log JSON (`messages[0].content`) and the session markdown log (`outputs/session_NNN_*.log.md`, inside each `<details>LLM payload</details>` block).
 

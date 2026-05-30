@@ -19,7 +19,7 @@ Skill detection is zero-cost pure text matching. The injected rules block gives 
 
 ## Background
 
-- Given the `adventure_path/06_rules/skills/` directory contains skill markdown files
+- Given the `adventure_path/04_rules/skills/` directory contains skill markdown files
 - And the SkillIndex has been loaded
 
 ---
@@ -81,7 +81,7 @@ Then  no skill is detected ("search" is not at a word boundary inside "researche
 **Scenario:** A skill file is loaded by SkillIndex
 
 ```gherkin
-Given a skill file at adventure_path/06_rules/skills/diplomacy.md
+Given a skill file at adventure_path/04_rules/skills/diplomacy.md
 Then  the first line is "# Diplomacy" (the skill name)
 And   a "**Triggers:**" field lists comma-separated trigger phrases
 And   the rules body follows the Triggers line
@@ -107,7 +107,7 @@ And   no Skill Reference block is injected into the per-turn prompt
 
 ## Out of Scope
 
-- Adding new skills (requires new file in `06_rules/skills/`)
+- Adding new skills (requires new file in `04_rules/skills/`)
 - DC resolution logic (covered by the resolve_roll endpoint in SPEC-001)
 
 ---

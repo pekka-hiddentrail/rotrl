@@ -20,7 +20,7 @@ The existing RAG system injects context based on what the *player mentions*. Eve
 ## Background
 
 - Given a session is active
-- And the event index has been loaded from `adventure_path/08_events/`
+- And the event index has been loaded from `adventure_path/02_events/`
 - And the session's `active_events` list is available
 
 ---
@@ -34,7 +34,7 @@ The existing RAG system injects context based on what the *player mentions*. Eve
 **Scenario:** LLM writes a valid `%%EVENT%%` tag
 
 ```gherkin
-Given an event file `08_events/goblin_attack_starts.md` exists
+Given an event file `02_events/goblin_attack_starts.md` exists
 And   the LLM response contains the line "%%EVENT%% goblin_attack_starts"
 When  the turn is processed
 Then  `goblin_attack_starts` is added to `session.active_events` with `turns_remaining = 5`
@@ -82,7 +82,7 @@ And   each event's `turns_remaining` decrements independently
 **Scenario:** LLM writes an event ID that has no corresponding file
 
 ```gherkin
-Given no file `08_events/no_such_event.md` exists
+Given no file `02_events/no_such_event.md` exists
 When  the LLM response contains "%%EVENT%% no_such_event"
 Then  no entry is added to `active_events`
 And   no error is raised
@@ -113,7 +113,7 @@ And   no duplicate entry is added to `active_events`
 **Scenario:** Session has events available
 
 ```gherkin
-Given the `08_events/` directory contains one or more event files
+Given the `02_events/` directory contains one or more event files
 When  the system prompt is built for any turn
 Then  the prompt includes a compact event map listing valid event IDs and their trigger conditions
 And   the map includes the `%%EVENT%%` syntax instruction
@@ -164,7 +164,7 @@ And   expired events are not included
 
 - `%%EVENT%%` is inline: `%%EVENT%% <event_id>` on a single line. No block form.
 - One event per LLM response. If the LLM writes multiple `%%EVENT%%` lines, only the first is processed. (Revisit if needed.)
-- The event map in the system prompt is injected only when `08_events/` contains files — zero-cost if no events are defined for a session.
+- The event map in the system prompt is injected only when `02_events/` contains files — zero-cost if no events are defined for a session.
 - N=5 is a hardcoded starting point. See TODO open design note — needs tuning against real sessions.
 - Related: [context-detection.feature](context-detection.feature) — same injection pipeline, different trigger source
 - Related: [response-parsing.feature](response-parsing.feature) — `%%EVENT%%` extends the existing section marker set

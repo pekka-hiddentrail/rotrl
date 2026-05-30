@@ -18,7 +18,7 @@ Combat begins when the LLM writes a `%%COMBAT%%` block with `round: 1` in its re
 
 ### What triggers the block
 
-Event files in `adventure_path/08_events/` that start a combat wave include a `### REQUIRED — Combat tracker` section in their injectable content. When the event is active, the system prompt includes explicit text telling the LLM to write `%%COMBAT%%` every turn while the event is active.
+Event files in `adventure_path/02_events/` that start a combat wave include a `### REQUIRED — Combat tracker` section in their injectable content. When the event is active, the system prompt includes explicit text telling the LLM to write `%%COMBAT%%` every turn while the event is active.
 
 Additionally, once `session.combat_state` is set (i.e. the first block has been parsed), `_inject_context` appends a `[COMBAT ONGOING — round N]` block to the system prompt each turn. This reminder fires regardless of whether any event is still active, so combat tracking continues even after the 5-turn event TTL expires.
 

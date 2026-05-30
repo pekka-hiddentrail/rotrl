@@ -68,7 +68,7 @@ And   the dice panel shows the pending roll banner
 Given the LLM response contains a %%GENERATE%% section with a name and role
 And   the NPC does not already exist in the index
 When  the section is parsed
-Then  a dot-prefixed directory adventure_path/05_npcs/.{slug}/ is created
+Then  a dot-prefixed directory adventure_path/01_npcs/.{slug}/ is created
 And   base.md is written with the correct canonical format
 And   the NPC index is invalidated so the next turn can detect this NPC
 ```

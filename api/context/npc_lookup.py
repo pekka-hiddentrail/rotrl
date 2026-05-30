@@ -5,11 +5,11 @@ turn's system prompt.
 Design:
 - Zero extra LLM calls: pure text matching, runs in <1 ms
 - Per-turn injection only: never modifies session.system_prompt permanently
-- Data-driven: all NPC data and aliases live in adventure_path/05_npcs/
+- Data-driven: all NPC data and aliases live in adventure_path/01_npcs/
 - Status and knowledge files are read FRESH on every detection call
 
 Folder structure (relative to repo root):
-  adventure_path/05_npcs/
+  adventure_path/01_npcs/
     <npc_slug>/
       base.md          ← canonical profile (git-tracked)
       knowledge.md     ← tagged knowledge list (git-ignored, grows each session)
@@ -62,7 +62,7 @@ class NpcMatch:
 
 @dataclass
 class NpcIndex:
-    """Lazy-loaded NPC index built by scanning adventure_path/05_npcs/.
+    """Lazy-loaded NPC index built by scanning adventure_path/01_npcs/.
 
     Instantiate once per process (module-level singleton in session_manager).
     Re-instantiate if NPC files change (backend restart required).
@@ -80,7 +80,7 @@ class NpcIndex:
         if self._loaded:
             return
 
-        npcs_root = self._repo_root / "adventure_path" / "05_npcs"
+        npcs_root = self._repo_root / "adventure_path" / "01_npcs"
         if not npcs_root.exists():
             self._loaded = True
             return

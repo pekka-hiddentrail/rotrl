@@ -154,8 +154,8 @@ In **dev mode** all markers are visible in the stream so you can see the raw out
 | `outputs/api_log/*.json` | Per turn | Full LLM request + response payload. Key fields: `first_token_ms` (ms to first streamed token), `section_format_ok` (true if `%%MARKER%%` sections present), `duration_ms`, `usage.total_tokens`, `status` |
 | `sessions/session_NNN/recap.md` | On End Session | Player-facing recap for the next session's intro card |
 | `sessions/session_NNN+1/boot.md` | On End Session | GM-facing continuity brief for the next session's system prompt. Includes a `## NPCs Active at Session End` section — read by `create_session` to restore `scene_npcs` on next boot |
-| `adventure_path/05_npcs/<slug>/session_NNN.md` | Per turn (per NPC) | NPC disposition, location, knowledge written after each interaction |
-| `adventure_path/05_npcs/.<slug>/` | On `%%GENERATE%%` | Session-NPC stub directory (dot-prefix = temporary). Rename to `<slug>/` to promote to permanent. Purge all via **Purge NPCs** or `DELETE /api/npcs/session`. |
+| `adventure_path/01_npcs/<slug>/session_NNN.md` | Per turn (per NPC) | NPC disposition, location, knowledge written after each interaction |
+| `adventure_path/01_npcs/.<slug>/` | On `%%GENERATE%%` | Session-NPC stub directory (dot-prefix = temporary). Rename to `<slug>/` to promote to permanent. Purge all via **Purge NPCs** or `DELETE /api/npcs/session`. |
 
 ---
 
@@ -185,7 +185,7 @@ rotrl/
 │       ├── npc_lookup.py          # NpcIndex — detect NPC names, inject profiles
 │       ├── skill_lookup.py        # SkillIndex — detect skill triggers, inject rules
 │       ├── location_lookup.py     # LocationIndex — detect locations, inject scene profiles
-│       └── event_index.py         # EventIndex — load 08_events/, inject on %%EVENT%% tag
+│       └── event_index.py         # EventIndex — load 02_events/, inject on %%EVENT%% tag
 │
 ├── ui/                            # Vite 5 + React 18 + TypeScript
 │   └── src/
@@ -206,14 +206,14 @@ rotrl/
 │
 ├── adventure_path/
 │   ├── 00_system_authority/       # Non-negotiable GM rules — adjudication, PF1e scope
-│   ├── 01_world_setting/          # Golarion/Varisia lore
-│   ├── 02_campaign_setting/       # RotRL structure, factions, tone
-│   ├── 03_books/                  # Adventure modules (Book I Act I complete)
-│   ├── 04_persistence/            # Session ledger
-│   ├── 05_npcs/                   # NPC stubs — hand-crafted or auto-created per turn
-│   ├── 06_rules/skills/           # Skill files — trigger words + rules text for RAG
-│   ├── 07_locations/              # Location profiles (read by LocationIndex at runtime)
-│   ├── 08_events/                 # Event files — fired by %%EVENT%% tag, injected for N turns
+│   ├── 07_world_setting/          # Golarion/Varisia lore
+│   ├── 05_campaign_setting/       # RotRL structure, factions, tone
+│   ├── 06_books/                  # Adventure modules (Book I Act I complete)
+│   ├── 08_persistence/            # Session ledger
+│   ├── 01_npcs/                   # NPC stubs — hand-crafted or auto-created per turn
+│   ├── 04_rules/skills/           # Skill files — trigger words + rules text for RAG
+│   ├── 03_locations/              # Location profiles (read by LocationIndex at runtime)
+│   ├── 02_events/                 # Event files — fired by %%EVENT%% tag, injected for N turns
 │   ├── 09_monsters/               # Generic monster stat blocks (AC, HP, attacks, morale, XP)
 │   └── 90_shared_references/      # Shared reference tables
 │
@@ -310,20 +310,20 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 528 pytest tests passing across 24 test files:
+**Backend:** 571 pytest tests passing across 24 test files:
 
 | File | Covers |
 |------|--------|
 | `test_sessions.py` | Session lifecycle endpoints, boot, turn, delete |
 | `test_turns.py` | Turn streaming, Ollama mock, error cases |
-| `test_boot_prompt.py` | System prompt assembly, party extraction, situation loading, delta cleanup |
+| `test_boot_prompt.py` | System prompt assembly, party extraction, situation loading, delta cleanup; dynamic-fragment constants (`_FORMAT_EXAMPLE`, `_COMBAT_FULL_SPEC`) absent from static prompt; section specs absent from static (moved to per-turn injection) |
 | `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, `stream_options` 400 fallback, streaming, max-history, rate-limit SSE event, `first_token_ms` capture |
 | `test_api_logger.py` | LLM call log file format, usage field, summary truncation, `first_token_ms`, `section_format_ok` |
 | `test_api_logs.py` | Log list and fetch endpoints, path traversal rejection |
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
 | `test_npc_lookup_extended.py` | `detect_all`, `lookup`, status/knowledge reads, `_parse_base` |
-| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC/skill/location/event injection, context metadata, combat ongoing reminder |
+| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC/skill/location/event injection, context metadata, turn-1 format example injection, full combat spec injection when active, conditional section specs (ROLL/DELTAS gated on detection), PC narrative+mechanical profile injection |
 | `test_end_session.py` | `_parse_turns_from_log`, `_enforce_recap_header`, `stream_end_session` errors |
 | `test_stream_filter.py` | `_stream_with_narrative_filter` — dev pass-through, narrative extraction, split tokens |
 | `test_recap_header.py` | Recap header normalization edge cases |
@@ -390,7 +390,7 @@ POST /api/sessions/{id}/turn  (repeated each exchange)
        │    Groq: capture x-ratelimit-* headers → emit rate_limits SSE event
        ├─ parse complete response:
        │    %%ROLL%%     → set pending_roll, yield roll_request event
-       │    %%GENERATE%% → create new NPC stub in adventure_path/05_npcs/.<slug>/
+       │    %%GENERATE%% → create new NPC stub in adventure_path/01_npcs/.<slug>/
        │    %%DELTAS%%   → write NPC status + knowledge files
        │    %%EVENT%%    → add event to active_events (TTL=5 turns); silently ignored if unknown or duplicate
        │    %%COMBAT%%   → update session.combat_state (round=0 clears; malformed block preserves existing state)
@@ -412,11 +412,11 @@ POST /api/sessions/{id}/end
 
 No vector database. Every turn, keyword lookups and active-event TTL checks run before the LLM call:
 
-1. **NPC lookup** — `NpcIndex` scans for alias matches against `adventure_path/05_npcs/*/base.md`. Matching NPC's profile (minus `<!-- REFERENCE -->` section) is prepended to system content.
-2. **Skill lookup** — `SkillIndex` scans for trigger words against `adventure_path/06_rules/skills/*.md`. Longest-match trigger wins; skill rules are prepended.
+1. **NPC lookup** — `NpcIndex` scans for alias matches against `adventure_path/01_npcs/*/base.md`. Matching NPC's profile (minus `<!-- REFERENCE -->` section) is prepended to system content.
+2. **Skill lookup** — `SkillIndex` scans for trigger words against `adventure_path/04_rules/skills/*.md`. Longest-match trigger wins; skill rules are prepended.
 3. **Scene NPCs** — NPCs accumulated in `session.scene_npcs` (from `%%DELTAS%%` writes + `_detect_narrative_npcs` scan) have their current status injected so the GM knows their last known state. `_detect_narrative_npcs` runs two passes: Pass 1 matches single Title Case words (≥4 chars) against the NPC alias table (`NpcIndex.canonical_for`) so first-name-only references like "Aldern" resolve correctly; Pass 2 is the two-word heuristic for unknown NPCs. The full `scene_npcs` list is included in every `context` SSE event and shown as chips in the IntentBar.
-4. **Active events** — `session.active_events` TTL is decremented; expired events are removed. Remaining events' content is injected as `## Active Event — {id}` blocks. Events are added when the LLM writes `%%EVENT%% <id>` and the corresponding `08_events/<id>.md` file exists.
-5. **Event map** (system prompt, not per-turn) — `EventIndex.event_map_text()` builds a compact block listing all valid event IDs and their trigger conditions, injected once at boot. Zero-cost if `08_events/` is empty.
+4. **Active events** — `session.active_events` TTL is decremented; expired events are removed. Remaining events' content is injected as `## Active Event — {id}` blocks. Events are added when the LLM writes `%%EVENT%% <id>` and the corresponding `02_events/<id>.md` file exists.
+5. **Event map** (system prompt, not per-turn) — `EventIndex.event_map_text()` builds a compact block listing all valid event IDs and their trigger conditions, injected once at boot. Zero-cost if `02_events/` is empty.
 
 ### Authority hierarchy
 
@@ -424,9 +424,9 @@ Rules files are organized in strict precedence — higher always overrides lower
 
 ```
 00_system_authority/   ← GM behavior, adjudication  (loaded at every session)
-01_world_setting/      ← Golarion/Varisia lore
-02_campaign_setting/   ← RotRL structure, factions, tone
-03_books/              ← Individual adventure modules
+07_world_setting/      ← Golarion/Varisia lore
+05_campaign_setting/   ← RotRL structure, factions, tone
+06_books/              ← Individual adventure modules
 session state          ← Live NPC files, knowledge, recap
 ```
 
@@ -499,7 +499,7 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 528 pytest + 194 Vitest + 7 Playwright tests | ✅ Complete |
+| Test suites — 571 pytest + 194 Vitest + 7 Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |

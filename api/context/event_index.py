@@ -1,4 +1,4 @@
-"""Event index — loads %%EVENT%% content files from adventure_path/08_events/.
+"""Event index — loads %%EVENT%% content files from adventure_path/02_events/.
 
 Each file has a metadata header (above <!-- INJECT -->) with the event ID and
 trigger description, and injectable content below the marker.
@@ -11,7 +11,7 @@ The index provides two things:
 Design:
 - Zero extra LLM calls — pure file loading
 - Lazy-loaded singleton (same pattern as NpcIndex / LocationIndex)
-- Event files live in adventure_path/08_events/<event_id>.md
+- Event files live in adventure_path/02_events/<event_id>.md
 - Files starting with "_" are skipped (templates, notes)
 
 File format:
@@ -53,7 +53,7 @@ class EventIndex:
         if self._loaded:
             return
 
-        events_root = self._repo_root / "adventure_path" / "08_events"
+        events_root = self._repo_root / "adventure_path" / "02_events"
         if not events_root.exists():
             self._loaded = True
             return

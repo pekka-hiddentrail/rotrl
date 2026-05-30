@@ -13,7 +13,7 @@ from api.context.npc_lookup import NpcIndex, _parse_base
 def _make_npc(base: Path, slug: str, name: str, aliases: list[str],
               locations: list[str] = None, body: str = "Profile text.",
               ref: str = "") -> Path:
-    npc_dir = base / "adventure_path" / "05_npcs" / slug
+    npc_dir = base / "adventure_path" / "01_npcs" / slug
     npc_dir.mkdir(parents=True, exist_ok=True)
     lines = [f"# {name}", f"**Aliases:** {', '.join(aliases)}"]
     if locations:
@@ -124,7 +124,7 @@ def test_lookup_unknown_returns_none(npc_root):
 # ── Status and knowledge fresh reads ─────────────────────────────────────────
 
 def test_fresh_status_returns_only_last_turn_block(npc_root):
-    npc_dir = npc_root / "adventure_path" / "05_npcs" / "kendra_deverin"
+    npc_dir = npc_root / "adventure_path" / "01_npcs" / "kendra_deverin"
     (npc_dir / "session_001.md").write_text(
         "## Turn 1 — 10:00:00\n**Disposition:** neutral → friendly\n\n"
         "## Turn 2 — 10:05:00\n**Disposition:** friendly\n",
@@ -143,7 +143,7 @@ def test_fresh_status_empty_when_no_session_files(npc_root):
 
 
 def test_fresh_knowledge_included(npc_root):
-    npc_dir = npc_root / "adventure_path" / "05_npcs" / "kendra_deverin"
+    npc_dir = npc_root / "adventure_path" / "01_npcs" / "kendra_deverin"
     (npc_dir / "knowledge.md").write_text(
         "- [pcs] Yanyeeku asked about fireworks.\n", encoding="utf-8"
     )
@@ -181,7 +181,7 @@ def test_format_context_minimal(npc_root):
 
 
 def test_format_context_includes_status_when_present(npc_root):
-    npc_dir = npc_root / "adventure_path" / "05_npcs" / "kendra_deverin"
+    npc_dir = npc_root / "adventure_path" / "01_npcs" / "kendra_deverin"
     (npc_dir / "session_001.md").write_text(
         "## Turn 1 — 10:00:00\n**Disposition:** friendly\n", encoding="utf-8"
     )
@@ -193,7 +193,7 @@ def test_format_context_includes_status_when_present(npc_root):
 
 
 def test_format_context_includes_knowledge_when_present(npc_root):
-    npc_dir = npc_root / "adventure_path" / "05_npcs" / "kendra_deverin"
+    npc_dir = npc_root / "adventure_path" / "01_npcs" / "kendra_deverin"
     (npc_dir / "knowledge.md").write_text("- [pcs] Knows Yanyeeku.\n", encoding="utf-8")
     idx = NpcIndex(_repo_root=npc_root)
     m = idx.lookup("Kendra Deverin")
@@ -205,7 +205,7 @@ def test_format_context_includes_knowledge_when_present(npc_root):
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 def test_npc_with_no_base_md_skipped(tmp_path):
-    npc_dir = tmp_path / "adventure_path" / "05_npcs" / "ghost"
+    npc_dir = tmp_path / "adventure_path" / "01_npcs" / "ghost"
     npc_dir.mkdir(parents=True, exist_ok=True)
     idx = NpcIndex(_repo_root=tmp_path)
     assert idx.known_npcs == []

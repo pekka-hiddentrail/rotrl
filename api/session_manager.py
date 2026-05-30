@@ -360,7 +360,10 @@ def _parse_combatant_line(line: str) -> Optional["Combatant"]:
     )
 
 
-def _parse_combat_block(text: str) -> Optional[CombatState]:
+def _parse_combat_block(
+    text: str,
+    existing_state: Optional["CombatState"] = None,
+) -> Optional["CombatState"]:
     """Parse the body of a %%COMBAT%% section into a CombatState.
 
     Return values:
@@ -372,6 +375,12 @@ def _parse_combat_block(text: str) -> Optional[CombatState]:
 
     The distinction between "intentional clear" and "parse failure" prevents a single
     malformed turn from silently wiping live combat state.
+
+    HP authority (Tier 1.1):
+    When *existing_state* is provided (round 2+), HP values for **known** combatants
+    are copied from *existing_state* instead of taken from the LLM block. New combatants
+    (name not in existing_state) are initialised with LLM-provided HP values.
+    Status and other fields are always updated from the LLM block.
     """
     if not text:
         return None
@@ -399,6 +408,17 @@ def _parse_combat_block(text: str) -> Optional[CombatState]:
     # were malformed — do not disturb existing combat state.
     if not found_round or not combatants:
         return None
+
+    # HP authority: for round 2+, inherit HP from backend for known combatants.
+    if existing_state is not None:
+        existing_by_name = {c.name.lower(): c for c in existing_state.combatants}
+        for c in combatants:
+            existing = existing_by_name.get(c.name.lower())
+            if existing is not None:
+                # Keep backend HP; update status and other fields from LLM.
+                c.hp_current = existing.hp_current
+                c.hp_max = existing.hp_max
+            # New combatant (not in existing_state): use LLM-provided HP as-is.
 
     return CombatState(round=round_num, combatants=combatants)
 
@@ -530,6 +550,53 @@ _COMBAT_BLOCK_RE = re.compile(
     re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 
+# Matches a %%HP%% delta block (Tier 1.1 — non-attack HP changes).
+_HP_BLOCK_RE = re.compile(
+    r'^%%HP%%[ \t]*\n(.*?)(?=^%%|\Z)',
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+
+# One combatant row inside a %%HP%% block.
+_HP_DELTA_LINE_RE = re.compile(
+    r'^\s*-\s*name\s*:\s*(?P<name>[^·•\n]+?)\s*[·•]\s*delta\s*:\s*(?P<delta>[+-]?\d+)',
+    re.IGNORECASE,
+)
+
+
+def _parse_hp_deltas(text: Optional[str]) -> list:
+    """Parse the body of a %%HP%% block into a list of (name, delta) tuples.
+
+    Each line should be:  - name: <Name> · delta: -N   (negative = damage, positive = healing)
+    Lines that don't match are silently skipped.
+    Returns an empty list on empty/None input.
+    """
+    if not text:
+        return []
+    results = []
+    for line in text.splitlines():
+        m = _HP_DELTA_LINE_RE.match(line)
+        if m:
+            try:
+                results.append((m.group("name").strip(), int(m.group("delta"))))
+            except ValueError:
+                pass
+    return results
+
+
+def _apply_hp_deltas(combat_state: Optional["CombatState"], deltas: list) -> None:
+    """Apply a list of (name, delta) HP changes to *combat_state* in-place.
+
+    Clamps each combatant's hp_current to [0, hp_max].
+    Unknown names and None combat_state are silently ignored.
+    """
+    if combat_state is None or not deltas:
+        return
+    by_name = {c.name.lower(): c for c in combat_state.combatants}
+    for name, delta in deltas:
+        combatant = by_name.get(name.lower())
+        if combatant is not None:
+            combatant.hp_current = max(0, min(combatant.hp_current + delta, combatant.hp_max))
+
 _ROLL_BLOCK_RE = re.compile(
     r'\s*%%ROLL%%\s*\n'
     r'(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n'
@@ -605,6 +672,9 @@ class GameSession:
     # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
     # Cleared to None when round == 0 or all combatants are inactive.
     combat_state: Optional[CombatState] = None
+    # Slim PC profiles built once at boot. Keys are lowercase canonical names.
+    # Each entry has "narrative" (appearance + personality) and "mechanical" (stats).
+    pc_profiles: dict = field(default_factory=dict)
 
 
 _sessions: dict[str, GameSession] = {}
@@ -621,112 +691,20 @@ def _log(session: GameSession, text: str) -> None:
         f.write(text + "\n")
 
 
-def _build_slim_system_prompt(session_number: int) -> str:
-    """Build the fixed base system prompt for this session.
+# ── Dynamic-injection prompt fragments ───────────────────────────────────────
+# These constants are NOT part of the static system prompt; _inject_context
+# appends them conditionally to the per-turn copy only when needed.
 
-    Loaded once at boot and never modified.  Per-turn context (NPC profiles,
-    skill rules, location NPCs) is injected dynamically inside _stream_chat.
-    """
-    repo_root = _REPO_ROOT
-
-    # Party names from player character sheets (best-effort)
-    party_lines: list[str] = []
-    players_dir = repo_root / "players"
-    if players_dir.exists():
-        for sheet in sorted(players_dir.glob("*/character_sheet.md")):
-            name = ""
-            cls = ""
-            for line in sheet.read_text(encoding="utf-8").splitlines():
-                if line.startswith("**Name:**"):
-                    name = line.replace("**Name:**", "").strip()
-                elif line.startswith("**Class / Archetype:**"):
-                    cls = line.replace("**Class / Archetype:**", "").strip()
-            if name and cls:
-                party_lines.append(f"  - {name} ({cls})")
-
-    party_block = "\n".join(party_lines) if party_lines else "  - (no character files found)"
-
-    # Session boot context: prefer sessions/session_NNN/boot.md (GM-facing),
-    # fall back to recap from previous session, then bare notice.
-    sessions_dir = repo_root / "sessions"
-    boot_path = sessions_dir / f"session_{session_number:03d}" / "boot.md"
-    if not boot_path.exists() and session_number > 1:
-        boot_path = sessions_dir / f"session_{session_number - 1:03d}" / "recap.md"
-    situation = boot_path.read_text(encoding="utf-8") if boot_path.exists() else "(No boot context found for this session.)"
-
-    _base_prompt = f"""You are the Game Master for a Pathfinder 1st Edition campaign: Rise of the Runelords.
-Session number: {session_number}
-
-CORE BEHAVIOR (always active)
-- Describe only what the characters can directly perceive. No hinting, no foreshadowing.
-- Never describe what a PC is doing or saying before the player declares it.
-- Never suggest actions, hint at correct choices, or guide the players.
-- Never invent lore, NPCs, or mechanics outside what you have been given. If unsure, say so.
-- Resolve what the player declares before narrating its outcome.
-
-GM STYLE
-- NPCs: open with demeanor and immediate goal. Do not dump biography unless asked.
-- Locations: 3–6 sensory details, one social detail, one interactive element.
-- Rules rulings: state the ruling, DC, and consequence in one sentence. No lengthy explanation.
-- Player drift: if momentum stalls, remind non-directively ("Your vow to X would apply here…").
-- Events: when time passes or PCs cross a boundary, fire only eligible triggers — do not telegraph upcoming ones.
-- Inventory: on loot, shopping, or consumables mention only changes and immediately relevant reminders.
-- Travel: give distance/time estimate, encounter cadence, and arrival conditions.
-
-PARTY
-{party_block}
-
-CURRENT SITUATION
-{situation}
-
-RESPONSE STRUCTURE (strictly enforced)
-Every response must use these sections in this exact order.
-Each section begins with its %%MARKER%% on a line by itself.
-Omit sections that are not needed for this turn.
-
-%%NARRATIVE%%
-Your narration — 2 to 4 paragraphs of natural prose.
-No markdown. No bullet points. No bold or italic formatting.
-
-%%ROLL%%
-Include only when a dice roll is needed. One block, opened by [ on its own line and closed by ] on its own line:
-[
-skill: [skill name only — no numbers or modifiers]
-dc: [integer]
-success: [one sentence — what happens if the roll meets or exceeds DC]
-failure: [one sentence — what happens if the roll falls below DC]
-]
-
-%%GENERATE%%
-REQUIRED whenever your narrative introduces any NEW named character not already in the scene.
-Do NOT skip this section if you name a new character — omitting it is an error.
-One block per new NPC or location:
-[
-type: [npc | location]
-name: [full name of npc or location exactly as written in your narrative]
-role: [occupation or type of location — one short phrase]
-appearance: [one sentence] ← omit if unsure
-location: [where they or it are usually found — area or city for locations]  ← omit if unsure
-summary: [one sentence — what the npc knows or wants, or what the location is known for]
-]
-
-%%DELTAS%%
-Include when any named NPCs are active in the scene. One block per NPC.
-Each block MUST be wrapped in square brackets exactly as shown — [ on its own line, ] on its own line:
-[
-npc: [canonical NPC name]
-disposition: [change e.g. neutral → curious]  ← omit if unchanged
-location: [where they are now]                ← omit if unchanged
-knowledge: [tag] [one fact this NPC learned]  ← repeat this line for each fact; omit if nothing new
-summary: [one sentence — what happened with this NPC this turn]
-]
-
-Knowledge tags: [persistent] [pcs] [quest] [world] [npcs] [trivia]
-
+# Injected once on the first player turn so the model sees the full format,
+# then dropped — the compact section headers in the base prompt are sufficient.
+_FORMAT_EXAMPLE = """\
 EXAMPLE OF A CORRECT FULL RESPONSE (follow this format exactly):
 
 %%NARRATIVE%%
-The crowd parts as you approach Mayor Deverin and Father Zantus near the cathedral steps. She turns with a warm smile, extending her hand in greeting. "Welcome to Sandpoint — I hope you're enjoying the festival. The apothecary's got some interesting remedies, if you're into that sort of thing," she says with a wink. "Just visit Gerhard Pickle down by the docks.
+The crowd parts as you approach Mayor Deverin and Father Zantus near the cathedral steps. \
+She turns with a warm smile, extending her hand in greeting. "Welcome to Sandpoint — I hope \
+you're enjoying the festival. The apothecary's got some interesting remedies, if you're into \
+that sort of thing," she says with a wink. "Just visit Gerhard Pickle down by the docks.
 
 %%GENERATE%%
 [
@@ -756,40 +734,132 @@ summary: Kendra greeted Yanyeeku warmly and answered his opening question.
 ],
 [
 npc: Abstalar Zantus
-disposition:  friendly → neutral
+disposition: friendly → neutral
 location: cathedral steps
 knowledge: [quest] Asks Yanyeeku to fetch him a drink from the tavern
 summary: Abstalar Zantus asked Yanyeeku to fetch him a drink from the tavern.
-]
+]"""
 
-SCENE EVENT — write when a trigger condition is first met; omit only when none apply
-Check the EVENT MAP below. If any trigger condition is met by this turn, append ONE line after %%DELTAS%%:
-%%EVENT%% <event_id>
-This is NOT a section header. The event ID goes on the SAME LINE as %%EVENT%%. Nothing else.
-Rules:
-- Fire on the FIRST turn the condition is met — do not delay, do not wait for a roll result.
-- Event triggers are NOT blocked by scene setup ("no threats", "peaceful festival") — those prevent unprompted GM foreshadowing, not event responses to what the player has already described.
-- If the player's input itself describes the trigger condition (alarm bell, goblins visible), the event fires this turn.
-- Omit this line only if NO event trigger applies to this turn.
-CORRECT:   %%EVENT%% goblin_attack_starts
-WRONG:     %%EVENT%%                              ← missing ID
-WRONG:     %%EVENT%%\n%%EVENT%% goblin_attack_starts  ← do NOT write twice
-WRONG:     %%EVENT%% goblin_attack_starts (Note: ...) ← no trailing text
-
-COMBAT TRACKER — write each turn when combat is in progress
+# Injected on the turn combat STARTS (session.combat_state is None when _inject_context runs).
+# LLM must supply hp: cur/max for every combatant so the backend can initialise HP values.
+_COMBAT_SPEC_ROUND1 = """\
+Format (round 1 — include hp for backend initialisation):
 %%COMBAT%%
-round: <N>
+round: 1
 combatants:
-  - name: <Name> · hp: <current>/<max> · ac: <AC> · init: <initiative> · status: <active|unconscious|fled|dead>
-  [one row per combatant, sorted by initiative descending]
+  - name: <Name> · hp: <cur>/<max> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead
+Rules: sort descending by initiative; round: 0 ends combat and clears the tracker; list ALL combatants."""
 
-Rules:
-- Start on the first turn combat begins (round 1). Increment round each time ALL combatants have acted.
-- Write round: 0 on the turn combat ends (enemies fled, surrendered, or all down). This clears the panel.
-- Omit %%COMBAT%% entirely when not in combat.
-- Update hp values each turn to reflect damage taken this turn.
-- Valid statuses: active (can act), unconscious (down, dying), fled (escaped), dead (destroyed).
-- List ALL combatants every turn — do not drop resolved ones until combat ends.
+# Injected on round 2+. The backend owns HP values; the LLM must NOT write hp: fields for
+# existing combatants (they are ignored). New combatants entering after round 1 still need hp:.
+# Non-attack HP changes (traps, poison, healing) use the %%HP%% block instead.
+_COMBAT_SPEC_ONGOING = """\
+Format (ongoing — backend manages HP; omit hp field for existing combatants):
+%%COMBAT%%
+round: N
+combatants:
+  - name: <Name> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead
+  [NEW combatants only: add hp: <cur>/<max>]
+
+Non-attack HP changes (traps, poison, healing):
+%%HP%%
+- name: <Name> · delta: -N   (negative = damage, positive = healing)
+
+Rules: sort descending by initiative; increment round when all combatants have acted; \
+round: 0 ends combat and clears the tracker; list ALL combatants every turn."""
+
+# Per-turn section specs — injected conditionally by _inject_context based on what
+# the turn context signals.  Only pay for specs that are actually relevant this turn.
+_NARRATIVE_SPEC = (
+    "%%NARRATIVE%%  — 2–4 paragraphs of prose; no markdown, no bullet points."
+)
+
+_ROLL_SPEC = (
+    "%%ROLL%%  — one block when a roll is needed:\n"
+    "[ skill: <name>  dc: <N>  success: <2 paragraphs>  failure: <2 paragraphs> ]"
+)
+
+_GENERATE_SPEC = (
+    "%%GENERATE%%  — REQUIRED for every NEW named character/location introduced this turn:\n"
+    "[ type: npc|location  name: <exact name>  role: <phrase>  appearance: <sentence>"
+    "  location: <place>  summary: <sentence> ]"
+)
+
+_DELTAS_SPEC = (
+    "%%DELTAS%%  — one block per NPC active in the scene:\n"
+    "[ npc: <name>  disposition: <old→new>  location: <place>"
+    "  knowledge: [tag] <fact>  summary: <sentence> ]\n"
+    "Tags: [persistent] [pcs] [quest] [world] [npcs] [trivia]"
+)
+
+
+def _build_slim_system_prompt(session_number: int) -> str:
+    """Build the fixed base system prompt for this session.
+
+    Loaded once at boot and never modified.  Per-turn context (NPC profiles,
+    skill rules, location NPCs, format example on turn 1, combat spec when
+    active) is injected dynamically by _inject_context.
+    """
+    repo_root = _REPO_ROOT
+
+    # Party names from player character sheets (best-effort)
+    party_lines: list[str] = []
+    players_dir = repo_root / "players"
+    if players_dir.exists():
+        for sheet in sorted(players_dir.glob("*/character_sheet.md")):
+            name = ""
+            cls = ""
+            for line in sheet.read_text(encoding="utf-8").splitlines():
+                if line.startswith("**Name:**"):
+                    name = line.replace("**Name:**", "").strip()
+                elif line.startswith("**Class / Archetype:**"):
+                    cls = line.replace("**Class / Archetype:**", "").strip()
+            if name and cls:
+                party_lines.append(f"  - {name} ({cls})")
+
+    party_block = "\n".join(party_lines) if party_lines else "  - (no character files found)"
+
+    # Session boot context: prefer sessions/session_NNN/boot.md (GM-facing),
+    # fall back to recap from previous session, then bare notice.
+    sessions_dir = repo_root / "sessions"
+    boot_path = sessions_dir / f"session_{session_number:03d}" / "boot.md"
+    if not boot_path.exists() and session_number > 1:
+        boot_path = sessions_dir / f"session_{session_number - 1:03d}" / "recap.md"
+    situation = boot_path.read_text(encoding="utf-8") if boot_path.exists() else "(No boot context found for this session.)"
+
+    _base_prompt = f"""You are the GM for a Pathfinder 1E campaign: Rise of the Runelords.
+Session number: {session_number}
+
+CORE BEHAVIOR (always active)
+- Describe only what the characters can directly perceive. No hinting, no foreshadowing.
+- Never describe what a PC is doing or saying before the player declares it.
+- Never suggest actions, hint at correct choices, or guide the players.
+- Never invent lore, NPCs, or mechanics outside what you have been given. If unsure, say so.
+- Resolve what the player declares before narrating its outcome.
+
+GM STYLE
+- NPCs: lead with demeanor and immediate goal; no biography unless asked.
+- Locations: 3–6 sensory details, one social detail, one interactive element.
+- Mechanics: state ruling, DC, and consequence in one sentence; no lengthy explanation.
+- Pacing: fire triggers on the first turn the condition is met; do not telegraph upcoming ones.
+
+PARTY
+{party_block}
+
+CURRENT SITUATION
+{situation}
+
+RESPONSE STRUCTURE — per-turn instructions list which sections are active this turn.
+Markers in order: %%NARRATIVE%%  %%ROLL%%  %%GENERATE%%  %%DELTAS%%  %%EVENT%%  %%COMBAT%%
+
+SCENE EVENT — append after %%DELTAS%% on the first turn a trigger is met:
+%%EVENT%% <event_id>   ← ID on the SAME LINE; nothing else on this line
+CORRECT: %%EVENT%% goblin_attack_starts
+WRONG:   %%EVENT%%  |  %%EVENT%%\\n%%EVENT%% id  |  %%EVENT%% id (Note: …)
+
+%%COMBAT%% — include each turn combat is active; omit otherwise:
+round: N  · one row per combatant: name · hp: cur/max · ac: N · init: N · status: active|unconscious|fled|dead
+round: 0 ends combat. Full format rules injected per-turn when active.
 
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
@@ -799,6 +869,84 @@ Everything after %%NARRATIVE%% is stripped before the player sees the response."
         _base_prompt += f"\n\n---\nEVENT MAP\n{_event_map}"
 
     return _base_prompt
+
+
+def _build_pc_profiles(data_dir: Path) -> dict:
+    """Build slim narrative and mechanical profiles for each PC at session boot.
+
+    Reads from ui/public/data/player_XX.json — structured and pre-validated,
+    avoids fragile markdown parsing.  Returns a dict keyed by lowercase
+    canonical name; each value has "narrative" and "mechanical" string tiers.
+    Missing fields are skipped gracefully.
+    """
+    profiles: dict = {}
+    if not data_dir.exists():
+        return profiles
+
+    _save_short = {"Fortitude": "Fort", "Reflex": "Ref", "Will": "Will"}
+
+    for json_path in sorted(data_dir.glob("player_*.json")):
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        name = data.get("name", "")
+        if not name:
+            continue
+
+        race = data.get("race", "")
+        cls = data.get("class", "")
+        archetype = data.get("archetype", "")
+        cls_full = f"{cls} / {archetype}" if archetype else cls
+        appearance = data.get("appearance", "")
+
+        hdr = f"## PC — {name} ({race} {cls_full})" if race else f"## PC — {name} ({cls_full})"
+        narr_lines = [hdr]
+        if appearance:
+            narr_lines.append(f"Appearance: {appearance}")
+
+        # Mechanical profile
+        hp_max = data.get("hp", {}).get("max", "")
+        ac_total = data.get("ac", {}).get("total", "")
+        initiative = data.get("initiative", "")
+        speed = data.get("speed", "")
+
+        ab_mods = [
+            f"{ab['name']} {ab['mod']}"
+            for ab in data.get("abilities", [])
+        ]
+        saves = [
+            f"{_save_short.get(sv['name'], sv['name'])} {sv['total']}"
+            for sv in data.get("saves", [])
+        ]
+        spell_names = [sp["name"] for sp in data.get("spells", {}).get("list", [])]
+
+        mech_lines = [f"## PC Stats — {name}"]
+        stats = []
+        if hp_max:
+            stats.append(f"HP: {hp_max}")
+        if ac_total:
+            stats.append(f"AC: {ac_total}")
+        if initiative:
+            stats.append(f"Init: {initiative}")
+        if speed:
+            stats.append(f"Speed: {speed}")
+        if stats:
+            mech_lines.append("  ".join(stats))
+        if ab_mods:
+            mech_lines.append("  ".join(ab_mods))
+        if saves:
+            mech_lines.append("Saves: " + " / ".join(saves))
+        if spell_names:
+            mech_lines.append("Spells: " + ", ".join(spell_names[:6]))
+
+        profiles[name.lower()] = {
+            "narrative": "\n".join(narr_lines),
+            "mechanical": "\n".join(mech_lines),
+        }
+
+    return profiles
 
 
 def create_session(
@@ -829,9 +977,10 @@ def create_session(
         num_gpu=num_gpu,
         system_prompt=system_prompt,
         log_path=_OUTPUTS_DIR / log_name,
+        pc_profiles=_build_pc_profiles(_REPO_ROOT / "ui" / "public" / "data"),
     )
 
-    # Boot cleanup — runs against adventure_path/05_npcs/ on every session start.
+    # Boot cleanup — runs against adventure_path/01_npcs/ on every session start.
     #
     # 1. SESSION NPC folders: auto-created stubs are deleted unless the GM has
     #    promoted the NPC by removing the "SESSION NPC" flag from base.md.
@@ -843,7 +992,7 @@ def create_session(
     # 3. knowledge.md: reset only when booting session 1. For all other
     #    session numbers, keep existing knowledge and continue append-only
     #    writes during play.
-    _npcs_root = _REPO_ROOT / "adventure_path" / "05_npcs"
+    _npcs_root = _REPO_ROOT / "adventure_path" / "01_npcs"
     if _npcs_root.exists():
         _delta_filename = f"session_{session_number:03d}.md"
         for _npc_dir in list(_npcs_root.iterdir()):
@@ -1085,9 +1234,9 @@ def _build_turn_directive(npc_match, skill_match, location_matches=None, scene_n
 def _process_generate_block(body: str, session: GameSession) -> None:
     """Create a new NPC or location stub from a %%GENERATE%% block body.
 
-    For type: location — creates a stub in adventure_path/07_locations/ and
+    For type: location — creates a stub in adventure_path/03_locations/ and
     invalidates the location index so the new entry is detectable immediately.
-    For NPC entries — creates a dot-prefixed stub in adventure_path/05_npcs/.
+    For NPC entries — creates a dot-prefixed stub in adventure_path/01_npcs/.
     Silently skipped if the entry already exists or the name field is missing.
     """
     fields = _parse_delta_fields(body)
@@ -1099,7 +1248,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
     if block_type == "location":
         loc_slug = _slugify(block_name)
-        loc_dir  = _REPO_ROOT / "adventure_path" / "07_locations" / loc_slug
+        loc_dir  = _REPO_ROOT / "adventure_path" / "03_locations" / loc_slug
         if loc_dir.exists():
             _log(session, f"\n> *[Location already exists, skipping: {block_name}]*\n")
             return
@@ -1124,7 +1273,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
     npc_slug = _slugify(block_name)
     # Dot-prefix marks this as a session NPC (temporary, purgeable from the UI).
-    npc_dir  = _REPO_ROOT / "adventure_path" / "05_npcs" / f".{npc_slug}"
+    npc_dir  = _REPO_ROOT / "adventure_path" / "01_npcs" / f".{npc_slug}"
     npc_dir.mkdir(parents=True, exist_ok=True)
 
     loc_str   = fields.get("location", "")
@@ -1146,7 +1295,7 @@ def _process_generate_block(body: str, session: GameSession) -> None:
 
 def list_session_npcs() -> list[str]:
     """Return the slug names of all session NPCs (dot-prefixed directories)."""
-    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    npc_base = _REPO_ROOT / "adventure_path" / "01_npcs"
     if not npc_base.exists():
         return []
     return sorted(
@@ -1163,7 +1312,7 @@ def purge_session_npcs() -> int:
     so the next turn no longer injects profiles for purged NPCs.
     """
     import shutil as _shutil
-    npc_base = _REPO_ROOT / "adventure_path" / "05_npcs"
+    npc_base = _REPO_ROOT / "adventure_path" / "01_npcs"
     if not npc_base.exists():
         return 0
     count = 0
@@ -1209,7 +1358,7 @@ def _stream_with_narrative_filter(
         return
 
     _NARRATIVE_START = "%%NARRATIVE%%\n"
-    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%")
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%", "\n%%HP%%")
     _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14; also covers "%%COMBAT%%\n" = 12
 
     buf           = ""      # not-yet-emitted accumulation
@@ -1342,6 +1491,14 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     if session.provider == "groq" and len(system_content) > _GROQ_MAX_SYSTEM_CHARS:
         system_content = system_content[:_GROQ_MAX_SYSTEM_CHARS] + "\n\n…[later context omitted to stay within payload limit]"
 
+    # ── Turn-1 format example ─────────────────────────────────────────────────
+    # session.messages has exactly 1 entry (the current user message, just
+    # appended by stream_turn) on the first player turn.  After that the
+    # model has seen the format; no need to repeat it every turn.
+    if len(session.messages) == 1:
+        system_content += f"\n\n---\n{_FORMAT_EXAMPLE}"
+        _log(session, "\n> *[Format example injected: first player turn]*\n")
+
     last_user = next(
         (m["content"] for m in reversed(history) if m["role"] == "user"), ""
     )
@@ -1392,6 +1549,37 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         if _loc.canonical_name not in session.scene_npcs:
             session.scene_npcs.append(_loc.canonical_name)
 
+    # ── Sections active this turn ─────────────────────────────────────────────
+    # Inject only the specs that are relevant based on detection results.
+    # %%NARRATIVE%% and %%GENERATE%% are always included; %%ROLL%% only when a
+    # skill is detected; %%DELTAS%% only when NPCs are present in the scene.
+    _active_specs = [_NARRATIVE_SPEC, _GENERATE_SPEC]
+    _active_spec_names = ["NARRATIVE", "GENERATE"]
+    if skill_match:
+        _active_specs.append(_ROLL_SPEC)
+        _active_spec_names.append("ROLL")
+    if session.scene_npcs or npc_match or location_matches:
+        _active_specs.append(_DELTAS_SPEC)
+        _active_spec_names.append("DELTAS")
+    system_content += (
+        f"\n\n---\n[SECTIONS ACTIVE THIS TURN]\n"
+        + "\n\n".join(_active_specs)
+    )
+    _log(session, f"\n> *[Section specs: {' '.join(_active_spec_names)}]*\n")
+
+    # ── PC profile injection ──────────────────────────────────────────────────
+    # Narrative profile injected when the PC's name appears in the player input.
+    # Mechanical profile added on top when a skill check is also detected.
+    _last_lower = last_user.lower()
+    for _pc_name, _pc_tiers in session.pc_profiles.items():
+        if _pc_name in _last_lower:
+            system_content += f"\n\n{_pc_tiers['narrative']}"
+            _log(session, f"\n> *[PC narrative profile injected: {_pc_name}]*\n")
+            if skill_match:
+                system_content += f"\n\n{_pc_tiers['mechanical']}"
+                _log(session, f"\n> *[PC mechanical profile injected: {_pc_name}]*\n")
+            break  # at most one PC per turn
+
     # ── Active events — decrement TTL, inject content ─────────────────────────
     expired_ids: list[str] = []
     for _ev in session.active_events:
@@ -1426,15 +1614,23 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         )
         _log(session, f"\n> *[Delta reminder injected for scene NPCs: {_npc_list}]*\n")
 
-    # ── Ongoing combat reminder ────────────────────────────────────────────────
-    # Injected unconditionally when combat is live so the model keeps writing
-    # %%COMBAT%% blocks even after the triggering event has expired.
+    # ── Ongoing combat — full spec injection + HP context ─────────────────────
+    # Injected when combat is live.  The static prompt keeps only a compact
+    # one-liner; the full format + rules are injected here so the model has
+    # everything it needs without paying the token cost when not in combat.
+    # Tier 1.1: HP values are backend-owned from round 2 onward.  We inject
+    # current HP so the LLM can narrate accurately without recomputing.
     if session.combat_state is not None and session.combat_state.round > 0:
+        _combat_spec = _COMBAT_SPEC_ONGOING
+        _hp_lines = "  ".join(
+            f"{c.name}: {c.hp_current}/{c.hp_max} ({c.status})\n"
+            for c in session.combat_state.combatants
+        )
         system_content += (
             f"\n\n---\n[COMBAT ONGOING — round {session.combat_state.round}]\n"
-            "You MUST include a `%%COMBAT%%` block this turn. "
-            "Increment round when all combatants have acted. "
-            "Update HP values to reflect damage taken this turn."
+            f"You MUST include a `%%COMBAT%%` block this turn.\n"
+            f"{_combat_spec}\n\n"
+            f"[CURRENT HP]\n  {_hp_lines}"
         )
         _log(session, f"\n> *[Combat reminder injected: round {session.combat_state.round}]*\n")
 
@@ -1635,11 +1831,22 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # ── %%HP%% (Tier 1.1 — non-attack HP deltas) ─────────────────────────
+        _hp_section = _sections.get("HP", "")
+        if _hp_section and session.combat_state is not None:
+            try:
+                _hp_deltas = _parse_hp_deltas(_hp_section)
+                if _hp_deltas:
+                    _apply_hp_deltas(session.combat_state, _hp_deltas)
+                    _log(session, f"\n> *[HP deltas applied: {_hp_deltas}]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%HP%% processing error: {_e}]*\n")
+
         # ── %%COMBAT%% ────────────────────────────────────────────────────────
         _combat_section = _sections.get("COMBAT", "")
         if _combat_section:
             try:
-                _combat_result = _parse_combat_block(_combat_section)
+                _combat_result = _parse_combat_block(_combat_section, existing_state=session.combat_state)
                 if _combat_result is not None:
                     if _combat_result.round == 0:          # intentional clear signal
                         session.combat_state = None
@@ -1709,11 +1916,22 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # %%HP%% (flat-block fallback path — Tier 1.1)
+        _hp_m = _HP_BLOCK_RE.search(response_text)
+        if _hp_m and session.combat_state is not None:
+            try:
+                _hp_deltas = _parse_hp_deltas(_hp_m.group(1))
+                if _hp_deltas:
+                    _apply_hp_deltas(session.combat_state, _hp_deltas)
+                    _log(session, f"\n> *[HP deltas applied (flat): {_hp_deltas}]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%HP%% processing error: {_e}]*\n")
+
         # %%COMBAT%% (flat-block fallback path)
         _combat_m = _COMBAT_BLOCK_RE.search(response_text)
         if _combat_m:
             try:
-                _combat_result = _parse_combat_block(_combat_m.group(1))
+                _combat_result = _parse_combat_block(_combat_m.group(1), existing_state=session.combat_state)
                 if _combat_result is not None:
                     if _combat_result.round == 0:
                         session.combat_state = None

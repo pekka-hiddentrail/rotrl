@@ -129,6 +129,83 @@ And   characters without a character_sheet.md are silently skipped
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-007 — Format example injected on first player turn only
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** First player turn of a session
+
+```gherkin
+Given a session has been booted
+And   session.messages has exactly 1 entry (the current user message)
+When  _inject_context assembles the per-turn system prompt
+Then  the full format example (Gerhard Pickle / Bottled Solutions) is appended to system_content
+And   the example is NOT present in session.system_prompt (the static base prompt)
+When  _inject_context is called on any subsequent turn (messages > 1)
+Then  the format example is NOT present in system_content
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-008 — Full combat spec injected per-turn only when combat is active
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Turn submitted during active combat
+
+```gherkin
+Given session.combat_state.round > 0
+When  _inject_context assembles the per-turn system prompt
+Then  the full combat format spec and rules (_COMBAT_FULL_SPEC) are appended to system_content
+And   the [COMBAT ONGOING — round N] header still shows the correct round number
+When  session.combat_state is None or round == 0
+Then  the full combat spec is NOT present in system_content
+And   the static base prompt contains only a compact one-liner %%COMBAT%% reference
+```
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-009 — Section specs injected conditionally each turn
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Per-turn system prompt assembly
+
+```gherkin
+Given _inject_context assembles the per-turn system prompt
+Then  a [SECTIONS ACTIVE THIS TURN] block is always appended
+And   the block always includes _NARRATIVE_SPEC and _GENERATE_SPEC
+When  a skill match is detected in the player input
+Then  _ROLL_SPEC is included in the block
+When  no skill is detected
+Then  _ROLL_SPEC is NOT included in the block
+When  session.scene_npcs is non-empty OR an NPC is detected this turn
+Then  _DELTAS_SPEC is included in the block
+When  scene_npcs is empty AND no NPC is detected
+Then  _DELTAS_SPEC is NOT included in the block
+And   the static base prompt contains only the marker list, NOT the full section specs
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-010 — PC slim profile injected when PC is named in player input
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Player input names a party character
+
+```gherkin
+Given session.pc_profiles contains a slim profile for each PC
+And   the player input contains a PC's canonical name (case-insensitive)
+When  _inject_context assembles the per-turn system prompt
+Then  that PC's narrative profile (appearance + personality) is appended to system_content
+When  a skill match is also detected in the same turn
+Then  that PC's mechanical profile (HP, AC, saves, spells, abilities) is also appended
+When  no PC name appears in the player input
+Then  no PC profile is injected
+When  multiple PC names appear, only the first matched PC's profile is injected
+```
+
+---
+
 ## Out of Scope
 
 - Campaign content quality (prompt engineering, not a spec concern)
@@ -140,5 +217,8 @@ And   characters without a character_sheet.md are silently skipped
 
 - See: [INDEX.md §16 — System Prompt Architecture](INDEX.md)
 - Boot context lookup order: `sessions/session_NNN/boot.md` → `sessions/session_N-1/recap.md` → hardcoded fallback text
-- `_build_slim_system_prompt()` in `api/session_manager.py` assembles the fixed prompt at boot
-- Per-turn copy assembly (AC-002, AC-003, AC-004) is the responsibility of `_inject_context(session) -> tuple[str, dict]`; `_stream_chat` calls it and unpacks `(system_content, context_info)` to build the LLM payload
+- `_build_slim_system_prompt()` in `api/session_manager.py` assembles the fixed prompt at boot; static content only
+- Dynamic fragments: `_FORMAT_EXAMPLE`, `_COMBAT_FULL_SPEC`, `_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC` — all module-level constants injected conditionally by `_inject_context`
+- `_build_pc_profiles(players_dir)` builds two-tier PC profiles at session boot; stored on `GameSession.pc_profiles`
+- Per-turn copy assembly (AC-002 through AC-010) is the responsibility of `_inject_context(session) -> tuple[str, dict]`
+- Target: static base prompt ≤ 900 tokens; turn-1 total ≤ 1300 tokens; turn 2+ social (no combat) ≤ 800 tokens

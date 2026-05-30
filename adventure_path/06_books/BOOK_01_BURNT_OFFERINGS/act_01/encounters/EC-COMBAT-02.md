@@ -52,6 +52,6 @@ Standard goblin equipment. No unique items.
 
 <!-- REFERENCE -->
 
-**Event file:** `adventure_path/08_events/fire_phase_begins.md` (injected into LLM)  
+**Event file:** `adventure_path/02_events/fire_phase_begins.md` (injected into LLM)  
 **Follows:** EC-COM-01 (Wave 1)  
 **Leads to:** EC-COM-03 (Wave 3 Cavalry) — goblin commandos arrive at end of this wave

@@ -228,7 +228,7 @@ def test_generate_aliases_from_name(seeded_rng):
 # ── %%GENERATE%% block — session_manager integration ─────────────────────────
 
 def _make_npc_dir(base: Path, slug: str, content: str = "") -> Path:
-    d = base / "adventure_path" / "05_npcs" / slug
+    d = base / "adventure_path" / "01_npcs" / slug
     d.mkdir(parents=True, exist_ok=True)
     if content:
         (d / "base.md").write_text(content, encoding="utf-8")
@@ -254,7 +254,7 @@ def test_generate_block_creates_stub(tmp_path, monkeypatch):
     )
     sm._process_generate_block(body, session)
 
-    stub = tmp_path / "adventure_path" / "05_npcs" / ".gorm_hysys" / "base.md"
+    stub = tmp_path / "adventure_path" / "01_npcs" / ".gorm_hysys" / "base.md"
     assert stub.exists(), "base.md should be created"
     text = stub.read_text(encoding="utf-8")
     assert "# Gorm Hysys" in text
@@ -371,14 +371,14 @@ def test_session_npc_recreated_after_reboot(tmp_path, monkeypatch):
 
     # Boot: cleanup purges it.
     session = sm.create_session(1, "qwen3:4b", dev_mode=True)
-    assert not (tmp_path / "adventure_path" / "05_npcs" / ".marta_hask").exists()
+    assert not (tmp_path / "adventure_path" / "01_npcs" / ".marta_hask").exists()
 
     # Now simulate the LLM emitting a %%GENERATE%% block for the same NPC.
     sm._process_generate_block(
         "type: npc\nname: Marta Hask\nrole: amulet vendor\n", session
     )
 
-    new_stub = tmp_path / "adventure_path" / "05_npcs" / ".marta_hask" / "base.md"
+    new_stub = tmp_path / "adventure_path" / "01_npcs" / ".marta_hask" / "base.md"
     assert new_stub.exists(), "Session NPC directory must be recreated after boot purge"
 
 
@@ -451,7 +451,7 @@ def test_delta_loop_creates_stub_for_unknown_npc(tmp_path, monkeypatch):
         stub_body += f"location: {fields['location']}\n"
     sm._process_generate_block(stub_body, session)
 
-    stub = tmp_path / "adventure_path" / "05_npcs" / ".grimbold_ironfist" / "base.md"
+    stub = tmp_path / "adventure_path" / "01_npcs" / ".grimbold_ironfist" / "base.md"
     assert stub.exists(), "Layer 2 must create a stub from delta data"
     text = stub.read_text(encoding="utf-8")
     assert "# Grimbold Ironfist" in text
@@ -496,7 +496,7 @@ def test_detect_does_not_create_stub(tmp_path, monkeypatch):
 
     sm._detect_narrative_npcs("Hannah Harvest greets Vanx warmly.", session)
 
-    npcs_root = tmp_path / "adventure_path" / "05_npcs"
+    npcs_root = tmp_path / "adventure_path" / "01_npcs"
     assert not npcs_root.exists() or not any(npcs_root.iterdir()), \
         "Detection must not write any NPC folder"
 

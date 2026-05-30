@@ -15,7 +15,7 @@
 > a description of that location — what it looks like, who is typically there,
 > and what its current state is — without any extra LLM calls.
 
-Locations live in `adventure_path/07_locations/`. A `LocationIndex` singleton detects
+Locations live in `adventure_path/03_locations/`. A `LocationIndex` singleton detects
 location keywords in player input and injects the matching profile into the per-turn
 system prompt alongside (not instead of) any NPC-at-location injection already produced
 by `NpcIndex.detect_by_location()`. The GM receives the physical and social context of
@@ -26,7 +26,7 @@ the place; the NPC profiles provide the people found there — both are needed.
 ## Background
 
 - Given a session is active
-- And `adventure_path/07_locations/` exists and contains location directories
+- And `adventure_path/03_locations/` exists and contains location directories
 - And the `LocationIndex` has been loaded
 
 ---
@@ -40,7 +40,7 @@ the place; the NPC profiles provide the people found there — both are needed.
 **Scenario:** `LocationIndex` is initialised
 
 ```gherkin
-Given adventure_path/07_locations/ contains sandpoint_garrison/, rusty_dragon/, and _LOCATION_TEMPLATE/
+Given adventure_path/03_locations/ contains sandpoint_garrison/, rusty_dragon/, and _LOCATION_TEMPLATE/
 When  the LocationIndex is loaded
 Then  sandpoint_garrison and rusty_dragon are in the index
 And   _LOCATION_TEMPLATE is not in the index
@@ -152,7 +152,7 @@ And   this persists for all subsequent turns until the session ends
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-008 — `%%GENERATE%%` with `type: location` creates a stub in `07_locations/`
+### AC-008 — `%%GENERATE%%` with `type: location` creates a stub in `03_locations/`
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 **Scenario:** GM response introduces a new named location via `%%GENERATE%%`
@@ -166,7 +166,7 @@ Given the %%GENERATE%% section contains a block with:
   location: main street
   summary: run by Gerhard Pickle, a font of local gossip
 When  the section is parsed
-Then  adventure_path/07_locations/bottled_solutions/base.md is created
+Then  adventure_path/03_locations/bottled_solutions/base.md is created
 And   the file starts with "# Bottled Solutions"
 And   the payload section includes role, appearance, and summary content
 And   the file contains "**Aliases:**" with at least the slugified name as a keyword
@@ -183,7 +183,7 @@ And   no base.md is created if a directory for this location already exists
 
 ```gherkin
 Given Bottled Solutions does not exist in the LocationIndex before this turn
-When  _process_generate_block() creates adventure_path/07_locations/bottled_solutions/base.md
+When  _process_generate_block() creates adventure_path/03_locations/bottled_solutions/base.md
 Then  _invalidate_location_index() is called immediately after the write
 And   on the next player turn, "bottled solutions" or "apothecary" in player input detects the new location
 And   the new Location Reference block is injected into that turn's prompt
@@ -193,7 +193,7 @@ And   the new Location Reference block is injected into that turn's prompt
 
 ## Out of Scope
 
-- `%%DELTAS%%` for locations — locations do not have per-turn disposition changes; world-state changes are recorded in `adventure_path/04_persistence/PERSISTENCE_LEDGER.md`
+- `%%DELTAS%%` for locations — locations do not have per-turn disposition changes; world-state changes are recorded in `adventure_path/08_persistence/PERSISTENCE_LEDGER.md`
 - Location-to-NPC reverse lookup (`LocationIndex` does not declare which NPCs are present — NPC files own that relationship via `**Locations:**`)
 - UI intent bar changes for the new `loc` / `loc_trigger` fields (can follow separately)
 - Multi-location detection in a single turn (single best match only, same as NPC detection)
@@ -205,7 +205,7 @@ And   the new Location Reference block is injected into that turn's prompt
 ### File layout
 
 ```
-adventure_path/07_locations/
+adventure_path/03_locations/
   _LOCATION_TEMPLATE.md         Template for new location directories
   sandpoint_garrison/
     base.md

@@ -94,10 +94,10 @@ If the rescue beat did not fire (CIVILIAN_RESCUE_BEAT = false), Aldern still app
 
 | Event ID | File | Content |
 |----------|------|---------|
-| goblin_attack_starts | `adventure_path/08_events/goblin_attack_starts.md` | Wave 1 stats, civilian rescue beat, warchanter priority |
-| fire_phase_begins | `adventure_path/08_events/fire_phase_begins.md` | Wave 2 stats, fire mechanics, Hemlock arrival |
-| cavalry_arrives | `adventure_path/08_events/cavalry_arrives.md` | Wave 3 stats, commando tactics, morale |
-| attack_repelled | `adventure_path/08_events/attack_repelled.md` | Aftermath beats, Aldern, Ameiko offer, level milestone |
+| goblin_attack_starts | `adventure_path/02_events/goblin_attack_starts.md` | Wave 1 stats, civilian rescue beat, warchanter priority |
+| fire_phase_begins | `adventure_path/02_events/fire_phase_begins.md` | Wave 2 stats, fire mechanics, Hemlock arrival |
+| cavalry_arrives | `adventure_path/02_events/cavalry_arrives.md` | Wave 3 stats, commando tactics, morale |
+| attack_repelled | `adventure_path/02_events/attack_repelled.md` | Aftermath beats, Aldern, Ameiko offer, level milestone |
 
 ---
 

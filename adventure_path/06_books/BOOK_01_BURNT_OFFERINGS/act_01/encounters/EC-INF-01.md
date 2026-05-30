@@ -47,4 +47,4 @@ After interrogation the goblin is a prisoner. Sheriff Hemlock takes custody of i
 <!-- REFERENCE -->
 
 **Act II hooks:** Thistletop (Fact 3) connects to Glassworks → Catacombs → Thistletop investigation chain  
-**Sheriff Hemlock:** takes custody — NPC file `adventure_path/05_npcs/belor_hemlock/base.md`
+**Sheriff Hemlock:** takes custody — NPC file `adventure_path/01_npcs/belor_hemlock/base.md`

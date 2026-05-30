@@ -39,7 +39,7 @@ class TestCanonicalFor:
         """An explicit alias in base.md resolves to the canonical name."""
         import api.context.npc_lookup as nl
         monkeypatch.setattr(nl, "_npc_index", None, raising=False)
-        npcs = tmp_path / "adventure_path" / "05_npcs"
+        npcs = tmp_path / "adventure_path" / "01_npcs"
         _make_npc(npcs, "aldern_foxglove",
                   "# Aldern Foxglove\n**Aliases:** Aldern, Foxglove\n")
         idx = nl.NpcIndex(_repo_root=tmp_path)
@@ -49,7 +49,7 @@ class TestCanonicalFor:
     def test_resolves_auto_word_alias(self, tmp_path, monkeypatch):
         """Each word of the canonical name ≥4 chars is auto-registered as alias."""
         import api.context.npc_lookup as nl
-        npcs = tmp_path / "adventure_path" / "05_npcs"
+        npcs = tmp_path / "adventure_path" / "01_npcs"
         _make_npc(npcs, "sheriff_hemlock", "# Sheriff Hemlock\n")
         idx = nl.NpcIndex(_repo_root=tmp_path)
         # "Sheriff" is only 7 chars but is in _NAME_EXCLUDE_WORDS, however the
@@ -63,7 +63,7 @@ class TestCanonicalFor:
 
     def test_case_insensitive(self, tmp_path, monkeypatch):
         import api.context.npc_lookup as nl
-        npcs = tmp_path / "adventure_path" / "05_npcs"
+        npcs = tmp_path / "adventure_path" / "01_npcs"
         _make_npc(npcs, "ameiko", "# Ameiko\n**Aliases:** ameiko\n")
         idx = nl.NpcIndex(_repo_root=tmp_path)
         assert idx.canonical_for("AMEIKO") == "Ameiko"
@@ -76,7 +76,7 @@ class TestSingleWordDetection:
     def test_single_word_known_alias_added_to_scene_npcs(self, tmp_path, monkeypatch):
         """'Aldern' in narrative text → 'Aldern Foxglove' added to scene_npcs."""
         sm = _sm_setup(tmp_path, monkeypatch)
-        npcs = tmp_path / "adventure_path" / "05_npcs"
+        npcs = tmp_path / "adventure_path" / "01_npcs"
         _make_npc(npcs, "aldern_foxglove",
                   "# Aldern Foxglove\n**Aliases:** Aldern\n")
         sm._invalidate_npc_index()
@@ -89,7 +89,7 @@ class TestSingleWordDetection:
     def test_single_word_not_duplicated_by_two_word_pass(self, tmp_path, monkeypatch):
         """Full name in text → tracked once only (Pass 1 fires, Pass 2 deduplicates)."""
         sm = _sm_setup(tmp_path, monkeypatch)
-        npcs = tmp_path / "adventure_path" / "05_npcs"
+        npcs = tmp_path / "adventure_path" / "01_npcs"
         _make_npc(npcs, "aldern_foxglove",
                   "# Aldern Foxglove\n**Aliases:** Aldern\n")
         sm._invalidate_npc_index()
@@ -102,7 +102,7 @@ class TestSingleWordDetection:
     def test_single_word_exclude_word_skipped(self, tmp_path, monkeypatch):
         """Words in _NAME_EXCLUDE_WORDS are not matched even if ≥4 chars."""
         sm = _sm_setup(tmp_path, monkeypatch)
-        npcs = tmp_path / "adventure_path" / "05_npcs"
+        npcs = tmp_path / "adventure_path" / "01_npcs"
         _make_npc(npcs, "mayor_deverin", "# Mayor Deverin\n**Aliases:** Mayor\n")
         sm._invalidate_npc_index()
         session = sm.create_session(1, "qwen3:4b", dev_mode=True)
@@ -128,7 +128,7 @@ class TestSingleWordDetection:
     def test_already_tracked_not_duplicated(self, tmp_path, monkeypatch):
         """If the canonical name is already in scene_npcs, Pass 1 doesn't duplicate it."""
         sm = _sm_setup(tmp_path, monkeypatch)
-        npcs = tmp_path / "adventure_path" / "05_npcs"
+        npcs = tmp_path / "adventure_path" / "01_npcs"
         _make_npc(npcs, "aldern_foxglove",
                   "# Aldern Foxglove\n**Aliases:** Aldern\n")
         sm._invalidate_npc_index()

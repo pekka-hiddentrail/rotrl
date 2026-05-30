@@ -126,7 +126,7 @@ And   no browser confirm() dialog is shown
 
 When  the GM clicks "Yes"
 Then  DELETE /api/npcs/session is called
-And   session NPC stub directories are removed from 05_npcs/
+And   session NPC stub directories are removed from 01_npcs/
 And   a toast notification confirms how many directories were removed
 And   the inline confirmation collapses back to the "Purge NPCs" button
 

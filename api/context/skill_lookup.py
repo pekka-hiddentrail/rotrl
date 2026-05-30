@@ -2,9 +2,9 @@
 the matching PF1e skill rules to inject into the current turn's system prompt.
 
 Design mirrors npc_lookup: zero extra LLM calls, per-turn injection only,
-fully data-driven from adventure_path/06_rules/skills/.
+fully data-driven from adventure_path/04_rules/skills/.
 
-Skill file format (adventure_path/06_rules/skills/<skill>.md):
+Skill file format (adventure_path/04_rules/skills/<skill>.md):
   # Skill Name
   **Triggers:** verb one, verb two, multi word trigger
   ...rest is the rules text injected verbatim...
@@ -27,7 +27,7 @@ class SkillMatch:
 
 @dataclass
 class SkillIndex:
-    """Lazy-loaded skill index built by scanning adventure_path/06_rules/skills/.
+    """Lazy-loaded skill index built by scanning adventure_path/04_rules/skills/.
 
     Instantiate once per process (module-level singleton in session_manager).
     """
@@ -41,7 +41,7 @@ class SkillIndex:
         if self._loaded:
             return
 
-        skills_root = self._repo_root / "adventure_path" / "06_rules" / "skills"
+        skills_root = self._repo_root / "adventure_path" / "04_rules" / "skills"
         if not skills_root.exists():
             self._loaded = True
             return

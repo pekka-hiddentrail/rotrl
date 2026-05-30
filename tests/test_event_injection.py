@@ -19,7 +19,7 @@ from .conftest import make_stream_response, parse_sse
 
 def _make_event_file(tmp_path: Path, event_id: str, trigger: str, content: str) -> Path:
     """Write a minimal valid event file and return its path."""
-    events_dir = tmp_path / "adventure_path" / "08_events"
+    events_dir = tmp_path / "adventure_path" / "02_events"
     events_dir.mkdir(parents=True, exist_ok=True)
     f = events_dir / f"{event_id}.md"
     f.write_text(
@@ -46,7 +46,7 @@ class TestEventIndexLoading:
         assert "AC 16" in entry.content
 
     def test_skips_underscore_files(self, tmp_path):
-        events_dir = tmp_path / "adventure_path" / "08_events"
+        events_dir = tmp_path / "adventure_path" / "02_events"
         events_dir.mkdir(parents=True, exist_ok=True)
         (events_dir / "_TEMPLATE.md").write_text(
             "**Event:** _template\n**Trigger:** ignore\n\n<!-- INJECT -->\ncontent\n",
@@ -56,7 +56,7 @@ class TestEventIndexLoading:
         assert idx.get("_template") is None
         assert len(idx.known_event_ids) == 0
 
-    def test_missing_08_events_dir_is_safe(self, tmp_path):
+    def test_missing_02_events_dir_is_safe(self, tmp_path):
         idx = EventIndex(_repo_root=tmp_path)
         assert idx.get("anything") is None
         assert idx.known_event_ids == []
@@ -92,14 +92,14 @@ class TestParseEventFile:
         assert "<!-- INJECT -->" not in entry.content
 
     def test_missing_inject_marker_returns_none(self, tmp_path):
-        events_dir = tmp_path / "adventure_path" / "08_events"
+        events_dir = tmp_path / "adventure_path" / "02_events"
         events_dir.mkdir(parents=True, exist_ok=True)
         f = events_dir / "bad.md"
         f.write_text("**Event:** bad\n**Trigger:** something\nno inject marker\n", encoding="utf-8")
         assert _parse_event_file(f) is None
 
     def test_missing_event_id_returns_none(self, tmp_path):
-        events_dir = tmp_path / "adventure_path" / "08_events"
+        events_dir = tmp_path / "adventure_path" / "02_events"
         events_dir.mkdir(parents=True, exist_ok=True)
         f = events_dir / "bad.md"
         f.write_text("**Trigger:** something\n\n<!-- INJECT -->\ncontent\n", encoding="utf-8")
@@ -130,11 +130,11 @@ class TestEventMapText:
 # ── Integration tests via HTTP client ─────────────────────────────────────────
 
 def _fake_events_dir(tmp_path: Path) -> Path:
-    """Create a minimal 08_events directory under tmp_path's adventure_path."""
-    events_dir = tmp_path / "outputs" / ".." / "adventure_path" / "08_events"
+    """Create a minimal 02_events directory under tmp_path's adventure_path."""
+    events_dir = tmp_path / "outputs" / ".." / "adventure_path" / "02_events"
     # The client fixture redirects _OUTPUTS_DIR but _REPO_ROOT stays as real repo.
     # We monkeypatch _REPO_ROOT separately in tests that need fake events.
-    events_dir = tmp_path / "adventure_path" / "08_events"
+    events_dir = tmp_path / "adventure_path" / "02_events"
     events_dir.mkdir(parents=True, exist_ok=True)
     return events_dir
 
