@@ -1,10 +1,13 @@
-import type { Message } from '../types'
+import { useState } from 'react'
+import type { Message, MessageSpeaker } from '../types'
 
 interface Props {
   message: Message
   isLast: boolean
   streaming: boolean
 }
+
+// ── Intro markdown renderer ───────────────────────────────────────────────────
 
 // Render intro markdown with minimal formatting (bold, italic, hr, headings)
 function renderIntro(text: string) {
@@ -24,6 +27,46 @@ function renderIntro(text: string) {
     return <p key={i} className="intro-p">{parts}</p>
   })
 }
+
+// ── Player speaker label components ──────────────────────────────────────────
+
+function CharacterLabel({ speaker }: { speaker: MessageSpeaker }) {
+  const [imgOk, setImgOk] = useState(true)
+  return (
+    <div className="bubble-speaker">
+      <span className="bubble-speaker-name" style={{ color: speaker.color }}>
+        {speaker.name}
+      </span>
+      <div
+        className="bubble-speaker-portrait"
+        data-testid="bubble-speaker-portrait"
+        style={{ borderColor: speaker.color, '--speaker-color': speaker.color } as React.CSSProperties}
+      >
+        {imgOk
+          ? <img
+              src={speaker.portrait}
+              alt={speaker.name}
+              className="bubble-speaker-img"
+              onError={() => setImgOk(false)}
+            />
+          : <span className="bubble-speaker-rune" style={{ color: speaker.color }}>{speaker.rune}</span>
+        }
+      </div>
+    </div>
+  )
+}
+
+function PartyLabel() {
+  return (
+    <div className="bubble-speaker">
+      <div className="bubble-speaker-party" data-testid="bubble-speaker-party">
+        <span className="bubble-speaker-party-text">player</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function MessageBubble({ message, isLast, streaming }: Props) {
   if (message.role === 'ending') {
@@ -53,14 +96,29 @@ export default function MessageBubble({ message, isLast, streaming }: Props) {
     )
   }
 
-  const isGm = message.role === 'gm'
+  if (message.role === 'gm') {
+    return (
+      <div className="bubble-row gm">
+        <div className="bubble-label">GM</div>
+        <div className="bubble bubble-gm">
+          {message.content}
+          {isLast && streaming && <span className="cursor">▋</span>}
+        </div>
+      </div>
+    )
+  }
+
+  // Player message
   return (
-    <div className={`bubble-row ${isGm ? 'gm' : 'player'}`}>
-      <div className="bubble-label">{isGm ? 'GM' : 'You'}</div>
-      <div className={`bubble ${isGm ? 'bubble-gm' : 'bubble-player'}`}>
+    <div className="bubble-row player">
+      {message.speaker
+        ? <CharacterLabel speaker={message.speaker} />
+        : <PartyLabel />
+      }
+      <div className="bubble bubble-player">
         {message.content}
-        {isLast && streaming && isGm && <span className="cursor">▋</span>}
       </div>
     </div>
   )
 }
+

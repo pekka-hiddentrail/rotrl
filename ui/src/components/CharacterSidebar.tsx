@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { CharacterData } from '../data/characters'
 
 function Portrait({ src, rune, color, name, size }: {
@@ -85,15 +86,26 @@ interface Props {
 
 export default function CharacterSidebar({ characters, loading, activeSpeakerId, onSetActive, onOpenSheet }: Props) {
   const [menuId, setMenuId] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
-  // Close the action menu when the user clicks outside the character's wrap element
+  // Compute fixed position from the wrap element's bounding rect when menu opens
+  useEffect(() => {
+    if (!menuId) { setMenuPos(null); return }
+    const wrap = document.querySelector(`[data-char-wrap="${menuId}"]`)
+    if (!wrap) return
+    const rect = wrap.getBoundingClientRect()
+    setMenuPos({ top: rect.top, left: rect.right + 8 })
+  }, [menuId])
+
+  // Close the action menu when the user clicks outside both the wrap AND the portal menu
   const handleDocMouseDown = useCallback((e: MouseEvent) => {
     if (!menuId) return
     const wrap = document.querySelector(`[data-char-wrap="${menuId}"]`)
-    if (wrap && !wrap.contains(e.target as Node)) {
-      setMenuId(null)
-    }
+    const menu = menuRef.current
+    const insideWrap = wrap?.contains(e.target as Node) ?? false
+    const insideMenu = menu?.contains(e.target as Node) ?? false
+    if (!insideWrap && !insideMenu) setMenuId(null)
   }, [menuId])
 
   useEffect(() => {
@@ -136,8 +148,13 @@ export default function CharacterSidebar({ characters, loading, activeSpeakerId,
                 />
               </div>
             </button>
-            {isMenuOpen && (
-              <div className="char-action-menu" ref={menuRef}>
+            {isMenuOpen && menuPos && createPortal(
+              <div
+                className="char-action-menu"
+                data-placement="right"
+                ref={menuRef}
+                style={{ top: menuPos.top, left: menuPos.left }}
+              >
                 <button
                   className="char-action-menu-item"
                   onClick={() => { onSetActive(c.id); setMenuId(null) }}
@@ -150,7 +167,8 @@ export default function CharacterSidebar({ characters, loading, activeSpeakerId,
                 >
                   ◳  Open Sheet
                 </button>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         )

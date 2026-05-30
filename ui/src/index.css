@@ -445,13 +445,10 @@ body {
   transition: box-shadow 0.2s;
 }
 
-/* Two-action dropdown menu */
+/* Two-action menu — portaled to document.body, position set by JS via inline style */
 .char-action-menu {
-  position: absolute;
-  top: calc(100% - 4px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
+  position: fixed;
+  z-index: 1000;
   background: #1e1212;
   border: 1px solid #4a2828;
   border-radius: 6px;
@@ -595,6 +592,12 @@ body {
 .splash-hint {
   color: var(--text-muted);
   font-size: 13px;
+  transition: opacity 0.4s ease;
+  min-height: 1.4em;
+}
+
+.splash-hint--fade {
+  opacity: 0;
 }
 
 .splash-hint code {
@@ -607,7 +610,7 @@ body {
 
 .splash-party {
   display: flex;
-  gap: 36px;
+  gap: 52px;
   justify-content: center;
   margin: 4px 0;
 }
@@ -620,8 +623,8 @@ body {
 }
 
 .splash-char-avatar {
-  width: 110px;
-  height: 110px;
+  width: 165px;
+  height: 165px;
   border-radius: 50%;
   border: 2px solid;
   display: flex;
@@ -638,18 +641,18 @@ body {
 }
 
 .splash-char-avatar span {
-  font-size: 40px;
+  font-size: 60px;
   font-family: serif;
 }
 
 .splash-char-name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.05em;
 }
 
 .splash-char-info {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -712,6 +715,7 @@ body {
 .bubble-row.player {
   align-self: flex-end;
   align-items: flex-end;
+  flex-direction: row;
 }
 
 .bubble-label {
@@ -729,6 +733,78 @@ body {
 
 .player .bubble-label {
   color: var(--player);
+}
+
+/* ── Player bubble speaker label ─────────────────────────────────────────── */
+
+/* Shared wrapper — circle + name stacked vertically, sits left of the bubble */
+.bubble-speaker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+/* Character name */
+.bubble-speaker-name {
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: 'Cinzel', sans-serif;
+}
+
+/* Portrait circle (character) */
+.bubble-speaker-portrait {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+
+.bubble-speaker-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bubble-speaker-rune {
+  font-size: 16px;
+  line-height: 1;
+  font-family: serif;
+}
+
+/* Party circle ("player" label, no character selected) */
+.bubble-speaker-party {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bubble-speaker-party-text {
+  font-size: 7px;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: 'Cinzel', sans-serif;
+  color: var(--text-dim, #7a8a9a);
+  line-height: 1;
+  text-align: center;
 }
 
 .bubble {
@@ -751,7 +827,7 @@ body {
   background: #162130;
   border: 1px solid #203348;
   color: var(--player);
-  border-top-right-radius: 2px;
+  border-top-left-radius: 2px;
   font-style: italic;
 }
 

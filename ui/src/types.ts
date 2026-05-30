@@ -1,5 +1,12 @@
 export type Role = 'gm' | 'player' | 'intro' | 'ending'
 
+export interface MessageSpeaker {
+  name: string
+  portrait: string
+  color: string
+  rune: string
+}
+
 export interface Combatant {
   name: string
   hp_current: number
@@ -17,6 +24,7 @@ export interface CombatState {
 export interface Message {
   role: Role
   content: string
+  speaker?: MessageSpeaker | null
 }
 
 export interface SessionInfo {

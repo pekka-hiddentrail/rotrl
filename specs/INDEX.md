@@ -21,14 +21,16 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button, API Logs button |
 | [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 6 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
 | [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 11 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration |
-| [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 11 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
+| [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 12 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
 | [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 6 | `_build_slim_system_prompt()`, per-turn copy, Groq cap |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 | [event-injection.feature](event-injection.feature) | Backend | `@event` `@injection` `@context` `@parsing` `@session` | 8 | `EventIndex`, `active_events`, `%%EVENT%%` parser, event map in system prompt |
 | [combat-tracker.feature](combat-tracker.feature) | Backend \| Frontend | `@combat` `@parsing` `@session` `@streaming` `@layout` | 10 | `CombatState`, `Combatant`, `_parse_combat_block`, `CombatPanel.tsx`, `HpBar.tsx`, `combat_update` SSE, `DELETE /combat`, per-turn combat reminder |
+| [player-bubble-speaker.feature](player-bubble-speaker.feature) | Frontend | `@chat` `@bubbles` `@character` `@speaker` `@identity` | 6 | `MessageBubble.tsx`, `types.ts` `MessageSpeaker`, `App.tsx` speaker snapshot, `index.css` |
+| [splash-hints.feature](splash-hints.feature) | Frontend | `@splash` `@hints` `@ui` `@rotation` | 6 | `SplashHint.tsx`, `hints.ts`, `App.tsx`, `index.css` |
 
-**Total: 130 acceptance criteria across 19 feature files**
+**Total: 137 acceptance criteria across 20 feature files**
 
 ---
 

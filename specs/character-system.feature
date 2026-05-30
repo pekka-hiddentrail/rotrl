@@ -186,7 +186,7 @@ And   the placeholder text remains "What do you do?"
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-010 — Player messages are prefixed with the active speaker tag
+### AC-010 — Player messages show speaker identity in chat; backend receives prefixed payload
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 **Scenario:** Player sends a message while a character is active
@@ -194,12 +194,13 @@ And   the placeholder text remains "What do you do?"
 ```gherkin
 Given Yanyeeku is the active character
 When  the player types "I would like to see the fireworks" and sends
-Then  the message appears in chat as '@Yanyeeku: "I would like to see the fireworks"'
+Then  the chat bubble shows the clean text "I would like to see the fireworks"
+And   the bubble has a speaker label with Yanyeeku's portrait and name (see player-bubble-speaker.feature)
 And   the input sent to the backend is '@Yanyeeku: "I would like to see the fireworks"'
 
 When  no character is active
 When  the player types "We look around"
-Then  the message appears in chat without any speaker prefix
+Then  the chat bubble shows "We look around" with a generic "player" party label
 And   the input sent to the backend is "We look around" unchanged
 ```
 
@@ -222,6 +223,29 @@ When  the player clears by toggling the active character off
 Then  no halo is shown
 And   the badge disappears
 ```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-012 — Action menu opens to the right of the avatar, not below
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Player opens the action menu
+
+```gherkin
+Given the sidebar is on the left edge of the screen
+When  the player clicks a character avatar
+Then  the action menu appears to the right of the avatar wrap
+And   the menu does not overlap the avatar
+And   the menu is positioned using data-placement="right" for test and accessibility purposes
+```
+
+**Notes:**
+- Implemented via `ReactDOM.createPortal` — menu is rendered into `document.body` with `position: fixed` and coordinates from `getBoundingClientRect()` on the wrap element. This is necessary because `.char-sidebar` has `overflow-y: auto`, which creates a clipping context that would hide an absolutely-positioned menu extending beyond the sidebar width.
+- `z-index: 1000` on `.char-action-menu` ensures it floats above all other panels (combat, chat, dice).
+- Position is computed once when `menuId` is set; `top = wrap.rect.top`, `left = wrap.rect.right + 8px`.
+- The click-outside handler checks both the original wrap AND the portaled menu ref so clicking menu items does not trigger an outside-click close.
+- `data-placement="right"` attribute on the menu div makes the placement verifiable without relying on CSS layout in tests.
 
 ---
 
