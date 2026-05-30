@@ -69,7 +69,7 @@ ollama pull qwen3:4b
 python dev.py
 ```
 
-This runs the backend pytest suite, then starts the backend and UI together with colour-coded output. Press **Ctrl-C** to stop both. Run the frontend Vitest suite separately with `cd ui && npm run test`.
+This runs the backend pytest suite, then starts the backend and UI together with colour-coded output. Press **Ctrl-C** to stop both. Run the frontend Vitest and Playwright suites separately with `cd ui && npm run test` / `npm run test:e2e`.
 
 ```bash
 python dev.py --skip-tests   # skip pytest and start immediately
@@ -238,9 +238,10 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 494 pytest tests
+├── tests/                         # 528 pytest tests
 ├── ui/src/components/__tests__/    # Vitest component tests
 ├── ui/src/__tests__/               # Vitest App SSE integration tests
+├── ui/e2e/                         # Playwright browser-flow tests
 │
 ├── dev.py                         # One-command dev startup (pytest → API + UI)
 ├── start_backend.ps1              # Windows: start FastAPI backend
@@ -290,7 +291,7 @@ All streaming endpoints use Server-Sent Events. Each event is a JSON object with
 
 ## Testing
 
-There are two local test layers: backend `pytest` tests and frontend `Vitest` component tests.
+There are three local test layers: backend `pytest` tests, frontend `Vitest` tests, and browser-level `Playwright` E2E tests.
 
 ```bash
 python -m pytest -q               # run all backend tests
@@ -301,9 +302,13 @@ python -m pytest tests/test_groq_provider.py -q   # run one file
 cd ui
 npm run test                      # run all frontend Vitest tests once
 npm run test:watch                # watch frontend tests during UI work
+npm run test:e2e                  # run Playwright browser-flow tests
+npm run test:e2e:ui               # run Playwright in interactive UI mode
 ```
 
-`python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest, so use `npm run test` from `ui/` before merging frontend changes.
+If Playwright reports a missing browser binary after a fresh install, run `cd ui && npx playwright install chromium`.
+
+`python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
 **Backend:** 528 pytest tests passing across 24 test files:
 
@@ -333,15 +338,29 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_config_tunables.py` | F6 env-var-configurable tunables (default values, type checks, override reads); R4 `_load_name_exclude_words` (file loading, comment/blank-line stripping, fallback on missing/empty file, case normalisation) |
 | `test_scene_npc_tracking.py` | `NpcIndex.canonical_for` (explicit alias, auto-word alias, unknown word, case-insensitive); single-word `_detect_narrative_npcs` Pass 1 (known alias → scene_npcs, dedup, exclude-word skip, unknown word ignored); `scene_npcs` in `context_info` (present, empty list, copy semantics); boot persistence (`_parse_scene_npcs_from_boot`, `stream_end_session` appends section, `create_session` restores) |
 
-**Frontend:** 134 Vitest tests passing across 6 test files (run separately — `cd ui && npm run test`):
+**Frontend:** 194 Vitest tests passing across 13 test files (run separately — `cd ui && npm run test`):
 
 | File | Covers |
 |------|--------|
-| `App.test.tsx` | App-level SSE integration — boot flow, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), error bar, session end cleanup |
+| `App.test.tsx` | App-level SSE integration — boot flow, provider/model switching, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), speaker payload prefixing, purge/View Log/Kill controls, streaming lockout, error bar, session end cleanup |
+| `ChatWindow.test.tsx` | Thinking indicator, GM streaming cursor, intro markdown rendering, autoscroll |
+| `Header.test.tsx` | Pre/post-boot controls, provider model options, boot disabled state, View Log handler, purge/Kill inline confirms, rate-limit badge |
+| `IntentBar.test.tsx` | 52-char truncation, NPC/skill/location tags, null tags, detecting state, missing-context diagnostic |
+| `CharacterSheet.test.tsx` | Modal close behavior, sheet sections, AC/save/spell tooltips, spell grouping |
+| `CharacterSidebarHealth.test.tsx` | Portrait/title display and HP bar thresholds |
+| `characters.test.tsx` | `useCharacters` API load success, HTTP failure, fetch rejection |
 | `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display, quick-roll from banner (AC-012) |
 | `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
 | `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |
 | `ApiLogPanel.test.tsx` | API log browser: list view (empty state, row rendering, filename parsing, close behaviours), detail view (status/format/latency/token badges, JSON block, back navigation, error path) |
+| `MessageBubble.test.tsx` | Player speaker labels, portrait fallback, clean player content, GM bubble invariants |
+| `SplashHint.test.tsx` | Hint pool integrity, initial display, timed rotation, no immediate repeats, fade class |
+
+**E2E:** 7 Playwright tests passing in Chromium (run separately — `cd ui && npm run test:e2e`):
+
+| File | Covers |
+|------|--------|
+| `e2e/app-flows.spec.ts` | Mocked-browser flows: boot badge, send turn, roll request, end session cleanup, Kill stuck ending, Purge NPCs toast, character sheet modal |
 
 ---
 
@@ -480,7 +499,7 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 528 pytest + 134 Vitest tests | ✅ Complete |
+| Test suites — 528 pytest + 194 Vitest + 7 Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
@@ -502,7 +521,7 @@ ollama list                            # confirm model is pulled
 | Backend | Python 3.9+, FastAPI, uvicorn |
 | Frontend | Vite 5, React 18, TypeScript |
 | Streaming | Server-Sent Events (SSE) |
-| Tests | pytest, FastAPI TestClient; Vitest, jsdom, React Testing Library |
+| Tests | pytest, FastAPI TestClient; Vitest, jsdom, React Testing Library; Playwright |
 | Rules system | Pathfinder 1st Edition RAW |
 
 ---

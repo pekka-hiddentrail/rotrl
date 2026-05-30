@@ -43,7 +43,15 @@ export default function App() {
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
   const [sheetCharId, setSheetCharId] = useState<string | null>(null)
   const [lastInput, setLastInput] = useState('')
-  const [intent, setIntent] = useState<{ npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; scene_npcs: string[] } | null>(null)
+  const [intent, setIntent] = useState<{
+    npc: string | null
+    npc_trigger: string | null
+    skill: string | null
+    skill_trigger: string | null
+    location: string | null
+    location_npcs: string[]
+    scene_npcs: string[]
+  } | null>(null)
   const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
   const [diceKey, setDiceKey] = useState(0)
   const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
