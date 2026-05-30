@@ -1,6 +1,6 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (571 pytest + 194 Vitest + 7 Playwright) cannot reach: real LLM behaviour, streaming feel against a live backend, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (646 pytest + 194 Vitest + 7 Playwright) cannot reach: real LLM behaviour, streaming feel against a live backend, on-disk side effects, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 
@@ -45,18 +45,18 @@ python dev.py --skip-tests
 
 **Chain D — prompt size and format example (API log inspection)**
 
-Verifies that the static base prompt is smaller and that the example appears exactly on turn 1.
+Verifies that the format example appears exactly on turn 1 and is absent on turn 2.
 
 1. Boot a session (Dev Mode OFF, Groq).
 2. Send turn 1: `We arrive at the Swallowtail Festival.`
 3. Open `outputs/api_log/` and find the JSON for this first turn.
 4. Read `raw_request.messages[0].content` (the system message sent to the LLM).
 5. ✔ The system message contains `Gerhard Pickle` — the format example was injected on turn 1.
-6. ✔ `total_tokens` (from `usage`) is below 1500 for a normal boot.md. If it's over 2000, the trim did not apply.
-7. Send turn 2: `I look around the square.`
+6. ✔ `prompt_tokens` is reasonable for what was detected. **Rough guideline:** base ~800 tokens + ~250 for FORMAT_EXAMPLE + ~500 per NPC profile injected + ~250 per location + ~200 per skill reference. A turn 1 with 1 NPC and 1 location detected should be ~1800–2400 prompt tokens. Much over 3500 with no injections = investigate trim.
+7. Send turn 2: `I admire the decorations.` (avoid skill/search words)
 8. Open the JSON for turn 2.
 9. ✔ `raw_request.messages[0].content` does **not** contain `Gerhard Pickle` — example absent after turn 1.
-10. ✔ `total_tokens` for turn 2 is noticeably lower than turn 1 (~250 tokens less).
+10. ✔ `prompt_tokens` for turn 2 is lower than turn 1 by roughly the FORMAT_EXAMPLE size (~250 tokens), assuming no new NPCs or skills were detected. If new context was injected, it may be equal or higher — that is expected.
 
 > **Note:** Use the in-app **API Logs** button (header, post-boot) to browse log files without leaving the browser.
 
@@ -70,7 +70,22 @@ Verifies that the static base prompt is smaller and that the example appears exa
 6. ✔ `raw_request.messages[0].content` contains the full combat spec including `sort descending by initiative` and `round: 0 ends combat`.
 7. ✔ The `[COMBAT ONGOING — round N]` header is present with the correct round number.
 
-**Chain F — conditional section specs and PC profile injection (API log inspection)**
+**Chain F — combat rules reference injection (API log inspection)**
+
+Verifies that `CombatRulesIndex` injects a rule reference only during active combat and only when a trigger phrase matches.
+
+1. Boot a session. Send a turn that triggers combat (e.g. `A goblin attacks!`) — play until `CombatPanel` appears.
+2. Send: `I try to charge the goblin archer.`
+3. Open the API log for this turn.
+4. ✔ `raw_request.messages[0].content` contains `## Combat Reference — Actions in Combat`.
+5. ✔ The reference body includes `Charge:` and `+2 attack, −2 AC` — injected from `04_rules/combat/actions.md`.
+6. ✔ Content after `<!-- REFERENCE -->` (e.g. `## Casting a Spell`) is **absent**.
+7. Send: `I step away from the goblin.` — triggers the AoO rule.
+8. ✔ `## Combat Reference — Attacks of Opportunity` appears (not Actions) — longest trigger wins.
+9. Click End Combat. Send: `I look around for survivors.`
+10. Open the API log. ✔ No `## Combat Reference` block — rule lookup does not fire outside combat.
+
+**Chain G — conditional section specs and PC profile injection (API log inspection)**
 
 Verifies that %%ROLL%% and %%DELTAS%% specs are gated, and PC narrative profile appears when the character is named.
 

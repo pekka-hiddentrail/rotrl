@@ -14,7 +14,27 @@ export interface Combatant {
   ac: number
   initiative: number
   status: 'active' | 'unconscious' | 'fled' | 'dead'
+  conditions?: string[]
 }
+
+export interface AttackResult {
+  attacker: string
+  target: string
+  roll: number
+  bonus: number
+  total: number
+  ac: number
+  hit: boolean
+  damage_rolls: number[]
+  damage_total: number
+  attack_type: string
+  is_pc: boolean
+}
+
+export type AttackPhase =
+  | null
+  | { phase: 'to_hit'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
+  | { phase: 'damage'; attacker: string; target: string; damage_expr: string; hit_total: number }
 
 export interface CombatState {
   round: number

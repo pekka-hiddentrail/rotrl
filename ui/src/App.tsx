@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import type { Message, SessionInfo, CombatState } from './types'
+import type { Message, SessionInfo, CombatState, AttackPhase, AttackResult } from './types'
 import type { CharacterData } from './data/characters'
 import Header from './components/Header'
 import ChatWindow from './components/ChatWindow'
@@ -12,7 +12,7 @@ import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat } from './api'
+import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat, resolveAttackRoll, resolveDamageRoll, resumeCombat } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
   const [imgOk, setImgOk] = useState(true)
@@ -56,10 +56,20 @@ export default function App() {
   const [diceKey, setDiceKey] = useState(0)
   const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
   const [combatState, setCombatState] = useState<CombatState | null>(null)
+  const [attackPhase, setAttackPhase] = useState<AttackPhase>(null)
+  const [attackLog, setAttackLog] = useState<AttackResult[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
+  // Refs for reading current state inside async closures (stale closure guard)
+  const attackPhaseRef = useRef<AttackPhase>(null)
+  const attackLogRef = useRef<AttackResult[]>([])
+  // Keep refs in sync with state
+  const setAttackPhaseSync = (v: AttackPhase) => { attackPhaseRef.current = v; setAttackPhase(v) }
+  const setAttackLogSync = (fn: (prev: AttackResult[]) => AttackResult[]) => {
+    setAttackLog(prev => { const next = fn(prev); attackLogRef.current = next; return next })
+  }
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
 
   const appendToken = useCallback((token: string) => {
@@ -140,12 +150,90 @@ export default function App() {
         if (event.type === 'roll_request') setPendingRoll(event)
         if (event.type === 'rate_limits') setRateLimits(event)
         if (event.type === 'combat_update') setCombatState(event.combat_state)
+        if (event.type === 'attack_request') setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
+        if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
+        if (event.type === 'error') throw new Error(event.message)
+      }
+      // Auto-resume if NPC attacks resolved but no PC attacks queued
+      if (!attackPhaseRef.current && attackLogRef.current.length > 0 && session) {
+        await doResumeCombat(session.id)
+      }
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setStreaming(false)
+    }
+  }
+
+  const doResumeCombat = async (sessionId: string) => {
+    setStreaming(true)
+    setAttackLogSync(() => [])
+    try {
+      for await (const event of resumeCombat(sessionId)) {
+        if (event.type === 'token') appendToken(event.content)
+        if (event.type === 'patch_last') {
+          setMessages(prev => {
+            const last = prev[prev.length - 1]
+            if (last?.role === 'gm') return [...prev.slice(0, -1), { ...last, content: event.content }]
+            return prev
+          })
+        }
+        if (event.type === 'combat_update') setCombatState(event.combat_state)
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
       setError(String(e))
     } finally {
       setStreaming(false)
+    }
+  }
+
+  const handleAttackRoll = async (rolled: number) => {
+    if (!session) return
+    try {
+      const result = await resolveAttackRoll(session.id, rolled)
+      const resultEntry: AttackResult = {
+        attacker: attackPhaseRef.current && attackPhaseRef.current.phase !== null ? (attackPhaseRef.current as { attacker: string }).attacker : '?',
+        target: attackPhaseRef.current && attackPhaseRef.current.phase !== null ? (attackPhaseRef.current as { target: string }).target : '?',
+        roll: result.roll, bonus: result.bonus, total: result.total, ac: result.ac,
+        hit: result.hit, damage_rolls: [], damage_total: 0,
+        attack_type: 'melee', is_pc: true,
+      }
+      if (result.hit) {
+        setAttackPhaseSync({ phase: 'damage', attacker: resultEntry.attacker, target: resultEntry.target, damage_expr: result.damage_expr!, hit_total: result.total })
+      } else {
+        setAttackLogSync(prev => [resultEntry, ...prev])
+        if (result.next_attack) {
+          setAttackPhaseSync({ phase: 'to_hit', ...result.next_attack })
+        } else if (result.queue_remaining === 0) {
+          setAttackPhaseSync(null)
+          await doResumeCombat(session.id)
+        }
+      }
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  const handleDamageRoll = async (rolls: number[], total: number) => {
+    if (!session || !attackPhaseRef.current || attackPhaseRef.current.phase !== 'damage') return
+    const { attacker, target } = attackPhaseRef.current as { attacker: string; target: string }
+    try {
+      const result = await resolveDamageRoll(session.id, rolls, total)
+      const resultEntry: AttackResult = {
+        attacker, target, roll: 0, bonus: 0, total: 0, ac: 0,
+        hit: true, damage_rolls: result.damage_rolls, damage_total: result.damage_total,
+        attack_type: 'melee', is_pc: true,
+      }
+      setAttackLogSync(prev => [resultEntry, ...prev])
+      if (result.next_attack) {
+        setAttackPhaseSync({ phase: 'to_hit', ...result.next_attack })
+      } else if (result.queue_remaining === 0) {
+        setAttackPhaseSync(null)
+        await doResumeCombat(session.id)
+      }
+    } catch (e) {
+      setError(String(e))
     }
   }
 
@@ -157,6 +245,8 @@ export default function App() {
     setMessages([])
     setCombatState(null)
     setPendingRoll(null)
+    setAttackPhaseSync(null)
+    setAttackLogSync(() => [])
     setDiceKey(k => k + 1)
   }
 
@@ -219,6 +309,8 @@ export default function App() {
       setMessages([])
       setCombatState(null)
       setPendingRoll(null)
+      setAttackPhaseSync(null)
+      setAttackLogSync(() => [])
       setDiceKey(k => k + 1)
     }
   }
@@ -332,6 +424,10 @@ export default function App() {
           sessionId={session?.id ?? null}
           pendingRoll={pendingRoll}
           activeSpeaker={activeCharacter ? characterMap[activeCharacter] : null}
+          attackPhase={attackPhase}
+          attackLog={attackLog}
+          onAttackRoll={handleAttackRoll}
+          onDamageRoll={handleDamageRoll}
           onRoll={async (expr: string, rolls: number[], total: number) => {
             const speaker = activeCharacter ? characterMap[activeCharacter] : null
             const speakerName = speaker?.name ?? null

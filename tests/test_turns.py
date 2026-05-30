@@ -154,6 +154,67 @@ def test_section_format_ok_none_when_error_before_content(booted_session):
     assert captured[0]["section_format_ok"] is None
 
 
+# ── Inline %%ROLL%% block (single-line bracket format) ───────────────────────
+
+def test_inline_roll_block_sets_pending_roll(booted_session):
+    """LLM writes [ skill: X  dc: N  success: ...  failure: ... ] on one line.
+
+    _BRACKET_BLOCK_RE requires [ on its own line, so _parse_bracket_blocks
+    returns nothing.  The inline fallback regex must catch it and set pending_roll.
+    """
+    import api.session_manager as sm
+
+    client, session_id = booted_session
+    tokens = [
+        "%%NARRATIVE%%\n\n",
+        "Ani scans the crowd.\n\n",
+        "%%ROLL%%\n",
+        "[ skill: Perception  dc: 15"
+        "  success: You spot three goblins crouching in the alley."
+        "  failure: Nothing resolves into a clear threat. ]",
+    ]
+    mock_resp = make_stream_response(tokens)
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        resp = _send(client, session_id, "Ani scans the square.")
+
+    events = parse_sse(resp)
+    roll_events = [e for e in events if e["type"] == "roll_request"]
+    assert len(roll_events) == 1
+    assert roll_events[0]["skill"] == "Perception"
+    assert roll_events[0]["dc"] == 15
+
+    session = sm._sessions[session_id]
+    assert session.pending_roll is not None
+    assert session.pending_roll["skill"] == "Perception"
+    assert session.pending_roll["dc"] == 15
+    assert "goblins" in session.pending_roll["success"]
+    assert "clear threat" in session.pending_roll["failure"]
+
+
+def test_multiline_roll_block_still_works(booted_session):
+    """Multi-line bracket format (existing behavior) must not regress."""
+    import api.session_manager as sm
+
+    client, session_id = booted_session
+    tokens = [
+        "%%NARRATIVE%%\n\nVanx eyes the lock.\n\n",
+        "%%ROLL%%\n",
+        "[\nskill: Disable Device\ndc: 20\n",
+        "success: The lock clicks open.\n",
+        "failure: The pick snaps.\n]",
+    ]
+    mock_resp = make_stream_response(tokens)
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        resp = _send(client, session_id, "Vanx tries to pick the lock.")
+
+    events = parse_sse(resp)
+    roll_events = [e for e in events if e["type"] == "roll_request"]
+    assert len(roll_events) == 1
+    assert roll_events[0]["skill"] == "Disable Device"
+    assert roll_events[0]["dc"] == 20
+
 def test_section_format_ok_recognises_all_marker_types(booted_session):
     client, session_id = booted_session
 

@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_roll, save_session, stream_boot, stream_end_session, stream_turn
+from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, stream_boot, stream_end_session, stream_resume_combat, stream_turn
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -153,6 +153,54 @@ def post_resolve_roll(session_id: str, req: ResolveRollRequest):
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return result
+
+
+class ResolveAttackRollRequest(BaseModel):
+    rolled: int
+
+
+class ResolveDamageRollRequest(BaseModel):
+    rolls: list[int]
+    total: int
+
+
+@app.post("/api/sessions/{session_id}/resolve_attack_roll")
+def post_resolve_attack_roll(session_id: str, req: ResolveAttackRollRequest):
+    """Process a player's to-hit roll for the first queued PC attack."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.attack_queue:
+        raise HTTPException(status_code=409, detail="No pending attack roll")
+    try:
+        return resolve_attack_roll(session, req.rolled)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.post("/api/sessions/{session_id}/resolve_damage_roll")
+def post_resolve_damage_roll(session_id: str, req: ResolveDamageRollRequest):
+    """Process a player's damage roll for the current hit PC attack."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.attack_queue or not session.attack_queue[0].hit:
+        raise HTTPException(status_code=409, detail="No pending damage roll")
+    try:
+        return resolve_damage_roll(session, req.rolls, req.total)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.post("/api/sessions/{session_id}/resume_combat")
+def post_resume_combat(session_id: str):
+    """Inject resolved attack results into history and call LLM to narrate outcomes."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.attack_queue:
+        raise HTTPException(status_code=409, detail="Attack queue not empty — resolve all PC attacks first")
+    return StreamingResponse(stream_resume_combat(session), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 @app.delete("/api/sessions/{session_id}/combat")

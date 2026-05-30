@@ -14,18 +14,14 @@ _REAL_OUTPUTS = Path(__file__).resolve().parent.parent / "outputs"
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_outputs():
-    """Remove api_log files and session logs written to the real outputs/ directory.
+    """Safety-net fixture — kept as a no-op.
 
-    Runs once after the full test session.  Acts as a safety net — the client
-    fixture redirects writes to tmp_path, so normally nothing lands here.
+    The client fixture redirects all writes to tmp_path so the real
+    outputs/ directory is never touched during test runs.  Real api_log
+    and session log files are intentionally preserved for post-run
+    inspection; this fixture no longer deletes them.
     """
     yield
-    api_log_dir = _REAL_OUTPUTS / "api_log"
-    if api_log_dir.exists():
-        for f in api_log_dir.glob("*.json"):
-            f.unlink(missing_ok=True)
-    for f in _REAL_OUTPUTS.glob("*.log.md"):
-        f.unlink(missing_ok=True)
 
 
 # ── SSE helper ────────────────────────────────────────────────────────────────
