@@ -2333,3 +2333,182 @@ body {
   max-height: 58vh;
   overflow-y: auto;
 }
+
+/* ─── Token Benchmark Panel ──────────────────────────────────────────────── */
+
+.bm-overlay {
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.bm-panel {
+  position: relative;
+  background: #140d0d;
+  border-left: 2px solid #3a1a0a;
+  border-right: 2px solid #3a1a0a;
+  width: min(1100px, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 24px 28px 32px;
+  border-radius: 4px;
+  margin-top: 4vh;
+}
+
+.bm-title {
+  font-size: 1rem;
+  color: var(--header-gold);
+  font-family: 'Cinzel', serif;
+  margin: 0 0 4px;
+}
+
+.bm-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0 0 18px;
+}
+
+.bm-subtitle code {
+  font-size: 0.76rem;
+  background: #1a1010;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #c9a84c;
+}
+
+/* Table */
+.bm-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+
+.bm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.bm-table th {
+  text-align: left;
+  padding: 5px 10px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid #2a1a10;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.bm-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid #1a1008;
+  color: var(--text);
+}
+
+.bm-row:hover td {
+  background: #1e1008;
+}
+
+.bm-ts {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.bm-model {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.bm-session {
+  font-size: 0.7rem;
+  font-family: monospace;
+  color: #a09060;
+}
+
+.bm-turn-cell {
+  text-align: center;
+  font-weight: bold;
+  color: var(--header-gold);
+}
+
+.bm-num {
+  text-align: right;
+  font-family: monospace;
+  font-size: 0.82rem;
+}
+
+.bm-total {
+  color: #c06060;
+  font-weight: bold;
+}
+
+.bm-log-link {
+  font-size: 0.72rem;
+  color: #6080c0;
+  text-decoration: none;
+}
+
+.bm-log-link:hover {
+  text-decoration: underline;
+}
+
+.bm-log-none {
+  color: var(--text-muted);
+}
+
+/* Charts */
+.bm-charts {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bm-chart {
+  flex: 1;
+  min-width: 280px;
+  background: #0e0909;
+  border: 1px solid #2a1a10;
+  border-radius: 6px;
+  padding: 12px 12px 8px;
+}
+
+.bm-chart-title {
+  font-size: 0.75rem;
+  color: var(--header-gold);
+  margin-bottom: 8px;
+  font-family: 'Cinzel', serif;
+}
+
+.bm-chart-no-data {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 24px 0;
+  text-align: center;
+}
+
+.bm-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.bm-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.bm-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.bm-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

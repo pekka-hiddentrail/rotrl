@@ -7,6 +7,7 @@ import InputBar from './components/InputBar'
 import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
 import ApiLogPanel from './components/ApiLogPanel'
+import TokenBenchmarks from './components/TokenBenchmarks'
 import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
@@ -58,6 +59,7 @@ export default function App() {
   const [combatState, setCombatState] = useState<CombatState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
+  const [showBenchmarks, setShowBenchmarks] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
@@ -276,6 +278,7 @@ export default function App() {
         onKillEnd={handleKillEnd}
         onViewLog={handleViewLog}
         onOpenApiLogs={() => setShowApiLogs(true)}
+        onOpenBenchmarks={() => setShowBenchmarks(true)}
         onPurgeNpcs={handlePurgeNpcs}
       />
 
@@ -370,6 +373,10 @@ export default function App() {
 
       {showApiLogs && (
         <ApiLogPanel onClose={() => setShowApiLogs(false)} />
+      )}
+
+      {showBenchmarks && (
+        <TokenBenchmarks onClose={() => setShowBenchmarks(false)} />
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />

@@ -44,6 +44,7 @@ interface Props {
   onKillEnd: () => void
   onViewLog: () => void
   onOpenApiLogs: () => void
+  onOpenBenchmarks: () => void
   onPurgeNpcs: () => void
 }
 
@@ -60,7 +61,7 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 
 export default function Header({
   session, streaming, ending, sessionNumber, model, devMode, provider, rateLimits,
-  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onPurgeNpcs,
+  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onOpenBenchmarks, onPurgeNpcs,
 }: Props) {
   const [confirmingPurge, setConfirmingPurge] = useState(false)
   const [confirmingKill, setConfirmingKill] = useState(false)
@@ -157,6 +158,9 @@ export default function Header({
                 Purge NPCs
               </button>
             )}
+            <button onClick={onOpenBenchmarks} className="btn btn-secondary" title="View token benchmark trends">
+              Benchmarks
+            </button>
             <button onClick={onBoot} disabled={locked} className="btn btn-primary">
               {streaming ? 'Booting…' : 'Boot Session'}
             </button>
@@ -195,6 +199,9 @@ export default function Header({
             </button>
             <button onClick={onOpenApiLogs} disabled={ending} className="btn btn-secondary">
               API Logs
+            </button>
+            <button onClick={onOpenBenchmarks} disabled={ending} className="btn btn-secondary" title="View token benchmark trends">
+              Benchmarks
             </button>
             {ending ? (
               <>
