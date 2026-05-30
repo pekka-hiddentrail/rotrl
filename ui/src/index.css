@@ -368,6 +368,22 @@ body {
   overflow: hidden;
 }
 
+/* Non-combat: sidebar(1) | chat(2) | dice(3) */
+.char-sidebar  { order: 1; }
+.chat-area     { order: 2; }
+.dice-panel    { order: 3; }
+.combat-panel  { display: none; order: 4; }
+
+/* Combat active: sidebar(1) | dice(2) | chat(3) | combat(4)
+   Dice moves left (border swaps sides); combat panel appears right. */
+.main-content.combat-active .dice-panel {
+  order: 2;
+  border-left: none;
+  border-right: 1px solid #2a1818;
+}
+.main-content.combat-active .chat-area  { order: 3; }
+.main-content.combat-active .combat-panel { display: flex; order: 4; }
+
 /* ── Character Sidebar ───────────────────── */
 
 .char-sidebar {
@@ -587,6 +603,54 @@ body {
   background: var(--surface-2);
   padding: 2px 6px;
   border-radius: 3px;
+}
+
+.splash-party {
+  display: flex;
+  gap: 36px;
+  justify-content: center;
+  margin: 4px 0;
+}
+
+.splash-char {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.splash-char-avatar {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+
+.splash-char-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.splash-char-avatar span {
+  font-size: 40px;
+  font-family: serif;
+}
+
+.splash-char-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.splash-char-info {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* ── Chat window ─────────────────────────── */
@@ -1728,4 +1792,157 @@ body {
   color: #887060;
   border: 1px solid #504030;
   font-style: italic;
+}
+
+/* ── Combat Panel ────────────────────────── */
+
+.combat-panel {
+  width: 220px;
+  flex-shrink: 0;
+  background: #110c0c;
+  border-left: 1px solid #7a1515;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 10px 8px 12px;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.combat-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #3a1818;
+  margin-bottom: 4px;
+}
+
+.combat-panel-title {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #c9a84c;
+}
+
+.combat-round-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  color: #9a7070;
+  background: #1e1010;
+  border: 1px solid #3a2020;
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+.combat-initiative-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.combatant-row {
+  background: #1a1010;
+  border: 1px solid #2a1818;
+  border-radius: 5px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.2s;
+}
+
+.combatant-current {
+  border-color: #c9a84c;
+  box-shadow: 0 0 8px #c9a84c18;
+}
+
+.combatant-inactive {
+  opacity: 0.5;
+}
+
+.combatant-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.combatant-name {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.combatant-meta {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.combatant-init,
+.combatant-ac {
+  font-size: 10px;
+  color: #9a8070;
+}
+
+.combatant-hp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-badge {
+  font-size: 9px;
+  font-family: 'Cinzel', serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.status-unconscious { background: #3a1010; color: #c04040; border: 1px solid #602020; }
+.status-fled        { background: #1a2010; color: #708040; border: 1px solid #304010; }
+.status-dead        { background: #1a1010; color: #605050; border: 1px solid #302020; }
+
+.combat-end-btn {
+  margin-top: 8px;
+  width: 100%;
+  font-size: 11px;
+}
+
+/* ── HP Bar ──────────────────────────────── */
+
+.hp-bar-track {
+  position: relative;
+  height: 14px;
+  background: #1a0f0f;
+  border: 1px solid #2a1818;
+  border-radius: 3px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.hp-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease, background 0.4s ease;
+  border-radius: 2px;
+}
+
+.hp-bar-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #e4ddd0cc;
+  pointer-events: none;
+  font-family: 'Georgia', serif;
 }

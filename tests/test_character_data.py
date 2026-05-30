@@ -1,5 +1,6 @@
 """
-Smoke tests for UI character JSON data (ui/public/data/).
+Smoke tests for UI character JSON data (ui/public/data/) and the
+GET /api/characters endpoint that serves it.
 
 Validates that:
   - characters.json is valid JSON and lists known player IDs
@@ -7,6 +8,7 @@ Validates that:
   - each player file contains all fields the CharacterData TypeScript type requires
   - numeric fields are sane (level >= 1, hp.max > 0, etc.)
   - no broken cross-references within a file
+  - /api/characters returns all characters as a JSON array
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "ui" / "public" / "data"
 
@@ -24,6 +27,9 @@ REQUIRED_STRING_FIELDS = [
     "alignment", "deity", "appearance",
     "initiative", "speed", "bab",
 ]
+
+# Fields that must exist and be strings, but may be empty (e.g. no subrace)
+OPTIONAL_STRING_FIELDS = ["subrace"]
 
 # Required top-level object/array fields
 REQUIRED_OBJECT_FIELDS = [
@@ -99,6 +105,15 @@ def test_required_object_field_present(all_characters, field):
     for char in all_characters:
         assert field in char, \
             f"Character '{char.get('id', '?')}' missing field '{field}'"
+
+
+@pytest.mark.parametrize("field", OPTIONAL_STRING_FIELDS)
+def test_optional_string_field_present_and_is_string(all_characters, field):
+    for char in all_characters:
+        assert field in char, \
+            f"Character '{char.get('id', '?')}' missing field '{field}'"
+        assert isinstance(char[field], str), \
+            f"'{field}' in '{char.get('id')}' must be a string"
 
 
 # ── id consistency ────────────────────────────────────────────────────────────
@@ -194,3 +209,48 @@ def test_spells_has_concentration_and_list(all_characters):
         assert "list" in spells, f"spells.list missing in '{char['id']}'"
         assert isinstance(spells["list"], list), \
             f"spells.list must be an array in '{char['id']}'"
+
+
+# ── GET /api/characters endpoint ──────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def api_client():
+    from api.main import app
+    with TestClient(app) as c:
+        yield c
+
+
+def test_api_characters_returns_200(api_client):
+    resp = api_client.get("/api/characters")
+    assert resp.status_code == 200
+
+
+def test_api_characters_returns_list(api_client):
+    resp = api_client.get("/api/characters")
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+
+
+def test_api_characters_ids_match_index(api_client, character_ids):
+    resp = api_client.get("/api/characters")
+    returned_ids = [c["id"] for c in resp.json()]
+    assert returned_ids == character_ids
+
+
+def test_api_characters_each_has_required_fields(api_client):
+    resp = api_client.get("/api/characters")
+    for char in resp.json():
+        for field in REQUIRED_STRING_FIELDS:
+            assert field in char, f"API response for '{char.get('id')}' missing '{field}'"
+        for field in REQUIRED_OBJECT_FIELDS:
+            assert field in char, f"API response for '{char.get('id')}' missing '{field}'"
+
+
+def test_api_characters_missing_index_returns_404(monkeypatch, tmp_path):
+    import api.main as main_mod
+    monkeypatch.setattr(main_mod, "_REPO_ROOT", tmp_path)
+    from api.main import app
+    with TestClient(app) as c:
+        resp = c.get("/api/characters")
+    assert resp.status_code == 404

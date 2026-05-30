@@ -298,6 +298,117 @@ def _extract_knowledge_items(body: str) -> list[str]:
     return items
 
 
+def _parse_combatant_line(line: str) -> Optional["Combatant"]:
+    """Parse a single combatant row from a %%COMBAT%% block.
+
+    Expected format (middle-dot separated fields):
+        - name: Shalelu · hp: 18/24 · ac: 17 · init: 14 · status: active
+    All fields except name are optional and fall back to safe defaults.
+    """
+    line = re.sub(r'^\s*[-•]\s*', '', line)
+    parts = re.split(r'\s*[·•]\s*', line)
+    fields: dict[str, str] = {}
+    for part in parts:
+        if ':' in part:
+            key, _, val = part.partition(':')
+            fields[key.strip().lower()] = val.strip()
+
+    name = fields.get('name', '').strip()
+    if not name:
+        return None
+
+    hp_raw = fields.get('hp', '0/0')
+    hp_parts = hp_raw.split('/')
+    try:
+        hp_current = int(hp_parts[0].strip())
+        hp_max = int(hp_parts[1].strip()) if len(hp_parts) > 1 else hp_current
+    except (ValueError, IndexError):
+        hp_current, hp_max = 0, 0
+
+    try:
+        ac = int(fields.get('ac', '10'))
+    except ValueError:
+        ac = 10
+
+    try:
+        initiative = int(fields.get('init', '0'))
+    except ValueError:
+        initiative = 0
+
+    status = fields.get('status', 'active').lower().strip()
+    return Combatant(
+        name=name,
+        hp_current=hp_current,
+        hp_max=hp_max,
+        ac=ac,
+        initiative=initiative,
+        status=status,
+    )
+
+
+def _parse_combat_block(text: str) -> Optional[CombatState]:
+    """Parse the body of a %%COMBAT%% section into a CombatState.
+
+    Return values:
+    - ``CombatState(round=0, combatants=[])`` — LLM wrote ``round: 0``; caller should
+      clear ``session.combat_state``.  This is the *intentional clear signal*.
+    - ``None`` — block is empty/None, or ``round`` was missing/0 with no combatants
+      parsed (i.e. a formatting error).  Caller should **not** change existing state.
+    - ``CombatState(round≥1, combatants=[...])`` — valid update; caller should store it.
+
+    The distinction between "intentional clear" and "parse failure" prevents a single
+    malformed turn from silently wiping live combat state.
+    """
+    if not text:
+        return None
+
+    round_num = 0
+    found_round = False
+    combatants: list[Combatant] = []
+
+    for line in text.splitlines():
+        round_m = re.match(r'^\s*round\s*:\s*(\d+)', line, re.IGNORECASE)
+        if round_m:
+            round_num = int(round_m.group(1))
+            found_round = True
+            continue
+        if re.match(r'^\s*[-•]\s*name:', line, re.IGNORECASE):
+            c = _parse_combatant_line(line)
+            if c is not None:
+                combatants.append(c)
+
+    # Intentional clear: LLM explicitly wrote round: 0
+    if found_round and round_num == 0:
+        return CombatState(round=0, combatants=[])
+
+    # Parse failure: no valid round found, or round > 0 but all combatant rows
+    # were malformed — do not disturb existing combat state.
+    if not found_round or not combatants:
+        return None
+
+    return CombatState(round=round_num, combatants=combatants)
+
+
+def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
+    """Convert a CombatState to a JSON-serialisable dict, or None."""
+    if state is None:
+        return None
+    return {
+        "round": state.round,
+        "combatants": [
+            {
+                "name": c.name,
+                "hp_current": c.hp_current,
+                "hp_max": c.hp_max,
+                "ac": c.ac,
+                "initiative": c.initiative,
+                "status": c.status,
+            }
+            for c in state.combatants
+        ],
+    }
+
+
 def _parse_response_sections(text: str) -> dict[str, str]:
     """Split a section-formatted LLM response into named sections.
 
@@ -399,6 +510,12 @@ def _write_npc_delta(fields: dict, session: GameSession) -> None:
         _log(session, f"\n> *[Knowledge written: {npc_name} ({len(k_items)} item(s))]*\n")
 
 
+# Matches a %%COMBAT%% block in the old flat-block format (fallback path).
+_COMBAT_BLOCK_RE = re.compile(
+    r'^%%COMBAT%%[ \t]*\n(.*?)(?=^%%|\Z)',
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+
 _ROLL_BLOCK_RE = re.compile(
     r'\s*%%ROLL%%\s*\n'
     r'(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n'
@@ -415,12 +532,34 @@ _ROLL_BLOCK_RE = re.compile(
 
 
 @dataclass
-@dataclass
 class ActiveEvent:
     """An event currently injecting content into the system prompt."""
     event_id: str
     content: str
     turns_remaining: int
+
+
+@dataclass
+class Combatant:
+    """A single combatant in the active combat tracker."""
+    name: str
+    hp_current: int
+    hp_max: int
+    ac: int
+    initiative: int
+    status: str = "active"  # "active" | "unconscious" | "fled" | "dead"
+
+    def __post_init__(self) -> None:
+        self.hp_current = max(0, min(self.hp_current, self.hp_max))
+        if self.status not in ("active", "unconscious", "fled", "dead"):
+            self.status = "active"
+
+
+@dataclass
+class CombatState:
+    """Current combat round and combatant list."""
+    round: int
+    combatants: list  # list[Combatant]
 
 
 @dataclass
@@ -449,6 +588,9 @@ class GameSession:
     scene_locations: list = field(default_factory=list)
     # Events currently active — each has content injected for turns_remaining turns.
     active_events: list = field(default_factory=list)  # list[ActiveEvent]
+    # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
+    # Cleared to None when round == 0 or all combatants are inactive.
+    combat_state: Optional[CombatState] = None
 
 
 _sessions: dict[str, GameSession] = {}
@@ -619,6 +761,21 @@ CORRECT:   %%EVENT%% goblin_attack_starts
 WRONG:     %%EVENT%%                              ← missing ID
 WRONG:     %%EVENT%%\n%%EVENT%% goblin_attack_starts  ← do NOT write twice
 WRONG:     %%EVENT%% goblin_attack_starts (Note: ...) ← no trailing text
+
+COMBAT TRACKER — write each turn when combat is in progress
+%%COMBAT%%
+round: <N>
+combatants:
+  - name: <Name> · hp: <current>/<max> · ac: <AC> · init: <initiative> · status: <active|unconscious|fled|dead>
+  [one row per combatant, sorted by initiative descending]
+
+Rules:
+- Start on the first turn combat begins (round 1). Increment round each time ALL combatants have acted.
+- Write round: 0 on the turn combat ends (enemies fled, surrendered, or all down). This clears the panel.
+- Omit %%COMBAT%% entirely when not in combat.
+- Update hp values each turn to reflect damage taken this turn.
+- Valid statuses: active (can act), unconscious (down, dying), fled (escaped), dead (destroyed).
+- List ALL combatants every turn — do not drop resolved ones until combat ends.
 
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
@@ -1024,8 +1181,8 @@ def _stream_with_narrative_filter(
         return
 
     _NARRATIVE_START = "%%NARRATIVE%%\n"
-    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%")
-    _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%")
+    _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14; also covers "%%COMBAT%%\n" = 12
 
     buf           = ""      # not-yet-emitted accumulation
     in_narrative  = False
@@ -1227,6 +1384,18 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         )
         _log(session, f"\n> *[Delta reminder injected for scene NPCs: {_npc_list}]*\n")
 
+    # ── Ongoing combat reminder ────────────────────────────────────────────────
+    # Injected unconditionally when combat is live so the model keeps writing
+    # %%COMBAT%% blocks even after the triggering event has expired.
+    if session.combat_state is not None and session.combat_state.round > 0:
+        system_content += (
+            f"\n\n---\n[COMBAT ONGOING — round {session.combat_state.round}]\n"
+            "You MUST include a `%%COMBAT%%` block this turn. "
+            "Increment round when all combatants have acted. "
+            "Update HP values to reflect damage taken this turn."
+        )
+        _log(session, f"\n> *[Combat reminder injected: round {session.combat_state.round}]*\n")
+
     context_info: dict = {
         "npc":           npc_match.canonical_name    if npc_match else None,
         "npc_trigger":   npc_match.matched_alias     if npc_match else None,
@@ -1422,6 +1591,22 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # ── %%COMBAT%% ────────────────────────────────────────────────────────
+        _combat_section = _sections.get("COMBAT", "")
+        if _combat_section:
+            try:
+                _combat_result = _parse_combat_block(_combat_section)
+                if _combat_result is not None:
+                    if _combat_result.round == 0:          # intentional clear signal
+                        session.combat_state = None
+                        _log(session, "\n> *[Combat state updated: cleared]*\n")
+                    else:                                   # valid update
+                        session.combat_state = _combat_result
+                        _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
+                # None → parse failure; leave session.combat_state unchanged
+            except Exception as _e:
+                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
+
     else:
         # ── Fallback: old flat-block format ───────────────────────────────────
         display_text = response_text
@@ -1480,6 +1665,21 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
+        # %%COMBAT%% (flat-block fallback path)
+        _combat_m = _COMBAT_BLOCK_RE.search(response_text)
+        if _combat_m:
+            try:
+                _combat_result = _parse_combat_block(_combat_m.group(1))
+                if _combat_result is not None:
+                    if _combat_result.round == 0:
+                        session.combat_state = None
+                        _log(session, "\n> *[Combat state updated (flat): cleared]*\n")
+                    else:
+                        session.combat_state = _combat_result
+                        _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
+
     # ── Single patch_last if anything was stripped ────────────────────────────
     # Emitting one event after all stripping avoids the UI briefly flashing
     # intermediate states (e.g. showing delta markup while the roll block is gone).
@@ -1492,6 +1692,9 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     # Roll request comes after the clean text is in place
     if roll_data:
         yield f"data: {json.dumps({'type': 'roll_request', **roll_data})}\n\n"
+
+    # Combat state — always emitted (null when no combat) so UI can show/hide panel.
+    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
 
     session.messages.append({"role": "assistant", "content": history_text})
     _log(session, f"\n### [{_ts()}] GM")

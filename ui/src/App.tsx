@@ -1,14 +1,40 @@
 import { useState, useCallback, useRef } from 'react'
-import type { Message, SessionInfo } from './types'
+import type { Message, SessionInfo, CombatState } from './types'
+import type { CharacterData } from './data/characters'
 import Header from './components/Header'
 import ChatWindow from './components/ChatWindow'
 import InputBar from './components/InputBar'
 import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
 import DicePanel from './components/DicePanel'
+import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
-import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs } from './api'
+import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat } from './api'
+
+function SplashPortrait({ c }: { c: CharacterData }) {
+  const [imgOk, setImgOk] = useState(true)
+  return (
+    <div className="splash-char">
+      <div className="splash-char-avatar" style={{ borderColor: c.color }}>
+        {imgOk
+          ? <img src={c.portrait} alt={c.name} onError={() => setImgOk(false)} />
+          : <span style={{ color: c.color }}>{c.rune}</span>
+        }
+      </div>
+      <div className="splash-char-name" style={{ color: c.color }}>{c.name}</div>
+      <div className="splash-char-info">{c.race} {c.class}</div>
+    </div>
+  )
+}
+
+function providerHint(provider: 'groq' | 'anthropic' | 'ollama'): JSX.Element {
+  if (provider === 'groq')
+    return <>Using Groq — make sure <code>GROQ_API_KEY</code> is set in <code>.env</code></>
+  if (provider === 'anthropic')
+    return <>Using Anthropic — make sure <code>ANTHROPIC_API_KEY</code> is set in <code>.env</code></>
+  return <>Using Ollama — make sure <code>ollama serve</code> is running locally</>
+}
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null)
@@ -27,6 +53,7 @@ export default function App() {
   const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
   const [diceKey, setDiceKey] = useState(0)
   const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
+  const [combatState, setCombatState] = useState<CombatState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const endAbortRef = useRef<AbortController | null>(null)
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
@@ -97,6 +124,7 @@ export default function App() {
         }
         if (event.type === 'roll_request') setPendingRoll(event)
         if (event.type === 'rate_limits') setRateLimits(event)
+        if (event.type === 'combat_update') setCombatState(event.combat_state)
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
@@ -112,6 +140,17 @@ export default function App() {
     setEnding(false)
     setSession(null)
     setMessages([])
+    setCombatState(null)
+  }
+
+  const handleEndCombat = async () => {
+    if (!session) { setCombatState(null); return }
+    try {
+      await endCombat(session.id)
+      setCombatState(null)
+    } catch {
+      setCombatState(null) // clear locally even if request fails
+    }
   }
 
   const handleEnd = async () => {
@@ -153,6 +192,7 @@ export default function App() {
       setEnding(false)
       setSession(null)
       setMessages([])
+      setCombatState(null)
     }
   }
 
@@ -214,7 +254,7 @@ export default function App() {
       {error && <div className="error-bar">{error}</div>}
       {charsError && <div className="error-bar">Character data: {charsError}</div>}
 
-      <div className="main-content">
+      <div className={`main-content${combatState ? ' combat-active' : ''}`}>
         <CharacterSidebar
           characters={characters}
           loading={charsLoading}
@@ -228,8 +268,13 @@ export default function App() {
             <div className="splash">
               <div className="splash-runes" aria-hidden="true">ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ ᛇ ᛈ ᛉ ᛊ</div>
               <div className="splash-title">Rise of the Runelords</div>
+              {characters.length > 0 && (
+                <div className="splash-party">
+                  {characters.map(c => <SplashPortrait key={c.id} c={c} />)}
+                </div>
+              )}
               <div className="splash-sub">Configure your session above and click Boot Session</div>
-              <div className="splash-hint">Using Groq — make sure <code>GROQ_API_KEY</code> is set in <code>.env</code></div>
+              <div className="splash-hint">{providerHint(provider)}</div>
             </div>
           )}
 
@@ -245,6 +290,14 @@ export default function App() {
             />
           )}
         </div>
+
+        {combatState && (
+          <CombatPanel
+            combatState={combatState}
+            disabled={streaming || ending}
+            onEndCombat={handleEndCombat}
+          />
+        )}
 
         <DicePanel
           key={diceKey}

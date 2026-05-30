@@ -20,24 +20,25 @@ Character data is loaded from static JSON files served by Vite. The sidebar show
 ## Background
 
 - Given the UI is loaded
-- And character JSON files exist at `/data/{id}.json`
+- And character JSON files exist in `ui/public/data/`
 
 ---
 
 ## Acceptance Criteria
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-001 — Characters are loaded from static JSON on startup
+### AC-001 — Characters are loaded from the API on startup
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 **Scenario:** UI initialises
 
 ```gherkin
-Given /data/characters.json contains ["harsk", "seoni"]
+Given character JSON files exist in ui/public/data/
 When  the UI loads
-Then  GET /data/characters.json is fetched to get the list of character IDs
-And   GET /data/harsk.json and GET /data/seoni.json are fetched in parallel
-And   both characters appear in the sidebar once loaded
+Then  GET /api/characters is fetched (served by the FastAPI backend)
+And   the response is a JSON array containing all character data objects
+And   all characters appear in the sidebar once loaded
+And   if the fetch fails an error bar shows "Character data: <reason>"
 ```
 
 ---
@@ -236,9 +237,10 @@ And   the badge disappears
 ## Notes
 
 - See: [INDEX.md §13 — Frontend: Character System](INDEX.md)
-- Character data schema fields: identity · vitals · abilities · saves · skills · feats · weapons · spells · inventory
+- Character data schema fields: identity (`id`, `name`, `race`, `subrace`, `class`, `archetype`, `alignment`, `deity`, `level`, `appearance`) · vitals (`hp`, `ac`, `initiative`, `speed`, `bab`) · abilities · saves · skills · feats · weapons · spells · inventory
 - `useCharacters` hook returns `{ characters, characterMap, loading, error }`
-- Character JSON files live in `ui/public/data/` and are served statically by Vite
+- Character JSON files live in `ui/public/data/` and are read by the FastAPI backend at `GET /api/characters`. Each request reads the files fresh — edits to JSON reflect on next page load without a frontend rebuild.
+- `race` holds the base race name only (e.g. `"Aasimar"`). Sub-race detail goes in `subrace` (e.g. `"Peri-Blooded (Emberkin)"`).
 - AC-007 through AC-011 implemented in: `App.tsx` (`activeSpeaker` = `activeCharacter` state, `sheetCharId` new state for sheet modal), `CharacterSidebar.tsx` (two-action menu + halo ring), `InputBar.tsx` (speaker badge)
 - Speaker tag format: `@<Name>: "<message>"` — prefix prepended in `handleSend` before adding to chat and before sending to backend; `lastInput` retains the raw (unprefixed) text for IntentBar display
 - `activeSpeakerId` prop on CharacterSidebar drives halo; `sheetCharId` drives the CharacterSheet modal — the two are independent states

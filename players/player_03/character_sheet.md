@@ -6,7 +6,7 @@
 **Current Level:** 1
 **XP:** 0
 
-**Race:** Peri-Blooded (Emberkin) Aasimar
+**Race / Subrace:** Aasimar / Peri-Blooded (Emberkin) 
 **Class / Archetype:** Warpriest / Sacred Fist
 **Alignment:** Neutral Good
 **Deity:** Irori

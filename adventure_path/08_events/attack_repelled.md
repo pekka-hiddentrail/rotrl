@@ -30,3 +30,6 @@ If the rescue beat fired during Wave 1, Aldern approaches now (if not already). 
 
 ### Level milestone
 PCs reach level 2 after this scene. Award at first natural rest.
+
+### REQUIRED — Combat tracker
+Combat is over. Write a `%%COMBAT%%` block with `round: 0` to clear the combat panel.

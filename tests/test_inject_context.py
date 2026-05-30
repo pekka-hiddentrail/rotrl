@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from api.session_manager import (
     GameSession,
+    CombatState,
+    Combatant,
     _inject_context,
     _DEV_MAX_HISTORY,
     _GROQ_MAX_HISTORY,
@@ -358,3 +360,67 @@ class TestContextInfoStructure:
         content, ctx = result
         assert isinstance(content, str)
         assert isinstance(ctx, dict)
+
+
+# ── Combat reminder ───────────────────────────────────────────────────────────
+
+def _goblin_combatant(name="Goblin Warrior", hp=5, ac=16, init=10):
+    return Combatant(name=name, hp_current=hp, hp_max=hp, ac=ac, initiative=init)
+
+
+class TestCombatReminder:
+    def test_combat_reminder_injected_when_round_positive(self):
+        session = _make_session(
+            messages=[{"role": "user", "content": "I swing at the goblin"}],
+            combat_state=CombatState(round=1, combatants=[_goblin_combatant()]),
+        )
+        content, _ = _call(session)
+        assert "[COMBAT ONGOING" in content
+        assert "%%COMBAT%%" in content
+
+    def test_combat_reminder_includes_correct_round_number(self):
+        session = _make_session(
+            messages=[{"role": "user", "content": "I attack again"}],
+            combat_state=CombatState(round=3, combatants=[_goblin_combatant()]),
+        )
+        content, _ = _call(session)
+        assert "round 3" in content
+
+    def test_no_combat_reminder_when_combat_state_is_none(self):
+        session = _make_session(
+            messages=[{"role": "user", "content": "We look around"}],
+            combat_state=None,
+        )
+        content, _ = _call(session)
+        assert "[COMBAT ONGOING" not in content
+
+    def test_no_combat_reminder_when_round_is_zero(self):
+        # round: 0 is the intentional clear signal — combat has just ended
+        session = _make_session(
+            messages=[{"role": "user", "content": "The last goblin falls"}],
+            combat_state=CombatState(round=0, combatants=[]),
+        )
+        content, _ = _call(session)
+        assert "[COMBAT ONGOING" not in content
+
+    def test_combat_reminder_present_without_other_context(self):
+        # No NPC / skill / location match — reminder still fires
+        session = _make_session(
+            messages=[{"role": "user", "content": "ok"}],
+            combat_state=CombatState(round=2, combatants=[_goblin_combatant()]),
+        )
+        content, _ = _call(session)
+        assert "[COMBAT ONGOING — round 2]" in content
+
+    def test_combat_reminder_appended_after_existing_directive(self):
+        # Reminder must appear even when another directive block is present
+        npc = _npc_match()
+        session = _make_session(
+            messages=[{"role": "user", "content": "I dodge and talk to Zantus"}],
+            combat_state=CombatState(round=1, combatants=[_goblin_combatant()]),
+        )
+        content, _ = _call(session, npc_idx=_npc_idx_with_match(npc))
+        assert "[GM DIRECTIVE FOR THIS TURN" in content
+        assert "[COMBAT ONGOING" in content
+        # Combat section must come AFTER the directive
+        assert content.index("[COMBAT ONGOING") > content.index("[GM DIRECTIVE FOR THIS TURN")

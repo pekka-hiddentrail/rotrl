@@ -9,6 +9,7 @@ export type SseEvent =
   | { type: 'patch_last'; content: string }
   | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string }
   | { type: 'rate_limits'; rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string }
+  | { type: 'combat_update'; combat_state: import('./types').CombatState | null }
 
 export async function* bootSession(
   sessionNumber: number,
@@ -74,6 +75,11 @@ export async function purgeSessionNpcs(): Promise<{ purged: number }> {
   const res = await fetch(`${BASE}/npcs/session`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`Purge session NPCs failed (${res.status})`)
   return res.json()
+}
+
+export async function endCombat(sessionId: string): Promise<void> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/combat`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`End combat failed (${res.status})`)
 }
 
 export async function logRoll(

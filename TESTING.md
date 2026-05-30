@@ -1,6 +1,6 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (450 pytest + 88 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (487 pytest + 93 Vitest) cannot reach: real LLM behaviour, streaming feel in a live browser, on-disk side effects, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 
@@ -240,9 +240,40 @@ Open each `base.md` in `adventure_path/07_locations/` and verify it meets the fo
 
 ## 5. Character Sidebar and Sheet
 
-**What automated tests cover:** sidebar action menu open/close, Set Active / Clear Active, Open Sheet callbacks, halo class, loading state.
+**What automated tests cover:** `GET /api/characters` returns 200, list, correct IDs, all required fields, 404 when index missing; sidebar action menu open/close, Set Active / Clear Active, Open Sheet callbacks, halo class, loading state; JSON files for all three player characters pass full field-presence and sanity checks.
 
 **Chains to run:**
+
+**Chain E — characters load before boot**
+1. Start the full stack (`python dev.py --skip-tests`).
+2. Open `http://localhost:5173` without clicking Boot Session.
+3. ✔ All three character portraits appear in the left sidebar immediately.
+4. ✔ No "Character data:" error bar appears at the top of the page.
+5. ✔ Each character's name label is visible below their avatar.
+6. ✔ HP bars are visible and coloured (green at full HP).
+
+**Chain F — API unavailable at page load**
+1. Start only Vite (leave the Python API stopped): `cd ui && npm run dev`.
+2. Open `http://localhost:5173`.
+3. ✔ A "Character data: TypeError: Failed to fetch" (or similar) error bar appears — sidebar shows only the "Party" label.
+4. Start the API (`python -m uvicorn api.main:app --port 8000`).
+5. Refresh the browser.
+6. ✔ Characters load correctly; error bar is gone.
+
+**Chain G — live JSON edit reflects on refresh**
+1. Open `ui/public/data/player_01.json`, set `hp.current` to `2`, save.
+2. Refresh the browser — **no rebuild needed** (the API reads files on every request).
+3. ✔ That character's HP bar in the sidebar is red (< 33%).
+4. Open the character sheet for that character.
+5. ✔ HP shows `2 / <max>` (the live value).
+6. Restore the original `hp.current` value and refresh again to confirm it goes back to green.
+
+**Chain H — malformed character JSON**
+1. Open `ui/public/data/player_02.json`, break the JSON (e.g. add a stray comma), save.
+2. Refresh the browser.
+3. ✔ A "Character data: HTTP 500" (or similar) error bar appears — sidebar is empty.
+4. Restore the file and refresh.
+5. ✔ All characters load; error bar gone.
 
 **Chain A — sheet completeness**
 1. Click a character avatar → click Open Sheet.
@@ -505,3 +536,48 @@ http://localhost:8000/api/log/api/../../api/session_manager.py
 ```
 
 - ✔ Server returns 400 or 404, not the contents of `session_manager.py`.
+
+---
+
+## 12. Combat Tracker
+
+**Chain A — panel appears on first combat turn**
+1. Boot a session and play to a point where combat would start (or just narrate: "Goblins attack!").
+2. In the GM response, the LLM should write a `%%COMBAT%%` block.
+3. ✔ The CombatPanel appears in the **right column** (below the header) after the turn completes.
+4. ✔ DicePanel has moved to the **left column** (below CharacterSidebar), no longer in the right.
+5. ✔ `.main-content` has the `combat-active` CSS class (check DevTools → Elements).
+6. ✔ Combatants are listed highest-initiative-first.
+7. ✔ The first combatant (highest init) has a gold glow (`combatant-current` class).
+
+**Chain B — HP bar colours**
+1. With a live CombatPanel, inspect the HP bars:
+2. ✔ A combatant at > 66% HP shows a **green** fill.
+3. ✔ A combatant at 33–66% HP shows an **amber** fill.
+4. ✔ A combatant below 33% HP shows a **red** fill.
+5. ✔ A combatant at 0 HP shows a **dark grey** fill.
+6. ✔ Inactive combatants (unconscious / fled / dead) are dimmed (`combatant-inactive` class) and show a coloured status badge.
+
+**Chain C — round: 0 clears the panel**
+1. Play through a combat until the encounter ends.
+2. The LLM should write `round: 0` in the `%%COMBAT%%` block to signal the end.
+3. ✔ CombatPanel disappears immediately after the turn completes.
+4. ✔ DicePanel returns to the **right column**.
+5. ✔ `.main-content` no longer has `combat-active`.
+
+**Chain D — End Combat button**
+1. With CombatPanel visible, click **End Combat**.
+2. ✔ `DELETE /api/sessions/{id}/combat` fires (visible in Network tab).
+3. ✔ CombatPanel disappears immediately.
+4. ✔ DicePanel returns to the right column.
+5. ✔ Subsequent turns proceed normally; the next `%%COMBAT%%` block can re-open combat.
+
+**Chain E — combat markup hidden from player**
+1. In dev mode OFF, play through a combat turn.
+2. ✔ `%%COMBAT%%`, `round:`, and `combatants:` strings are **never** visible in the chat bubble.
+3. ✔ The narrative text (e.g. "Blades clash!") appears normally.
+
+**Chain F — layout persists across session end**
+1. End a session while CombatPanel is visible (click **End Session**).
+2. ✔ After recap completes, CombatPanel is gone and DicePanel is back in the right column.
+3. ✔ Same behaviour when using the **Kill Session** (X) button.
