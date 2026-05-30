@@ -254,3 +254,32 @@ def test_api_characters_missing_index_returns_404(monkeypatch, tmp_path):
     with TestClient(app) as c:
         resp = c.get("/api/characters")
     assert resp.status_code == 404
+
+
+def test_api_characters_rejects_non_string_ids(monkeypatch, tmp_path):
+    data_dir = tmp_path / "ui" / "public" / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "characters.json").write_text("[123]", encoding="utf-8")
+    import api.main as main_mod
+    monkeypatch.setattr(main_mod, "_REPO_ROOT", tmp_path)
+    from api.main import app
+    with TestClient(app) as c:
+        resp = c.get("/api/characters")
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Invalid character ID"
+
+
+def test_api_characters_rejects_path_traversal_ids(monkeypatch, tmp_path):
+    data_dir = tmp_path / "ui" / "public" / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "characters.json").write_text('["../../../etc/passwd"]', encoding="utf-8")
+    etc_dir = tmp_path / "etc"
+    etc_dir.mkdir()
+    (etc_dir / "passwd.json").write_text('{"id":"leak"}', encoding="utf-8")
+    import api.main as main_mod
+    monkeypatch.setattr(main_mod, "_REPO_ROOT", tmp_path)
+    from api.main import app
+    with TestClient(app) as c:
+        resp = c.get("/api/characters")
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Invalid character ID"
