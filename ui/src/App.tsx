@@ -11,6 +11,7 @@ import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
+import SplashHint from './components/SplashHint'
 import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
@@ -27,14 +28,6 @@ function SplashPortrait({ c }: { c: CharacterData }) {
       <div className="splash-char-info">{c.race} {c.class}</div>
     </div>
   )
-}
-
-function providerHint(provider: 'groq' | 'anthropic' | 'ollama'): JSX.Element {
-  if (provider === 'groq')
-    return <>Using Groq — make sure <code>GROQ_API_KEY</code> is set in <code>.env</code></>
-  if (provider === 'anthropic')
-    return <>Using Anthropic — make sure <code>ANTHROPIC_API_KEY</code> is set in <code>.env</code></>
-  return <>Using Ollama — make sure <code>ollama serve</code> is running locally</>
 }
 
 export default function App() {
@@ -110,7 +103,16 @@ export default function App() {
     setError(null)
     setLastInput(input)
     setIntent(null)
-    setMessages(prev => [...prev, { role: 'player', content: sentInput }])
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'player',
+        content: input,
+        speaker: speaker
+          ? { name: speaker.name, portrait: speaker.portrait, color: speaker.color, rune: speaker.rune }
+          : null,
+      },
+    ])
     setStreaming(true)
 
     try {
@@ -186,6 +188,7 @@ export default function App() {
           })
           // Brief pause so players see the final message before clearing
           await new Promise(r => setTimeout(r, 1800))
+          setSessionNumber(n => n + 1)
         }
       }
     } catch (e) {
@@ -277,7 +280,7 @@ export default function App() {
                 </div>
               )}
               <div className="splash-sub">Configure your session above and click Boot Session</div>
-              <div className="splash-hint">{providerHint(provider)}</div>
+              <SplashHint />
             </div>
           )}
 

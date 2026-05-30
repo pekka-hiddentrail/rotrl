@@ -396,6 +396,28 @@ describe('App — session end cleanup', () => {
     }
   })
 
+  it('done event increments session number by 1', async () => {
+    const origTimeout = globalThis.setTimeout
+    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+      (fn: any, ms?: number, ...args: any[]) =>
+        origTimeout.call(globalThis, fn, ms !== undefined && ms >= 500 ? 0 : ms, ...args) as ReturnType<typeof setTimeout>,
+    )
+    try {
+      const { gen, release } = makeStalledGen({ type: 'done' as const })
+      mockEnd.mockImplementation(() => gen)
+      await user.click(screen.getByRole('button', { name: 'End Session' }))
+      release()
+      // Wait for the pre-boot screen to come back, then check the number input
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Boot Session' })).toBeInTheDocument(),
+      )
+      // Default session number was 1 — should now be 2
+      expect(screen.getByRole('spinbutton')).toHaveValue(2)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('error during end session → error bar shown and session cleared', async () => {
     mockEnd.mockImplementation(() =>
       makeGen({ type: 'error' as const, message: 'Recap generation failed' }),

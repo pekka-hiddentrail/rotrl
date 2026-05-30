@@ -118,6 +118,23 @@ describe('CharacterSidebar — action menu', () => {
   })
 })
 
+describe('CharacterSidebar — action menu placement (AC-012)', () => {
+  it('action menu has data-placement="right"', () => {
+    render(<CharacterSidebar {...defaultProps} />)
+    fireEvent.click(screen.getByTitle(/Yanyeeku/))
+    const menu = document.querySelector('.char-action-menu')
+    expect(menu).toHaveAttribute('data-placement', 'right')
+  })
+
+  it('action menu is portaled to document.body (not clipped by sidebar overflow)', () => {
+    render(<CharacterSidebar {...defaultProps} />)
+    fireEvent.click(screen.getByTitle(/Yanyeeku/))
+    const menu = document.querySelector('.char-action-menu')!
+    // Menu must be a direct child of document.body so sidebar overflow does not clip it
+    expect(menu.parentElement).toBe(document.body)
+  })
+})
+
 describe('CharacterSidebar — active speaker halo', () => {
   it('adds .active class to the active character button', () => {
     render(<CharacterSidebar {...defaultProps} activeSpeakerId="yanyeeku" />)

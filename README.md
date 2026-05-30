@@ -333,7 +333,7 @@ npm run test:watch                # watch frontend tests during UI work
 | `test_config_tunables.py` | F6 env-var-configurable tunables (default values, type checks, override reads); R4 `_load_name_exclude_words` (file loading, comment/blank-line stripping, fallback on missing/empty file, case normalisation) |
 | `test_scene_npc_tracking.py` | `NpcIndex.canonical_for` (explicit alias, auto-word alias, unknown word, case-insensitive); single-word `_detect_narrative_npcs` Pass 1 (known alias → scene_npcs, dedup, exclude-word skip, unknown word ignored); `scene_npcs` in `context_info` (present, empty list, copy semantics); boot persistence (`_parse_scene_npcs_from_boot`, `stream_end_session` appends section, `create_session` restores) |
 
-**Frontend:** 115 Vitest tests passing across 5 test files (run separately — `cd ui && npm run test`):
+**Frontend:** 134 Vitest tests passing across 6 test files (run separately — `cd ui && npm run test`):
 
 | File | Covers |
 |------|--------|
@@ -478,7 +478,9 @@ ollama list                            # confirm model is pulled
 | Single-word NPC detection — `_detect_narrative_npcs` Pass 1 resolves aliases (`NpcIndex.canonical_for`) | ✅ Complete |
 | `scene_npcs` in `context` SSE event — chips shown in IntentBar each turn | ✅ Complete |
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
-| Test suites — 528 pytest + 115 Vitest tests | ✅ Complete |
+| Session number auto-increments after successful End Session | ✅ Complete |
+| Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
+| Test suites — 528 pytest + 134 Vitest tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
