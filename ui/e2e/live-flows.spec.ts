@@ -1,4 +1,37 @@
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
+
+const repoRoot = path.resolve(process.cwd(), '..')
+const sessionNpcRoot = path.join(repoRoot, 'adventure_path', '01_npcs')
+const locationRoot = path.join(repoRoot, 'adventure_path', '03_locations')
+
+function dotNpcDirs() {
+  return readdirSync(sessionNpcRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name.startsWith('.'))
+    .map(entry => entry.name)
+    .sort()
+}
+
+function dotNpcPath(dirName: string) {
+  return path.join(sessionNpcRoot, dirName)
+}
+
+function readNpcBase(dirName: string) {
+  const basePath = path.join(dotNpcPath(dirName), 'base.md')
+  return existsSync(basePath) ? readFileSync(basePath, 'utf8') : ''
+}
+
+function locationDirs() {
+  return readdirSync(locationRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name)
+    .sort()
+}
+
+function locationPath(dirName: string) {
+  return path.join(locationRoot, dirName)
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -14,14 +47,15 @@ async function configureHaiku(page: Page) {
 /** Click Boot and wait for the session badge to appear. */
 async function bootSession(page: Page) {
   await page.getByRole('button', { name: 'Boot Session' }).click()
-  await expect(page.getByText(/Session 1/)).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('.session-badge', { hasText: 'Session 1' })).toBeVisible({ timeout: 20_000 })
 }
 
-/** Fill the input, send, then wait until the Send button re-enables (stream done). */
+/** Fill the input, send, then wait until the textbox re-enables (stream done). */
 async function sendTurnAndWait(page: Page, text: string) {
-  await page.getByRole('textbox').fill(text)
+  const input = page.getByRole('textbox')
+  await input.fill(text)
   await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: 60_000 })
+  await expect(input).toBeEnabled({ timeout: 90_000 })
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +82,10 @@ test.describe.serial('L1-L4 — live session and response format', () => {
     await page.goto('/')
     await configureHaiku(page)
     await bootSession(page)
-    await sendTurnAndWait(page, 'I look around the room carefully.')
+    await sendTurnAndWait(
+      page,
+      'I approach Father Abstalar Zantus at the cathedral and tell him I will help watch the crowd during the ceremony.',
+    )
   })
 
   test.afterAll(async () => {
@@ -134,4 +171,193 @@ test('L6 — character sidebar renders from real /api/characters', async ({ page
 
   // Sidebar label present
   await expect(page.locator('.sidebar-label')).toHaveText('Party')
+})
+
+// ---------------------------------------------------------------------------
+// L7-L8 - generated NPC lifecycle
+//
+// Uses the live app and real backend side effects: one test asks the model to
+// create a new named NPC, then the next test purges that session NPC directory.
+// ---------------------------------------------------------------------------
+
+test.describe.serial('L7-L8 - live generated NPC lifecycle', () => {
+  let generatedNpcDir = ''
+  let initialLocationDirs = new Set<string>()
+
+  test.afterAll(() => {
+    if (generatedNpcDir && existsSync(dotNpcPath(generatedNpcDir))) {
+      rmSync(dotNpcPath(generatedNpcDir), { recursive: true, force: true })
+    }
+    for (const dirName of locationDirs()) {
+      if (!initialLocationDirs.has(dirName)) {
+        rmSync(locationPath(dirName), { recursive: true, force: true })
+      }
+    }
+  })
+
+  test('L7 - %%GENERATE%% creates a dot-prefixed NPC directory', async ({ page }) => {
+    const before = new Set(dotNpcDirs())
+    initialLocationDirs = new Set(locationDirs())
+    const newNpcName = 'Tavra Quillmark'
+
+    await page.goto('/')
+    await configureHaiku(page)
+    await bootSession(page)
+    await sendTurnAndWait(
+      page,
+      [
+        `At the festival map stall, I meet a nervous local seller who introduces herself as ${newNpcName}.`,
+        `${newNpcName} offers me a hand-drawn map of the Lost Coast, and I ask which landmark she recommends visiting first.`,
+      ].join(' '),
+    )
+
+    await expect(page.locator('.bubble-gm').filter({ hasText: '%%GENERATE%%' })).toBeVisible({
+      timeout: 60_000,
+    })
+
+    await expect
+      .poll(
+        () => dotNpcDirs().filter(dirName => !before.has(dirName)).length,
+        { timeout: 15_000, message: 'waiting for generated NPC directory' },
+      )
+      .toBeGreaterThan(0)
+
+    const createdDirs = dotNpcDirs().filter(dirName => !before.has(dirName))
+    const matchingDirs = createdDirs.filter(dirName => readNpcBase(dirName).includes('Tavra Quillmark'))
+
+    expect(matchingDirs, `created session NPC dirs: ${createdDirs.join(', ')}`).toHaveLength(1)
+    generatedNpcDir = matchingDirs[0]
+
+    const listed = await page.request.get('/api/npcs/session')
+    expect(listed.status()).toBe(200)
+    await expect(listed.json()).resolves.toMatchObject({
+      npcs: expect.arrayContaining([generatedNpcDir.slice(1)]),
+    })
+
+    await page.getByRole('button', { name: 'End Session' }).click()
+    await expect(page.getByText('End session?')).toBeVisible()
+    await page.getByRole('button', { name: 'End without recap' }).click()
+    await expect(page.getByRole('button', { name: 'Boot Session' })).toBeVisible({ timeout: 15_000 })
+  })
+
+  test('L8 - Purge NPCs removes the generated NPC directory', async ({ page }) => {
+    test.skip(!generatedNpcDir, 'L7 did not create a generated NPC directory')
+
+    const unrelatedSessionDirs = dotNpcDirs().filter(dirName => dirName !== generatedNpcDir)
+    test.skip(
+      unrelatedSessionDirs.length > 0,
+      `Refusing to purge unrelated session NPC dirs: ${unrelatedSessionDirs.join(', ')}`,
+    )
+
+    await page.goto('/')
+    await expect(page.getByRole('button', { name: 'Purge NPCs' })).toBeVisible()
+    await page.getByRole('button', { name: 'Purge NPCs' }).click()
+    await expect(page.getByText('Purge session NPCs?')).toBeVisible()
+    await page.getByRole('button', { name: 'Yes' }).click()
+
+    await expect(page.getByText('1 session NPC directory removed.')).toBeVisible({ timeout: 10_000 })
+    await expect
+      .poll(() => existsSync(dotNpcPath(generatedNpcDir)), { timeout: 10_000 })
+      .toBe(false)
+
+    const listed = await page.request.get('/api/npcs/session')
+    expect(listed.status()).toBe(200)
+    await expect(listed.json()).resolves.toEqual({ npcs: [] })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// L9-L11 - live event, combat, and roll lifecycle
+//
+// Drives the goblin raid from event trigger to combat tracker, then verifies a
+// live %%ROLL%% prompt can be answered through the dice panel.
+// ---------------------------------------------------------------------------
+
+test.describe.serial('L9-L11 - live goblin event, combat, and roll flow', () => {
+  let page: Page
+  let initialSessionNpcDirs = new Set<string>()
+  let initialLocationDirs = new Set<string>()
+
+  test.beforeAll(async ({ browser }) => {
+    initialSessionNpcDirs = new Set(dotNpcDirs())
+    initialLocationDirs = new Set(locationDirs())
+    page = await browser.newPage()
+    await page.goto('/')
+    await configureHaiku(page)
+    await bootSession(page)
+  })
+
+  test.afterAll(async () => {
+    if (!page.isClosed()) {
+      await page.getByRole('button', { name: 'End Session' }).click().catch(() => undefined)
+      await page.getByRole('button', { name: 'End without recap' }).click().catch(() => undefined)
+      await page.close()
+    }
+    for (const dirName of dotNpcDirs()) {
+      if (!initialSessionNpcDirs.has(dirName)) {
+        rmSync(dotNpcPath(dirName), { recursive: true, force: true })
+      }
+    }
+    for (const dirName of locationDirs()) {
+      if (!initialLocationDirs.has(dirName)) {
+        rmSync(locationPath(dirName), { recursive: true, force: true })
+      }
+    }
+  })
+
+  test('L9 - live turn triggers goblin_attack_starts event', async () => {
+    await sendTurnAndWait(
+      page,
+      [
+        'The cathedral alarm bell rings and goblins become visible at the north edge of the festival square.',
+        'This is the exact trigger for the goblin_attack_starts event.',
+        'Write the event line exactly as %%EVENT%% goblin_attack_starts after the narrative and deltas.',
+        'Do not start combat until my next action.',
+      ].join(' '),
+    )
+
+    const gmBubble = page.locator('.bubble-gm').last()
+    await expect(gmBubble).toContainText('%%EVENT%%', { timeout: 60_000 })
+    await expect(gmBubble).toContainText('goblin_attack_starts')
+  })
+
+  test('L10 - active goblin event produces the combat tracker', async () => {
+    await sendTurnAndWait(
+      page,
+      [
+        'I draw my weapon and move between the trapped family and the nearest goblin warriors.',
+        'The goblin_attack_starts event is active, so start Wave 1 combat now.',
+        'Write a %%COMBAT%% block with round: 1 and the Wave 1 goblin combatants.',
+        'Do not write a %%ATTACK%% block yet.',
+      ].join(' '),
+    )
+
+    await expect(page.locator('.bubble-gm').last()).toContainText('%%COMBAT%%', { timeout: 60_000 })
+    await expect(page.locator('.combat-panel')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.combat-round-badge')).toContainText(/Round\s+1/)
+    await expect(page.locator('.combatant-name').filter({ hasText: /goblin/i }).first()).toBeVisible()
+  })
+
+  test('L11 - %%ROLL%% prompt can be answered from the dice panel', async () => {
+    await sendTurnAndWait(
+      page,
+      [
+        'I scan the chaos to locate the goblin warchanter before anyone attacks.',
+        'This requires a Perception check.',
+        'Write the roll prompt exactly in this bracketed format: %%ROLL%% [ skill: Perception  dc: 15  success: You spot the warchanter.  failure: You cannot locate the warchanter. ]',
+        'Do not add a second %%ROLL%% marker.',
+        'Do not resolve the roll yourself and do not write a %%ATTACK%% block.',
+      ].join(' '),
+    )
+
+    await expect(page.locator('.bubble-gm').last()).toContainText('%%ROLL%%', { timeout: 60_000 })
+    await expect(page.locator('.dice-panel-active')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.roll-request-skill')).toContainText('Perception')
+    await expect(page.locator('.roll-request-dc')).toContainText('DC 15')
+
+    await page.locator('.roll-request-prompt').filter({ hasText: 'Perception' }).click()
+
+    await expect(page.locator('.history-row').first()).toContainText(/PASSED|FAILED/, { timeout: 15_000 })
+    await expect(page.getByText(/rolled (?:a )?\d+/i).last()).toBeVisible()
+  })
 })

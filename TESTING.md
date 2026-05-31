@@ -1,11 +1,15 @@
 # Manual Testing Guide
 
-This document covers areas the automated suite (646 pytest + 194 Vitest + 7 Playwright) cannot reach: real LLM behaviour, streaming feel against a live backend, on-disk side effects, and UI interactions that require a human to judge quality.
+This document covers areas the automated suite (679 pytest + 194 Vitest + 18 Playwright, including 11 live Playwright flows) cannot reach: subjective LLM quality, streaming feel, and UI interactions that require a human to judge quality.
 
 **Run the automated suite first.** If it's red, don't bother with this.
 
 ```
-pytest && cd ui && npm run test && npm run test:e2e
+pytest
+cd ui
+npm run test
+npm run test:e2e
+npx playwright test --config playwright.live.config.ts
 ```
 
 Then start the stack:
@@ -18,7 +22,7 @@ python dev.py --skip-tests
 
 ## 1. Session Boot
 
-**What automated tests cover:** prompt assembly, file loading, boot endpoint, intro card SSE; static base prompt does not contain the format example or verbose combat rules; `_FORMAT_EXAMPLE` and `_COMBAT_FULL_SPEC` constants have the right shape.
+**What automated tests cover:** prompt assembly, file loading, boot endpoint, intro card SSE; static base prompt does not contain the format example or verbose combat rules; `_FORMAT_EXAMPLE`, `_COMBAT_SPEC_ROUND1`, and `_COMBAT_SPEC_ONGOING` constants have the right shape.
 
 **Chains to run:**
 
@@ -52,7 +56,7 @@ Verifies that the format example appears exactly on turn 1 and is absent on turn
 3. Open `outputs/api_log/` and find the JSON for this first turn.
 4. Read `raw_request.messages[0].content` (the system message sent to the LLM).
 5. ✔ The system message contains `Gerhard Pickle` — the format example was injected on turn 1.
-6. ✔ `prompt_tokens` is reasonable for what was detected. **Rough guideline:** base ~800 tokens + ~250 for FORMAT_EXAMPLE + ~500 per NPC profile injected + ~250 per location + ~200 per skill reference. A turn 1 with 1 NPC and 1 location detected should be ~1800–2400 prompt tokens. Much over 3500 with no injections = investigate trim.
+6. ✔ `prompt_tokens` is reasonable for what was detected. **Rough guideline:** base ~800 tokens + ~250 for FORMAT_EXAMPLE (turn 1 only) + ~50 per NPC short stub (no skill active that turn) or ~500 per full NPC profile (skill also detected) + ~250 per location + ~200 per skill reference. A turn 1 with 1 NPC (no skill) and 1 location should be ~1350–1800 prompt tokens. Much over 3500 with no injections = investigate trim.
 7. Send turn 2: `I admire the decorations.` (avoid skill/search words)
 8. Open the JSON for turn 2.
 9. ✔ `raw_request.messages[0].content` does **not** contain `Gerhard Pickle` — example absent after turn 1.
@@ -169,6 +173,9 @@ Check for all four turns:
 
 **What automated tests cover:** `NpcIndex` singleton, `npc_dir_for`, stub creation, delta write functions — all with temp directories.
 
+**Live Playwright coverage:** `ui/e2e/live-flows.spec.ts` boots a real session, asks the LLM to generate a uniquely named NPC, verifies the dot-prefixed directory appears under `adventure_path/01_npcs/`, then clicks **Purge NPCs** and verifies that directory is removed.
+It also triggers `goblin_attack_starts`, verifies the active event produces a live combat tracker, and answers a `%%ROLL%%` Perception prompt through the dice panel.
+
 **Chains to run (requires real disk state):**
 
 **Chain A — delta write to known NPC**
@@ -269,11 +276,12 @@ Check for all four turns:
 5. Send five more turns with no location keyword.
 6. ✔ Location context persists throughout — GM does not suddenly forget where the party is.
 
-**Chain D — location + NPC-at-location combined injection**
+**Chain D — location + directly-named NPC combined injection**
 1. Send: `We go to the garrison and look for Sheriff Hemlock.`
 2. ✔ Intent bar shows both a location (`Sandpoint Garrison`) and an NPC (`Belor Hemlock`).
 3. ✔ GM response references both the physical garrison and Hemlock's presence specifically.
-4. In Dev Mode, confirm two context blocks appear in the raw output — one `## Location Reference — Sandpoint Garrison` and one `## NPC Reference — Belor Hemlock` — separated by `---`.
+4. In Dev Mode, confirm two context blocks appear in the raw output — one `## Location Reference — Sandpoint Garrison` and one `## NPC — Belor Hemlock` (short stub, no skill active) — separated by `---`.
+5. **Note:** NPCs associated with a location are NOT auto-injected. Hemlock appears here because he is explicitly named ("Sheriff Hemlock") in the input. Sending `We go to the garrison.` alone injects only the location profile — Hemlock is not added unless named.
 
 **Chain E — all eight seed locations reachable by alias**
 
@@ -312,13 +320,13 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 
 ---
 
-## 5. Character Sidebar and Sheet
+## 6. Character Sidebar and Sheet
 
 **What automated tests cover:** `GET /api/characters` returns 200, list, correct IDs, all required fields, 404 when index missing; sidebar action menu open/close, Set Active / Clear Active, Open Sheet callbacks, halo class, loading state; JSON files for all three player characters pass full field-presence and sanity checks.
 
 **Chains to run:**
 
-**Chain E — characters load before boot**
+**Chain A — characters load before boot**
 1. Start the full stack (`python dev.py --skip-tests`).
 2. Open `http://localhost:5173` without clicking Boot Session.
 3. ✔ All three character portraits appear in the left sidebar immediately.
@@ -326,7 +334,7 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 5. ✔ Each character's name label is visible below their avatar.
 6. ✔ HP bars are visible and coloured (green at full HP).
 
-**Chain F — API unavailable at page load**
+**Chain B — API unavailable at page load**
 1. Start only Vite (leave the Python API stopped): `cd ui && npm run dev`.
 2. Open `http://localhost:5173`.
 3. ✔ A "Character data: TypeError: Failed to fetch" (or similar) error bar appears — sidebar shows only the "Party" label.
@@ -334,7 +342,7 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 5. Refresh the browser.
 6. ✔ Characters load correctly; error bar is gone.
 
-**Chain G — live JSON edit reflects on refresh**
+**Chain C — live JSON edit reflects on refresh**
 1. Open `ui/public/data/player_01.json`, set `hp.current` to `2`, save.
 2. Refresh the browser — **no rebuild needed** (the API reads files on every request).
 3. ✔ That character's HP bar in the sidebar is red (< 33%).
@@ -342,14 +350,14 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 5. ✔ HP shows `2 / <max>` (the live value).
 6. Restore the original `hp.current` value and refresh again to confirm it goes back to green.
 
-**Chain H — malformed character JSON**
+**Chain D — malformed character JSON**
 1. Open `ui/public/data/player_02.json`, break the JSON (e.g. add a stray comma), save.
 2. Refresh the browser.
 3. ✔ A "Character data: HTTP 500" (or similar) error bar appears — sidebar is empty.
 4. Restore the file and refresh.
 5. ✔ All characters load; error bar gone.
 
-**Chain A — sheet completeness**
+**Chain E — sheet completeness**
 1. Click a character avatar → click Open Sheet.
 2. Scroll through every section: Abilities, Saves, Skills, Weapons, Spells, Inventory.
 3. ✔ No section shows `undefined`, `null`, or `[object Object]`.
@@ -357,7 +365,7 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 5. Press Escape or click the close button.
 6. ✔ Sheet closes; background UI is still interactive.
 
-**Chain B — active speaker in chat**
+**Chain F — active speaker in chat**
 1. Click a character avatar → click Set Active.
 2. ✔ Halo/ring appears on that avatar.
 3. ✔ Input bar shows "Speaking as \<Name\>" badge.
@@ -367,13 +375,13 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 7. Type `I look around.` and send.
 8. ✔ Player bubble shows `I look around.` with no prefix.
 
-**Chain C — sheet open during streaming**
+**Chain G — sheet open during streaming**
 1. Send a turn that will produce a long GM response.
 2. Immediately click a character avatar → Open Sheet while tokens are streaming.
 3. ✔ Sheet opens normally.
 4. ✔ Tokens continue to appear in the background; no freeze or error.
 
-**Chain D — HP bar colour (requires JSON edit)**
+**Chain H — HP bar colour (requires JSON edit)**
 1. Open `ui/public/data/player_01.json`, set `hp.current` to 2 (low HP), save.
 2. Refresh the browser, open the character sheet.
 3. ✔ HP bar is red.
@@ -381,7 +389,7 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 
 ---
 
-## 6. Streaming Feel
+## 7. Streaming Feel
 
 **What automated tests cover:** SSE event parsing, token append, `patch_last` replacement — with mocked streams.
 
@@ -414,7 +422,7 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 
 ---
 
-## 7. Session End
+## 8. Session End
 
 **What automated tests cover:** `stream_end_session` status events, recap header enforcement, boot file write — with mocked Groq.
 
@@ -443,7 +451,7 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 
 ---
 
-## 8. Provider and Model Switching
+## 9. Provider and Model Switching
 
 **What automated tests cover:** provider branch logic in `_stream_chat`, model payload differences — with mocked HTTP.
 
@@ -476,7 +484,7 @@ Open each `base.md` in `adventure_path/03_locations/` and verify it meets the fo
 
 ---
 
-## 9. Edge Cases Worth Probing
+## 10. Edge Cases Worth Probing
 
 **Chain A — very long player input**
 
@@ -492,12 +500,11 @@ Send this wall of text as a single turn:
 
 Send: `I find Ameikko at the tavern.` (double-k typo)
 
-- ✔ `NpcIndex` alias matching catches it — intent bar shows Ameiko detected.
-- ✗ If intent bar is empty, the alias is not registered for this variant.
+- ✗ Intent bar shows **no NPC detected** — `NpcIndex` uses strict word-boundary regex matching only; typos are never caught unless explicitly added as an alias.
 
 Then send: `I ask Hemlock about the raids.` (surname only)
 
-- ✔ Intent bar shows Belor Hemlock detected (single-word match via exact index lookup).
+- ✔ Intent bar shows Belor Hemlock detected (single-word exact alias match).
 
 **Chain C — two NPCs in one turn**
 
@@ -518,12 +525,14 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 1. Boot with Dev Mode ON.
 2. Send: `I speak at length with Ameiko about her father Lonjiku and her plans for the Rusty Dragon.`
 3. Read the full raw response.
-4. ✔ A `%%DELTAS%%` block is present and contains at least one entry for `ameiko_kaijitsu`.
-5. ✔ The `knowledge:` lines are readable English sentences, not truncated or escaped JSON.
+4. ✔ A `%%DELTAS%%` block is present and contains at least one bracket entry for `ameiko_kaijitsu`.
+5. ✔ Each delta uses the bracket format exactly: `[ npc: Ameiko Kaijitsu  disposition: ...  location: ...  knowledge: [tag] ...  summary: ... ]` — **never bullet points**.
+6. ✔ The block contains only Ameiko (an NPC) — no PCs, no groups ("crowd"), no objects, no scene state entries.
+7. ✔ The `knowledge:` lines are readable English sentences, not truncated or escaped JSON.
 
 ---
 
-## 10. Event Injection
+## 11. Event Injection
 
 **What automated tests cover:** `EventIndex` loading, file parsing, event firing from `%%EVENT%%` tags, TTL decrement and expiry, duplicate guard, unknown-ID guard, event map in system prompt, `%%EVENT%%` hidden from player token stream, `active_events` in SSE context event, and a double-write regression (LLM writes `%%EVENT%%` alone then `%%EVENT%% <id>` on the next line — the regex correctly skips the bare marker and fires on the second line) — all with temp directories.
 
@@ -566,13 +575,7 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 5. ✔ The `context` SSE event has `active_events` containing `fire_phase_begins`.
 6. ✔ If `goblin_attack_starts` has already expired by this point, it is absent; if it still has turns remaining, both events appear simultaneously.
 
-**Chain E — unknown event ID is silent**
-1. Boot Dev Mode ON.
-2. Send a turn that contains no real event trigger.
-3. Manually note: if the GM mistakenly writes `%%EVENT%% nonexistent_event`, the system should not crash.
-4. Check the backend log — ✔ a warning is logged but no exception and the turn completes normally.
-
-**Chain F — event map visible in system prompt (dev mode)**
+**Chain E — event map visible in system prompt (dev mode)**
 1. Boot Dev Mode ON.
 2. Inspect the first LLM payload in `outputs/api_log/` (the boot payload).
 3. ✔ The system prompt contains an `EVENT MAP` section listing at minimum `goblin_attack_starts`, `fire_phase_begins`, `cavalry_arrives`, `attack_repelled` with their trigger conditions.
@@ -580,7 +583,7 @@ Send 16 turns of short inputs (just `ok`, `I look around`, `I wait`, etc.) to tr
 
 ---
 
-## 11. Log Sanity Check
+## 12. Log Sanity Check
 
 **Chain A — log structure + latency fields**
 After a session with at least 4 turns:
@@ -613,7 +616,7 @@ http://localhost:8000/api/log/api/../../api/session_manager.py
 
 ---
 
-## 12. Combat Tracker
+## 13. Combat Tracker
 
 **Chain A — panel appears on first combat turn**
 1. Boot a session and play to a point where combat would start (or just narrate: "Goblins attack!").

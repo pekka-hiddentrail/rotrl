@@ -215,6 +215,57 @@ def test_multiline_roll_block_still_works(booted_session):
     assert roll_events[0]["skill"] == "Disable Device"
     assert roll_events[0]["dc"] == 20
 
+
+def test_unbracketed_section_roll_block_sets_pending_roll(booted_session):
+    """Section parser accepts live-model plain field ROLL blocks."""
+    import api.session_manager as sm
+
+    client, session_id = booted_session
+    tokens = [
+        "%%NARRATIVE%%\n\nYanyeeku listens for the singer.\n\n",
+        "%%ROLL%%\n",
+        "skill: Perception\n",
+        "dc: 15\n",
+        "success: You spot the goblin warchanter on a stall.\n\n",
+        "She is clearly directing the warriors.\n",
+        "failure: The shrieking crowd hides her position.\n",
+        "%%ROLL%%\n",
+        "%%DELTAS%%\n[]",
+    ]
+    mock_resp = make_stream_response(tokens)
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        resp = _send(client, session_id, "Yanyeeku scans the square.")
+
+    events = parse_sse(resp)
+    roll_events = [e for e in events if e["type"] == "roll_request"]
+    assert len(roll_events) == 1
+    assert roll_events[0]["skill"] == "Perception"
+    assert roll_events[0]["dc"] == 15
+
+    session = sm._sessions[session_id]
+    assert session.pending_roll is not None
+    assert session.pending_roll["skill"] == "Perception"
+    assert "warchanter" in session.pending_roll["success"]
+    assert "directing the warriors" in session.pending_roll["success"]
+
+
+def test_parse_response_sections_keeps_first_nonempty_duplicate_marker():
+    """A repeated empty section marker must not erase the real section body."""
+    import api.session_manager as sm
+
+    sections = sm._parse_response_sections(
+        "%%ROLL%%\n"
+        "skill: Perception\n"
+        "dc: 15\n"
+        "success: You see her.\n"
+        "failure: You lose her.\n"
+        "%%ROLL%%"
+    )
+
+    assert sections["ROLL"].startswith("skill: Perception")
+    assert "You lose her" in sections["ROLL"]
+
 def test_section_format_ok_recognises_all_marker_types(booted_session):
     client, session_id = booted_session
 

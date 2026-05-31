@@ -489,7 +489,12 @@ def _parse_response_sections(text: str) -> dict[str, str]:
     sections: dict[str, str] = {}
     i = 1
     while i + 1 < len(parts):
-        sections[parts[i].strip()] = parts[i + 1].strip()
+        name = parts[i].strip()
+        content = parts[i + 1].strip()
+        if name in sections and sections[name] and content:
+            sections[name] = f"{sections[name]}\n\n{content}"
+        elif name not in sections or content:
+            sections[name] = content
         i += 2
     if "NARRATIVE" not in sections:
         sections["NARRATIVE"] = text.strip()
@@ -1130,7 +1135,9 @@ _GENERATE_SPEC = (
 )
 
 _DELTAS_SPEC = (
-    "%%DELTAS%%  — one block per NPC active in the scene (individual named NPCs ONLY — never a PC, never a group, crowd, or collective):\n"
+    "%%DELTAS%%  — one bracket block per named NPC active in the scene.\n"
+    "RULES: named NPCs only — NEVER a PC, a group, a crowd, an object, or scene state.\n"
+    "FORMAT: use this exact bracket notation only — never bullet points, never prose:\n"
     "[ npc: <name>  disposition: <old→new>  location: <place>"
     "  knowledge: [tag] <fact>  summary: <sentence> ]\n"
     "Tags (use exactly one): [persistent] [pcs] [quest] [world] [npcs] [trivia] [threat]"
@@ -1194,15 +1201,21 @@ CURRENT SITUATION
 {situation}
 
 RESPONSE STRUCTURE — per-turn instructions list which sections are active this turn.
+Only write sections listed in [SECTIONS ACTIVE THIS TURN]. Exception: %%EVENT%% and %%GENERATE%% may always be added when triggered. %%DELTAS%% MUST NOT be written unless it appears in [SECTIONS ACTIVE THIS TURN].
 Markers in order: %%NARRATIVE%%  %%ROLL%%  %%GENERATE%%  %%DELTAS%%  %%EVENT%%  %%COMBAT%%
 
-SCENE EVENT — append after %%DELTAS%% on the first turn a trigger is met:
+SCENE EVENT — append after %%DELTAS%% (or %%GENERATE%% if %%DELTAS%% is not active) on the first turn a trigger is met:
 %%EVENT%% <event_id>   ← ID on the SAME LINE; nothing else on this line
 CORRECT: %%EVENT%% goblin_attack_starts
 WRONG:   %%EVENT%%  |  %%EVENT%%\\n%%EVENT%% id  |  %%EVENT%% id (Note: …)
 
-%%COMBAT%% — include every turn combat is active; omit when no combat.
-round: 0 ends and clears combat. Full format spec injected per-turn (when active events or combat is ongoing).
+%%COMBAT%% — write when starting or continuing combat; omit when no combat.
+round: 0 ends and clears combat. Compact round-1 format (use when starting combat):
+%%COMBAT%%
+round: 1
+combatants:
+  - name: <Name> · hp: <cur>/<max> · ac: <AC> · init: <init> · status: active
+Full spec re-injected per-turn when active events or combat is ongoing.
 
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
@@ -1847,22 +1860,26 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     )
     injected: list[str] = []
 
-    npc_match = _get_npc_index().detect(last_user)
-    if npc_match:
-        injected.append(_get_npc_index().format_context(npc_match))
-        _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (alias: \"{npc_match.matched_alias}\")]*\n")
-
+    # Detect skill first — needed to choose full vs short NPC profile below.
     skill_match = _get_skill_index().detect(last_user)
     if skill_match:
         injected.append(_get_skill_index().format_context(skill_match))
         _log(session, f"\n> *[Skill context injected: {skill_match.skill_name} (trigger: \"{skill_match.matched_trigger}\")]*\n")
 
-    already_injected = {npc_match.canonical_name} if npc_match else set()
-    location_matches = _get_npc_index().detect_by_location(last_user)
-    location_matches = [m for m in location_matches if m.canonical_name not in already_injected]
-    for loc_match in location_matches:
-        injected.append(_get_npc_index().format_context(loc_match))
-        _log(session, f"\n> *[Location context injected: {loc_match.canonical_name} at \"{loc_match.matched_location}\"]*\n")
+    # NPC injection: full profile when a social/skill check is active this turn;
+    # short stub (name + hook + DC + current state) otherwise.
+    npc_match = _get_npc_index().detect(last_user)
+    if npc_match:
+        if skill_match:
+            injected.append(_get_npc_index().format_context(npc_match))
+            _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (full — skill active, alias: \"{npc_match.matched_alias}\")]*\n")
+        else:
+            injected.append(_get_npc_index().format_short_context(npc_match))
+            _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (short, alias: \"{npc_match.matched_alias}\")]*\n")
+
+    # Location-based NPC injection removed — only inject NPCs the player
+    # explicitly named or directly interacted with (not all NPCs at a location).
+    location_matches: list = []
 
     # Location profile detection (LocationIndex — separate from NPC-at-location)
     loc_match = _get_location_index().detect(last_user)
@@ -1888,9 +1905,6 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
 
     if npc_match and npc_match.canonical_name not in session.scene_npcs:
         session.scene_npcs.append(npc_match.canonical_name)
-    for _loc in location_matches:
-        if _loc.canonical_name not in session.scene_npcs:
-            session.scene_npcs.append(_loc.canonical_name)
 
     # ── Sections active this turn ─────────────────────────────────────────────
     # Inject only the specs that are relevant based on detection results.
@@ -1901,7 +1915,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     if skill_match:
         _active_specs.append(_ROLL_SPEC)
         _active_spec_names.append("ROLL")
-    if session.scene_npcs or npc_match or location_matches:
+    if session.scene_npcs or npc_match:
         _active_specs.append(_DELTAS_SPEC)
         _active_spec_names.append("DELTAS")
     system_content += (
@@ -2161,6 +2175,27 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         "dc":      _inline_m.group("dc").strip(),
                         "success": _inline_m.group("success").strip(),
                         "failure": _inline_m.group("failure").strip(),
+                    }]
+            if not _roll_blocks:
+                # Live models sometimes write the section body as plain fields:
+                # skill: Perception
+                # dc: 15
+                # success: ...
+                # failure: ...
+                _line_m = re.search(
+                    r"(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n"
+                    r"dc:\s*(?P<dc>\d+)\s*\n"
+                    r"success:\s*(?P<success>.*?)\n"
+                    r"failure:\s*(?P<failure>.*)\s*$",
+                    _roll_section.strip(),
+                    re.DOTALL | re.IGNORECASE,
+                )
+                if _line_m:
+                    _roll_blocks = [{
+                        "skill":   _line_m.group("skill").strip(),
+                        "dc":      _line_m.group("dc").strip(),
+                        "success": _line_m.group("success").strip(),
+                        "failure": _line_m.group("failure").strip(),
                     }]
             if _roll_blocks:
                 _rf = _roll_blocks[0]

@@ -72,13 +72,15 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 │      → session log: ### [HH:MM:SS] PLAYER\n{input}
 │
 ├─ 3. Build context-augmented system prompt copy
-│      ├─ NpcIndex.detect(input)
-│      │    → if alias match: prepend NPC profile (base.md up to <!-- REFERENCE -->)
-│      │    → add NPC to session.scene_npcs
-│      ├─ SkillIndex.detect(input)
+│      ├─ SkillIndex.detect(input)                   [detected first — gates NPC format below]
 │      │    → if trigger match: prepend skill rules (longest trigger wins)
-│      ├─ Location NPC profiles
-│      │    → for each NPC in scene_npcs: prepend current status from session_NNN.md
+│      ├─ NpcIndex.detect(input)                     [only explicitly named NPCs]
+│      │    → if alias match AND skill active: prepend full NPC profile (base.md up to <!-- REFERENCE -->)
+│      │    → if alias match AND no skill:    prepend short NPC stub (~60 tokens)
+│      │         stub = first Personality sentence + Diplomacy DC + current disposition + location
+│      │    → add NPC to session.scene_npcs
+│      │    NOTE: detect_by_location is disabled — NPCs associated with a mentioned location
+│      │          are NOT auto-injected unless the player explicitly names them
 │      ├─ CombatRulesIndex.detect(input)  [only when combat_state.round > 0]
 │      │    → if trigger match: prepend combat rule body from 04_rules/combat/
 │      │         labelled "## Combat Reference — {rule_name}"

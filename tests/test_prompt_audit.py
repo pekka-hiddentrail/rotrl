@@ -186,9 +186,9 @@ class TestSystemPromptSizeBudgets:
 
     @pytest.mark.prompt_audit
     def test_one_npc_injection_within_budget(self):
-        """Turn with one full NPC profile injected.
+        """Turn with one NPC mentioned (no skill check) → short NPC stub injected.
 
-        Simulates: player mentions an NPC → 2000-char profile injected.
+        Simulates: player names an NPC, no social check active → short context (~300 chars).
         Hard limit: 8500 chars.
         """
         npc_match = MagicMock()
@@ -207,6 +207,7 @@ class TestSystemPromptSizeBudgets:
         npc_idx.detect.return_value = npc_match
         npc_idx.detect_by_location.return_value = []
         npc_idx.format_context.return_value = "## NPC Reference — Kendra Deverin\n\n" + "X" * 2000
+        npc_idx.format_short_context.return_value = "## NPC — Kendra Deverin\nPragmatic mayor. | Diplomacy DC 12 | friendly | cathedral steps"
 
         with patch("api.session_manager._get_npc_index", return_value=npc_idx), \
              patch("api.session_manager._get_skill_index", return_value=_no_index()), \
@@ -305,6 +306,7 @@ class TestSystemPromptSizeBudgets:
         def _fmt(m):
             return f"## NPC Reference — {m.canonical_name}\n\n" + "X" * 2000
         npc_idx.format_context.side_effect = _fmt
+        npc_idx.format_short_context.side_effect = lambda m: f"## NPC — {m.canonical_name}\nHook. | Diplomacy DC 12"
 
         skill_idx = _no_index()
         skill_idx.detect.return_value = skill_match

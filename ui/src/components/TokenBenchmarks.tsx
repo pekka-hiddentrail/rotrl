@@ -116,6 +116,8 @@ function LineChart({ rows, title }: ChartProps) {
   )
 }
 
+const PAGE_SIZE = 9
+
 interface Props {
   onClose: () => void
 }
@@ -124,6 +126,7 @@ export default function TokenBenchmarks({ onClose }: Props) {
   const [rows, setRows] = useState<BenchmarkRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
 
   useEffect(() => {
     fetchBenchmarks()
@@ -180,7 +183,7 @@ export default function TokenBenchmarks({ onClose }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
+                  {rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE).map((r, i) => (
                     <tr key={i} className={`bm-row bm-row--t${r.turn}`}>
                       <td className="bm-ts">{r.timestamp.replace('T', ' ')}</td>
                       <td className="bm-model">{r.provider} / {r.model}</td>
@@ -210,6 +213,28 @@ export default function TokenBenchmarks({ onClose }: Props) {
                 </tbody>
               </table>
             </div>
+
+            {rows.length > PAGE_SIZE && (() => {
+              const totalPages = Math.ceil(rows.length / PAGE_SIZE)
+              return (
+                <div className="bm-paginator">
+                  <button
+                    className="bm-page-btn"
+                    onClick={() => setPage(p => p - 1)}
+                    disabled={page === 0}
+                  >‹ Prev</button>
+                  <span className="bm-page-info">
+                    {page + 1} / {totalPages}
+                    <span className="bm-page-total"> ({rows.length} rows)</span>
+                  </span>
+                  <button
+                    className="bm-page-btn"
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={page >= totalPages - 1}
+                  >Next ›</button>
+                </div>
+              )
+            })()}
 
             <div className="bm-charts">
               {([1, 2, 3] as const).map(t => (

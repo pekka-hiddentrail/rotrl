@@ -182,7 +182,7 @@ rotrl/
 │   │                              # section parsing, delta writes, end-session recap
 │   ├── api_logger.py              # Per-turn LLM call logging to outputs/api_log/
 │   └── context/
-│       ├── npc_lookup.py          # NpcIndex — detect NPC names, inject profiles
+        ├── npc_lookup.py          # NpcIndex — detect NPC names, inject full profile (skill active) or short stub
 │       ├── skill_lookup.py        # SkillIndex — detect skill triggers, inject rules
 │       ├── location_lookup.py     # LocationIndex — detect locations, inject scene profiles
 │       └── event_index.py         # EventIndex — load 02_events/, inject on %%EVENT%% tag
@@ -304,13 +304,14 @@ npm run test                      # run all frontend Vitest tests once
 npm run test:watch                # watch frontend tests during UI work
 npm run test:e2e                  # run Playwright browser-flow tests
 npm run test:e2e:ui               # run Playwright in interactive UI mode
+npx playwright test --config playwright.live.config.ts  # live UI + backend + LLM flow checks
 ```
 
 If Playwright reports a missing browser binary after a fresh install, run `cd ui && npx playwright install chromium`.
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 646 pytest tests passing across 25 test files:
+**Backend:** 679 pytest tests passing across 25 test files:
 
 | File | Covers |
 |------|--------|
@@ -323,7 +324,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
 | `test_npc_lookup_extended.py` | `detect_all`, `lookup`, status/knowledge reads, `_parse_base` |
-| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC/skill/location/event injection, context metadata, turn-1 format example injection, full combat spec injection when active, conditional section specs (ROLL/DELTAS gated on detection), PC narrative+mechanical profile injection |
+| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC short-stub vs full-profile selection (skill gate), no-location-NPC-injection, skill/location/event injection, context metadata, turn-1 format example injection, full combat spec injection when active, conditional section specs (ROLL/DELTAS gated on detection), PC narrative+mechanical profile injection |
 | `test_end_session.py` | `_parse_turns_from_log`, `_enforce_recap_header`, `stream_end_session` errors |
 | `test_stream_filter.py` | `_stream_with_narrative_filter` — dev pass-through, narrative extraction, split tokens |
 | `test_recap_header.py` | Recap header normalization edge cases |
@@ -338,6 +339,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_config_tunables.py` | F6 env-var-configurable tunables (default values, type checks, override reads); R4 `_load_name_exclude_words` (file loading, comment/blank-line stripping, fallback on missing/empty file, case normalisation) |
 | `test_scene_npc_tracking.py` | `NpcIndex.canonical_for` (explicit alias, auto-word alias, unknown word, case-insensitive); single-word `_detect_narrative_npcs` Pass 1 (known alias → scene_npcs, dedup, exclude-word skip, unknown word ignored); `scene_npcs` in `context_info` (present, empty list, copy semantics); boot persistence (`_parse_scene_npcs_from_boot`, `stream_end_session` appends section, `create_session` restores) |
 | `test_combat_lookup.py` | `CombatRulesIndex` loading, trigger detection, longest-match, word boundary, `_parse_combat_rule_file`, `<!-- REFERENCE -->` boundary, `format_context` |
+| `test_token_benchmark.py` | Real-API token benchmark — boots Anthropic Haiku, runs three fixed turns, appends prompt/completion/total token counts to `outputs/token_benchmarks.csv`; automatically skipped when `ANTHROPIC_API_KEY` is absent (`@pytest.mark.benchmark`) |
 
 **Frontend:** 194 Vitest tests passing across 13 test files (run separately — `cd ui && npm run test`):
 
@@ -345,7 +347,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 |------|--------|
 | `App.test.tsx` | App-level SSE integration — boot flow, provider/model switching, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), speaker payload prefixing, purge/View Log/Kill controls, streaming lockout, error bar, session end cleanup |
 | `ChatWindow.test.tsx` | Thinking indicator, GM streaming cursor, intro markdown rendering, autoscroll |
-| `Header.test.tsx` | Pre/post-boot controls, provider model options, boot disabled state, View Log handler, purge/Kill inline confirms, rate-limit badge |
+| `Header.test.tsx` | Pre/post-boot controls, provider model options, boot disabled state, View Log handler, purge/Kill inline confirms, rate-limit badge, Benchmarks button |
 | `IntentBar.test.tsx` | 52-char truncation, NPC/skill/location tags, null tags, detecting state, missing-context diagnostic |
 | `CharacterSheet.test.tsx` | Modal close behavior, sheet sections, AC/save/spell tooltips, spell grouping |
 | `CharacterSidebarHealth.test.tsx` | Portrait/title display and HP bar thresholds |
@@ -357,11 +359,12 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `MessageBubble.test.tsx` | Player speaker labels, portrait fallback, clean player content, GM bubble invariants |
 | `SplashHint.test.tsx` | Hint pool integrity, initial display, timed rotation, no immediate repeats, fade class |
 
-**E2E:** 7 Playwright tests passing in Chromium (run separately — `cd ui && npm run test:e2e`):
+**E2E:** 7 mocked Playwright tests plus 11 live Playwright tests passing in Chromium:
 
 | File | Covers |
 |------|--------|
 | `e2e/app-flows.spec.ts` | Mocked-browser flows: boot badge, send turn, roll request, end session cleanup, Kill stuck ending, Purge NPCs toast, character sheet modal |
+| `e2e/live-flows.spec.ts` | Live backend + LLM flows: boot/session format checks, log API, end-session recap, character sidebar, generated NPC directory creation, Purge NPCs directory removal, goblin event trigger, combat tracker, dice-panel roll resolution |
 
 ---
 

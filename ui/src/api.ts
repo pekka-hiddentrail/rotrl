@@ -152,39 +152,6 @@ export async function* resumeCombat(sessionId: string): AsyncGenerator<SseEvent>
   yield* parseSseStream(res)
 }
 
-export async function resolveAttackRoll(
-  sessionId: string,
-  rolled: number,
-): Promise<{ hit: boolean; ac: number; roll: number; bonus: number; total: number; damage_expr: string | null; queue_remaining: number; next_attack: { attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string } | null }> {
-  const res = await fetch(`${BASE}/sessions/${sessionId}/resolve_attack_roll`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rolled }),
-  })
-  if (!res.ok) throw new Error(`Resolve attack roll failed (${res.status})`)
-  return res.json()
-}
-
-export async function resolveDamageRoll(
-  sessionId: string,
-  rolls: number[],
-  total: number,
-): Promise<{ damage_rolls: number[]; damage_total: number; queue_remaining: number; next_attack: { attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string } | null }> {
-  const res = await fetch(`${BASE}/sessions/${sessionId}/resolve_damage_roll`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rolls, total }),
-  })
-  if (!res.ok) throw new Error(`Resolve damage roll failed (${res.status})`)
-  return res.json()
-}
-
-export async function* resumeCombat(sessionId: string): AsyncGenerator<SseEvent> {
-  const res = await fetch(`${BASE}/sessions/${sessionId}/resume_combat`, { method: 'POST' })
-  if (!res.ok) throw new Error(`Resume combat failed (${res.status})`)
-  yield* parseSseStream(res)
-}
-
 export async function fetchApiLogList(): Promise<string[]> {
   const res = await fetch(`${BASE}/log/api`)
   if (!res.ok) throw new Error(`API log list failed (${res.status})`)
