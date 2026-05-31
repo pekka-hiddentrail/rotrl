@@ -153,7 +153,7 @@ Then  the backend raises immediately without retrying
 
 - See: [INDEX.md §3 — LLM Providers](INDEX.md)
 - Default model: `llama-3.3-70b-versatile` (Groq), `qwen3:4b` (Ollama)
-- History trimmed to 10 messages for Groq, 30 for Ollama
+- History trimmed to 10 messages for Groq, 30 for Ollama, 60 for Anthropic (30 exchanges)
 - Per-day limits only appear in the 429 error body — per-minute limits surface via headers on every successful response
 - Models confirmed to support `stream_options`: `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`
 - Models confirmed NOT to support `stream_options`: `llama3-8b-8192`, `mixtral-8x7b-32768`

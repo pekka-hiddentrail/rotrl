@@ -13,7 +13,7 @@
 > I want to record LLM prompt/completion token counts for a fixed three-turn scenario after each code change,
 > so that I can detect prompt bloat regressions before they accumulate into real session cost.
 
-The benchmark runs three deterministic turns against the real Anthropic API using a fixed session-1 scenario. Token counts are appended to a persistent CSV and visualised in a panel accessible from the header. The panel shows the most-recent 9 rows at a time with a paginator and three trend charts (one per benchmark turn) covering the full history.
+The benchmark runs three deterministic turns against the real Anthropic API using a fixed session-1 scenario. Token counts are appended to a persistent CSV and visualised in a panel accessible from the header. The panel shows the most-recent 12 rows at a time (merged across social and combat sources, up to 30 per source) with a paginator and six trend charts in two labelled groups covering the full history.
 
 ---
 
@@ -89,34 +89,38 @@ And   pressing Escape or clicking the backdrop closes the panel
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-005 — Table paginates at 9 rows per page
+### AC-005 — Table paginates at 12 rows per page with a per-source cap
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
-Given the benchmark CSV has more than 9 rows
+Given the benchmark CSVs together have more than 12 rows
 When  the panel is open
-Then  the table shows exactly 9 rows on the first page (most recent first)
+Then  the table shows exactly 12 rows on the first page (newest first, merged across sources)
+And   at most 30 rows from each source (social / combat) are loaded
 And   a paginator shows "1 / N  (total rows)" below the table
 And   clicking Next advances to the next page
 And   clicking Prev moves back
 And   Prev is disabled on page 1; Next is disabled on the last page
-And   if the CSV has ≤ 9 rows, no paginator is rendered
+And   if the combined total is ≤ 12 rows, no paginator is rendered
 ```
 
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-006 — Three trend charts visualise prompt/completion/total over time
+### AC-006 — Six trend charts in two labelled groups
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
-Given benchmark data exists for all three turns
+Given benchmark data exists for all three social turns and at least one combat scenario
 When  the panel is open
-Then  three line charts are shown below the table: one for Turn 1, Turn 2, Turn 3
+Then  a section label "Social (3-turn run)" appears above three line charts for Turn 1 / 2 / 3
+And   a section label "Combat" appears above three line charts for:
+        combat_init  ("Combat T2 — Initiation")
+        first_strike ("Combat T3 — First Strike")
+        intimidate   ("Combat T4 — Intimidate")
 And   each chart plots prompt (green), completion (gold), and total (red) over run index
-And   y-axis ticks scale to the max value across all three series
 And   a legend identifies each series by colour and label
-And   if a turn has no data, its chart shows "No data yet"
+And   if a turn or scenario has no data, its chart shows "No data yet"
 ```
 
 ---
@@ -130,4 +134,52 @@ Given a benchmark row has a non-empty log_file field
 When  the user clicks the "view" link in that row's Log column
 Then  the browser opens GET /api/log/api/{log_file} in a new tab
 And   rows with an empty log_file show "—" with no link
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-008 — Combat benchmark run appends rows to the combat CSV
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given ANTHROPIC_API_KEY is set and the backend is running
+When  pytest tests/test_token_benchmark.py::test_token_counts_combat_turns is executed
+Then  the test sends four turns:
+        T1 pre_combat   — "We arrive at the Swallowtail festival."
+        T2 combat_init  — a turn that triggers a %%COMBAT%% block (goblin attack)
+        T3 first_strike — "Thaelion attacks Goblin 1."
+        T4 intimidate   — a war-cry intimidation attempt
+And   rows for combat_init, first_strike, and intimidate are appended to outputs/token_benchmarks_combat.csv
+And   each row contains the standard token fields plus: scenario, combat_started, attack_requested, roll_requested, log_file
+And   if combat_started == 0 after turn T2, the test prints a WARNING but does not fail
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-009 — GET /api/benchmarks/combat returns all combat CSV rows as JSON
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given outputs/token_benchmarks_combat.csv contains N rows
+When  GET /api/benchmarks/combat is called
+Then  the response is { "rows": [ ... ] } with N objects
+And   each object has the combat CSV fields (scenario, combat_started, attack_requested, roll_requested, plus standard token fields)
+And   if the file does not exist, the response is { "rows": [] }
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-010 — Table rows are visually tinted by source
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given the merged benchmark table contains both social (basic) and combat rows
+When  the panel is open
+Then  social rows have a subtle green background tint (class bm-row--basic)
+And   combat rows have a subtle amber background tint (class bm-row--combat)
+And   both tints intensify on row hover
+And   the Turn / Scenario column shows the scenario name for combat rows and the turn number for social rows
 ```

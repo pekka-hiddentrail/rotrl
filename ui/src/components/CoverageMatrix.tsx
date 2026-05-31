@@ -275,13 +275,24 @@ export default function CoverageMatrix({ onClose }: Props) {
                 <>
                   <div className="cm-summary">
                     <span className={`cm-stat ${ccData.total_pct >= 80 ? 'cm-stat--covered' : 'cm-stat--gap'}`}>
-                      {ccData.total_pct}% total
+                      {ccData.total_pct}%
+                      {ccData.total_pct_delta !== null && ccData.total_pct_delta !== 0 && (
+                        <span className={`cc-delta cc-delta--${ccData.total_pct_delta > 0 ? 'up' : 'down'}`}>
+                          {ccData.total_pct_delta > 0 ? '▲' : '▼'}{Math.abs(ccData.total_pct_delta)}%
+                        </span>
+                      )}
+                      {' '}total
                     </span>
                     <span className="cm-stat-sep">·</span>
                     <span className="cm-stat">
                       {ccData.total_stmts - ccData.total_miss} / {ccData.total_stmts} lines
                     </span>
                     <span className="cm-stat cm-stat--gap">{ccData.total_miss} uncovered</span>
+                    {!ccData.has_prev && (
+                      <span className="cm-stat cc-no-prev" title="Run python scripts/snapshot_coverage.py before tests to enable deltas">
+                        no baseline
+                      </span>
+                    )}
                   </div>
 
                   <div className="cm-table-wrap">
@@ -320,6 +331,14 @@ export default function CoverageMatrix({ onClose }: Props) {
                                     style={{ width: `${f.pct}%`, background: barColor }}
                                   />
                                 </div>
+                                {f.delta !== null && f.delta !== 0 && (
+                                  <span className={`cc-delta cc-delta--${f.delta > 0 ? 'up' : 'down'}`}>
+                                    {f.delta > 0 ? '▲' : '▼'}{Math.abs(f.delta)}%
+                                  </span>
+                                )}
+                                {f.delta === 0 && ccData.has_prev && (
+                                  <span className="cc-delta cc-delta--same">=</span>
+                                )}
                               </td>
                               <td className="cc-lines-cell">
                                 {shown.join(', ')}

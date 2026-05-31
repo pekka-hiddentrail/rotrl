@@ -308,6 +308,30 @@ def get_benchmarks():
     return JSONResponse({"rows": rows})
 
 
+@app.get("/api/benchmarks/combat")
+def get_combat_benchmarks():
+    """Return all combat benchmark rows from outputs/token_benchmarks_combat.csv as JSON."""
+    import csv as _csv
+    csv_path = _REPO_ROOT / "outputs" / "token_benchmarks_combat.csv"
+    if not csv_path.exists():
+        return JSONResponse({"rows": []})
+    rows: list[dict] = []
+    with csv_path.open(newline="", encoding="utf-8") as fh:
+        for row in _csv.DictReader(fh):
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens", "system_chars"):
+                try:
+                    row[k] = int(row[k])
+                except (ValueError, KeyError):
+                    row[k] = 0
+            for k in ("combat_started", "attack_requested", "roll_requested"):
+                try:
+                    row[k] = int(row[k])
+                except (ValueError, KeyError):
+                    row[k] = 0
+            rows.append(row)
+    return JSONResponse({"rows": rows})
+
+
 @app.get("/api/coverage")
 def get_coverage():
     """Return the feature AC coverage matrix built by scripts/build_coverage.py.
@@ -324,38 +348,66 @@ def get_coverage():
 
 @app.get("/api/code-coverage")
 def get_code_coverage():
-    """Return pytest-cov line coverage data.
+    """Return pytest-cov line coverage data with optional delta from previous run.
 
     Generate with: pytest --cov --cov-report=json
     The .coveragerc [json] section writes to outputs/code_coverage.json.
+    Create a baseline for delta tracking with: python scripts/snapshot_coverage.py
     """
     import json as _json
-    path = _REPO_ROOT / "outputs" / "code_coverage.json"
+    path      = _REPO_ROOT / "outputs" / "code_coverage.json"
+    prev_path = _REPO_ROOT / "outputs" / "code_coverage_prev.json"
     if not path.exists():
-        return JSONResponse({"generated": None, "files": [], "total_stmts": 0, "total_miss": 0, "total_pct": 0})
+        return JSONResponse({
+            "generated": None, "files": [], "has_prev": False,
+            "total_stmts": 0, "total_miss": 0, "total_pct": 0, "total_pct_delta": None,
+        })
     raw = _json.loads(path.read_text(encoding="utf-8"))
+
+    # Build per-file pct lookup from the previous run (if snapshot exists)
+    prev_pct: dict[str, int] = {}
+    if prev_path.exists():
+        try:
+            prev_raw = _json.loads(prev_path.read_text(encoding="utf-8"))
+            for fname, fdata in prev_raw.get("files", {}).items():
+                norm = fname.replace("\\", "/")
+                prev_pct[norm] = round(fdata.get("summary", {}).get("percent_covered", 0))
+        except Exception:
+            pass
+    has_prev = bool(prev_pct)
+
     files = []
     for fname, fdata in raw.get("files", {}).items():
         summary = fdata.get("summary", {})
         stmts = summary.get("num_statements", 0)
-        miss = summary.get("missing_lines", 0)
-        pct = round(summary.get("percent_covered", 0))
+        miss  = summary.get("missing_lines", 0)
+        pct   = round(summary.get("percent_covered", 0))
+        norm  = fname.replace("\\", "/")
+        delta = (pct - prev_pct[norm]) if norm in prev_pct else None
         files.append({
-            "name": fname.replace("\\", "/"),
+            "name": norm,
             "stmts": stmts,
             "miss": miss,
             "covered": stmts - miss,
             "pct": pct,
+            "delta": delta,
             "missing_lines": fdata.get("missing_lines", []),
         })
     files.sort(key=lambda f: f["pct"])
-    totals = raw.get("totals", {})
+
+    totals     = raw.get("totals", {})
+    total_pct  = round(totals.get("percent_covered", 0))
+    prev_total = round(sum(prev_pct.values()) / len(prev_pct)) if prev_pct else None
+    total_delta = (total_pct - prev_total) if prev_total is not None else None
+
     return JSONResponse({
-        "generated": raw.get("meta", {}).get("timestamp"),
-        "files": files,
-        "total_stmts": totals.get("num_statements", 0),
-        "total_miss": totals.get("missing_lines", 0),
-        "total_pct": round(totals.get("percent_covered", 0)),
+        "generated":        raw.get("meta", {}).get("timestamp"),
+        "files":            files,
+        "has_prev":         has_prev,
+        "total_stmts":      totals.get("num_statements", 0),
+        "total_miss":       totals.get("missing_lines", 0),
+        "total_pct":        total_pct,
+        "total_pct_delta":  total_delta,
     })
 
 

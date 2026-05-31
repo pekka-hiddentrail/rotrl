@@ -258,6 +258,35 @@ Then  combatant.conditions == [] and no chips are rendered
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-013 — Full party roster injected when combat starts
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM writes the first `%%COMBAT%%` block of the session
+
+```gherkin
+Given active_events are present (combat may start this turn)
+And   session.combat_state is None
+When  _inject_context assembles the system prompt
+Then  a [PARTY ROSTER] block is appended after _COMBAT_SPEC_ROUND1
+And   the block lists every PC with name, hp_max/hp_max, ac, initiative, status: active
+And   the format of each line matches the %%COMBAT%% combatant line format exactly
+
+Given session.combat_state is a CombatState with round ≥ 1 (combat already started)
+When  _inject_context assembles the system prompt
+Then  NO [PARTY ROSTER] block is present (ongoing spec does not repeat the roster)
+
+Given session.pc_profiles is empty
+When  _inject_context assembles the system prompt with active_events
+Then  NO [PARTY ROSTER] block is present
+```
+
+**Implementation:** `_build_pc_combat_roster(session)` reads `pc_profiles[*]["combat_stats"]`
+(a raw-value dict populated at boot from `player_*.json`). HP is initialised to `hp_max/hp_max`;
+backend takes HP authority from round 2 onward (see [combat-hp.feature](combat-hp.feature)).
+
+---
+
 ## Out of Scope (Tracker)
 
 - Map / grid positioning
@@ -266,10 +295,57 @@ Then  combatant.conditions == [] and no chips are rendered
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-014 — Active-turn highlight advances via "Next Turn →" button
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** GM manually steps through the initiative order
+
+```gherkin
+Given CombatPanel renders with currentCombatantName="Shalelu" (init 14, active)
+And   combatants are Shalelu (init 14, active), Thaelion (init 8, active), Goblin 1 (init 6, unconscious)
+When  the GM clicks "Next Turn →"
+Then  onAdvanceTurn is called
+And   the next active combatant in initiative order (Thaelion) receives combatant-current
+And   Shalelu no longer has combatant-current
+
+Given Thaelion is highlighted (currentCombatantName="Thaelion")
+When  the GM clicks "Next Turn →" again
+Then  the highlight wraps back to Shalelu (only two active combatants remain)
+
+Given currentCombatantName is null (combat just started, no explicit tracking yet)
+When  CombatPanel renders
+Then  the highlight falls back to the first active combatant by initiative order
+```
+
+**Implementation:** `currentCombatantName: string | null` state in `App.tsx`,
+initialised on the first `combat_update` of a new combat by selecting the
+highest-initiative active combatant.  `handleAdvanceTurn()` sorts combatants,
+filters to `status === 'active'`, and sets the next name (wrapping with modulo).
+Passed to `CombatPanel` as `currentCombatantName` + `onAdvanceTurn` props.
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-015 — Dead combatant name is visually marked with a muted red colour
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** A combatant's status is "dead"
+
+```gherkin
+Given a combatant row has status: "dead"
+Then  the row has the "combatant-dead" CSS class
+And   the combatant name text colour is muted red (#8b3333)
+And   the row also has "combatant-inactive" (opacity 0.5)
+And   the row does NOT have "combatant-current"
+```
+
+---
+
 ## Notes
 
 - `%%COMBAT%%` is a **section marker** (like `%%DELTAS%%`), not an inline tag like `%%EVENT%%`.
-- Combat rule injection (AC-011) mirrors `SkillIndex` exactly: `CombatRulesIndex` in `api/context/combat_lookup.py`, same file format (`# Heading`, `**Triggers:**`, `<!-- REFERENCE -->`), longest-trigger-wins detection. Six rule files in `adventure_path/04_rules/combat/`. Only fires when `combat_state.round > 0` — never in out-of-combat turns.
+- Combat rule injection (AC-011) mirrors `SkillIndex` exactly: `CombatRulesIndex` in `api/context/combat_lookup.py`, same file format (`# Heading`, `**Triggers:**`, `<!-- REFERENCE -->`), longest-trigger-wins detection. Twelve rule files in `adventure_path/04_rules/combat/`. Only fires when `combat_state.round > 0` — never in out-of-combat turns.
 - Related: [skill-system.feature](skill-system.feature) — `SkillIndex` is the structural template `CombatRulesIndex` mirrors.
   Its content is multi-line: one `round:` line and one `-name:` line per combatant.
 - The combatant separator is `·` (U+00B7 MIDDLE DOT) or `•` (U+2022 BULLET).

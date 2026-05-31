@@ -21,10 +21,14 @@ interface PendingRoll {
   dc: number
   success: string
   failure: string
+  speaker?: string | null
 }
 
 interface ActiveSpeaker {
   name: string
+  portrait: string
+  color: string
+  rune: string
   skills: { name: string; total: number }[]
 }
 
@@ -212,6 +216,26 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
             onClick={handleBannerClick}
             title="Click to roll d20"
           >
+            {activeSpeaker && (
+              <div className="roll-request-character">
+                <div
+                  className="roll-request-avatar"
+                  style={{ borderColor: activeSpeaker.color }}
+                >
+                  <img
+                    src={activeSpeaker.portrait}
+                    alt={activeSpeaker.name}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                  <span className="roll-request-rune" style={{ color: activeSpeaker.color }}>
+                    {activeSpeaker.rune}
+                  </span>
+                </div>
+                <span className="roll-request-name" style={{ color: activeSpeaker.color }}>
+                  {activeSpeaker.name}
+                </span>
+              </div>
+            )}
             <div className="roll-request-skill">{pendingRoll.skill}</div>
             <div className="roll-request-dc">DC {pendingRoll.dc}</div>
             <div className="roll-request-hint">click to roll d20</div>

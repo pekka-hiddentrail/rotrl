@@ -1079,6 +1079,49 @@ body {
   50%       { border-color: #c9a84caa; box-shadow: 0 0 10px #c9a84c22; }
 }
 
+.roll-request-character {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.roll-request-avatar {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #c9a84c;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #1a1408;
+}
+
+.roll-request-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.roll-request-rune {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.roll-request-name {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
 .roll-request-skill {
   font-family: 'Cinzel', serif;
   font-size: 11px;
@@ -2073,6 +2116,8 @@ body {
 .status-fled        { background: #1a2010; color: #708040; border: 1px solid #304010; }
 .status-dead        { background: #1a1010; color: #605050; border: 1px solid #302020; }
 
+.combatant-dead .combatant-name { color: #8b3333; }
+
 .combat-end-btn {
   margin-top: 8px;
   width: 100%;
@@ -2465,6 +2510,22 @@ body {
 
 .bm-row:hover td {
   background: #1e1008;
+}
+
+/* Subtle source tinting — green for social benchmark, amber for combat */
+.bm-row--basic td   { background-color: #0b130b; }
+.bm-row--combat td  { background-color: #151208; }
+.bm-row--basic:hover td  { background-color: #122012 !important; }
+.bm-row--combat:hover td { background-color: #221d08 !important; }
+
+.bm-chart-section-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 20px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e1208;
 }
 
 .bm-ts {
@@ -2879,7 +2940,7 @@ body {
 .cc-pct--mid  { color: #c9a84c; font-weight: bold; }
 .cc-pct--low  { color: #c06060; font-weight: bold; }
 
-.cc-bar-col { width: 80px; padding: 4px 8px; }
+.cc-bar-col { width: 110px; padding: 4px 8px; white-space: nowrap; }
 
 .cc-bar-wrap {
   width: 72px;
@@ -2887,6 +2948,28 @@ body {
   background: #2a1a08;
   border-radius: 3px;
   overflow: hidden;
+}
+
+/* Delta indicator — shown next to the bar when a prev snapshot exists */
+.cc-delta {
+  display: inline-block;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  margin-left: 5px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.cc-delta--up   { color: #7acc88; }
+.cc-delta--down { color: #c06060; }
+.cc-delta--same { color: #5a4828; }
+
+/* "no baseline" note in summary row */
+.cc-no-prev {
+  font-size: 9px;
+  color: #5a4828;
+  font-style: italic;
+  letter-spacing: 0.04em;
 }
 
 .cc-bar-fill {

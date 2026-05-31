@@ -5,6 +5,7 @@ ANTHROPIC_API_KEY is not set.
 
 Run explicitly:
     pytest tests/test_token_benchmark.py -v -s
+    pytest tests/test_token_benchmark.py::test_token_counts_combat_turns -v -s
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ _CSV_FIELDS = [
 ]
 
 _PROVIDER = "anthropic"
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL    = "claude-haiku-4-5-20251001"
 
 
 def _latest_api_log_for_session(session_id: str) -> dict | None:
@@ -152,3 +153,154 @@ def test_token_counts_three_turns(benchmark_client):
             f"total={row['total_tokens']}  "
             f"sys_chars={row['system_chars']}"
         )
+
+
+# ── Combat benchmark ──────────────────────────────────────────────────────────
+#
+# A second benchmark scenario that measures token cost across the first two
+# turns of active combat.  Written to a separate CSV so the schema can include
+# a "scenario" label and diagnostic SSE flags without changing the existing
+# social-turn CSV.
+#
+# Run explicitly:
+#     pytest tests/test_token_benchmark.py::test_token_counts_combat_turns -v -s
+
+_COMBAT_BENCHMARK_CSV = _REAL_OUTPUTS / "token_benchmarks_combat.csv"
+_COMBAT_CSV_FIELDS = [
+    "timestamp", "provider", "model", "session", "turn", "scenario",
+    "prompt_tokens", "completion_tokens", "total_tokens", "system_chars",
+    "combat_started",    # 1 if a combat_update SSE event was in the stream, else 0
+    "attack_requested",  # 1 if an attack_request SSE event was in the stream, else 0
+    "roll_requested",    # 1 if a roll_request SSE event was in the stream, else 0
+    "log_file",
+]
+
+
+def _append_combat_benchmark_row(row: dict) -> None:
+    """Append one row to the combat benchmark CSV, writing headers if needed."""
+    _REAL_OUTPUTS.mkdir(parents=True, exist_ok=True)
+    write_header = not _COMBAT_BENCHMARK_CSV.exists()
+    with _COMBAT_BENCHMARK_CSV.open("a", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_COMBAT_CSV_FIELDS)
+        if write_header:
+            writer.writeheader()
+        writer.writerow({k: row.get(k, "") for k in _COMBAT_CSV_FIELDS})
+
+
+@pytest.mark.benchmark
+def test_token_counts_combat_turns(benchmark_client):
+    """Boot an Anthropic Haiku session and record token costs across four combat turns.
+
+    Turn 1 — pre_combat    : arrive at the Swallowtail festival plaza (establishes world context)
+    Turn 2 — combat_init   : goblins attack; a %%COMBAT%% block is expected → combat_update SSE
+    Turn 3 — first_strike  : a PC attacks a goblin; %%ATTACK%% block expected → attack_request SSE
+    Turn 4 — intimidate    : player tries to intimidate the goblin leader mid-combat (skill roll)
+
+    Each row records prompt/completion/total tokens plus three boolean flags that
+    indicate whether key SSE events appeared (useful for detecting turns where the
+    LLM did not produce the expected section type).
+
+    Results are appended to outputs/token_benchmarks_combat.csv (never deleted).
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set — skipping real-API benchmark")
+
+    run_ts = datetime.now().isoformat(timespec="seconds")
+
+    # ── Boot ─────────────────────────────────────────────────────────────────
+    resp = benchmark_client.post("/api/sessions", json={
+        "session_number": 1,
+        "model": _MODEL,
+        "provider": _PROVIDER,
+        "temperature": 0.3,
+        "dev_mode": False,
+    })
+    assert resp.status_code == 200, f"Boot failed: {resp.text}"
+    boot_events = parse_sse(resp)
+    done_evt = next((e for e in boot_events if e.get("type") == "done"), None)
+    assert done_evt and done_evt.get("session_id"), "Boot did not return a session_id"
+    session_id: str = done_evt["session_id"]
+
+    rows: list[dict] = []
+
+    def _send_turn_combat(input_text: str, benchmark_turn: int, scenario: str) -> dict:
+        r = benchmark_client.post(
+            f"/api/sessions/{session_id}/turn",
+            json={"input": input_text},
+        )
+        assert r.status_code == 200, \
+            f"Turn {benchmark_turn} ({scenario}) failed: {r.text}"
+        evts = parse_sse(r)
+        assert any(e.get("type") == "done" for e in evts), \
+            f"Turn {benchmark_turn} ({scenario}) stream did not complete"
+
+        event_types = {e.get("type") for e in evts}
+
+        log_data = _latest_api_log_for_session(session_id)
+        assert log_data, f"No API log found for turn {benchmark_turn} ({scenario})"
+
+        row = _extract_token_row(log_data, run_ts, benchmark_turn)
+        row["scenario"]        = scenario
+        row["combat_started"]  = int("combat_update"   in event_types)
+        row["attack_requested"] = int("attack_request" in event_types)
+        row["roll_requested"]   = int("roll_request"   in event_types)
+
+        print(
+            f"\n[combat-benchmark] turn={benchmark_turn} ({scenario})  "
+            f"prompt={row['prompt_tokens']}  "
+            f"completion={row['completion_tokens']}  "
+            f"total={row['total_tokens']}  "
+            f"sys_chars={row['system_chars']}  "
+            f"sse={sorted(event_types)}"
+        )
+        return row
+
+    # ── Turn 1: pre-combat ────────────────────────────────────────────────────
+    # Establish scene context at the festival before violence breaks out.
+    rows.append(_send_turn_combat(
+        "We arrive at the Swallowtail Festival plaza as Father Zantus begins the blessing ceremony.",
+        1,
+        "pre_combat",
+    ))
+
+    # ── Turn 2: combat initiation ─────────────────────────────────────────────
+    # Prompt should trigger a %%COMBAT%% block with initiative rolls.
+    # A combat_update SSE event appearing in the stream confirms the LLM
+    # produced a valid %%COMBAT%% section that the backend parsed successfully.
+    rows.append(_send_turn_combat(
+        "Suddenly goblin war-chants erupt from the gates — a raiding party bursts into the plaza,"
+        " torches in hand, attacking the crowd!  Roll initiative and begin combat.",
+        2,
+        "combat_init",
+    ))
+    if not rows[-1]["combat_started"]:
+        print(
+            "\n[combat-benchmark] WARNING: combat_update was NOT in the turn-2 SSE stream."
+            " The LLM may not have emitted a %%COMBAT%% block — token costs for"
+            " turns 3-4 will reflect a non-combat context."
+        )
+
+    # ── Turn 3: first strike ──────────────────────────────────────────────────
+    # PC attacks a goblin.  If the LLM correctly emits %%ATTACK%% with a PC
+    # attacker, the backend will emit an attack_request SSE event.
+    # NOTE: the benchmark records the /turn token cost only.  The subsequent
+    # dice-resolution round-trip (/resolve_attack_roll, /resume_combat) is a
+    # separate backend call not measured here.
+    rows.append(_send_turn_combat(
+        "Ani draws his longsword and strikes at the nearest goblin!",
+        3,
+        "first_strike",
+    ))
+
+    # ── Turn 4: intimidate ────────────────────────────────────────────────────
+    # Social skill used in combat.  Expect a roll_request SSE event (Intimidate DC).
+    rows.append(_send_turn_combat(
+        "I step forward, slam my shield on the ground, and bellow a war cry to intimidate"
+        " the goblin leader into fleeing!",
+        4,
+        "intimidate",
+    ))
+
+    # ── Persist to CSV ────────────────────────────────────────────────────────
+    for row in rows:
+        _append_combat_benchmark_row(row)

@@ -120,6 +120,26 @@ And   the session clears and the UI returns to the splash screen after completio
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-007 — Combat resolution narrative starts a fresh GM message bubble
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** doResumeCombat streams tokens after attack resolution
+
+```gherkin
+Given the player has resolved a damage roll (queue_remaining === 0)
+And   the previous GM response (attack setup narrative) is the last message in the chat
+When  doResumeCombat begins streaming
+Then  the combat resolution tokens appear in a NEW GM message bubble
+And   the previous GM message text is unchanged
+```
+
+**Implementation:** `doResumeCombat` pushes an empty `{ role: 'gm', content: '' }`
+message before the streaming loop begins, ensuring `appendToken` appends to the
+new bubble rather than the last one from the previous turn.
+
+---
+
 ## Out of Scope
 
 - Section marker filtering (covered by SPEC-006)

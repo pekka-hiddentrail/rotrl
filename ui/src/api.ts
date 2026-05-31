@@ -7,7 +7,7 @@ export type SseEvent =
   | { type: 'error'; message: string }
   | { type: 'context'; npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; location: string | null; location_npcs: string[]; scene_npcs: string[] }
   | { type: 'patch_last'; content: string }
-  | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string }
+  | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string; speaker?: string | null }
   | { type: 'rate_limits'; rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string }
   | { type: 'combat_update'; combat_state: import('./types').CombatState | null }
   | { type: 'attack_request'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
@@ -65,7 +65,7 @@ export async function endSession(sessionId: string): Promise<void> {
 export async function resolveRoll(
   sessionId: string,
   rolled: number,
-): Promise<{ passed: boolean; skill: string; dc: number; rolled: number; outcome: string }> {
+): Promise<{ passed: boolean; skill: string; dc: number; rolled: number; outcome: string; speaker?: string | null }> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/resolve_roll`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -105,6 +105,7 @@ export interface BenchmarkRow {
   model: string
   session: string
   turn: string | number
+  scenario?: string
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
@@ -115,6 +116,13 @@ export interface BenchmarkRow {
 export async function fetchBenchmarks(): Promise<BenchmarkRow[]> {
   const res = await fetch(`${BASE}/benchmarks`)
   if (!res.ok) throw new Error(`Benchmarks fetch failed (${res.status})`)
+  const data: { rows: BenchmarkRow[] } = await res.json()
+  return data.rows
+}
+
+export async function fetchCombatBenchmarks(): Promise<BenchmarkRow[]> {
+  const res = await fetch(`${BASE}/benchmarks/combat`)
+  if (!res.ok) throw new Error(`Combat benchmarks fetch failed (${res.status})`)
   const data: { rows: BenchmarkRow[] } = await res.json()
   return data.rows
 }
@@ -149,15 +157,18 @@ export interface CodeCoverageFile {
   miss:          number
   covered:       number
   pct:           number
+  delta:         number | null
   missing_lines: number[]
 }
 
 export interface CodeCoverageData {
-  generated:   string | null
-  files:       CodeCoverageFile[]
-  total_stmts: number
-  total_miss:  number
-  total_pct:   number
+  generated:       string | null
+  files:           CodeCoverageFile[]
+  has_prev:        boolean
+  total_stmts:     number
+  total_miss:      number
+  total_pct:       number
+  total_pct_delta: number | null
 }
 
 export async function fetchCodeCoverage(): Promise<CodeCoverageData> {
