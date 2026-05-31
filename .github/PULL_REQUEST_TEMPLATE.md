@@ -1,40 +1,98 @@
-## What changed
+## Summary
 
-<!-- One or two sentences. What does this PR add, fix, or remove? -->
+<!-- What problem does this solve, and how? 2–4 sentences. Lead with the "why", not a list of files changed. -->
 
 ## Type
 
-<!-- Check all that apply -->
-
 - [ ] Campaign content (encounters, NPCs, locations, lore)
-- [ ] GM agent / prompts / boot protocol
-- [ ] Backend (FastAPI, session manager, NPC lookup)
+- [ ] GM agent / prompts / system prompt
+- [ ] Backend (FastAPI, session manager, parsers, state)
 - [ ] Frontend (UI, components, styles)
-- [ ] Infrastructure (scripts, deps, config)
-- [ ] Docs / README
+- [ ] Tests (pytest / Vitest / Playwright)
+- [ ] Infrastructure (scripts, deps, CI, config)
+- [ ] Docs / README / specs
 
-## Testing
+## Changes
 
-<!-- How was this verified? Check what applies. -->
+<!-- One bullet per logical change. Group by layer if multiple layers are touched. -->
 
-- [ ] Booted a dev-mode session and played at least one turn
-- [ ] Booted a full-mode session (rules enforcement active)
-- [ ] NPC detection tested in the session (`npc_lookup` picks up the right names)
-- [ ] Session log written correctly to `outputs/`
-- [ ] `npx tsc --noEmit` passes (frontend only)
-- [ ] Not testable — explain why:
+**Backend**
+- 
+
+**Frontend**
+- 
+
+**Tests**
+- 
+
+**Specs / docs**
+- 
+
+<!-- Remove sections that don't apply -->
+
+## Breaking changes
+
+<!-- List anything that is not backwards-compatible. Leave blank if none. -->
+
+| Area | What broke | Migration |
+|------|-----------|-----------|
+| API | | |
+| SSE events | | |
+| State / file format | | |
+| Prompt format | | |
+
+## LLM / prompt impact
+
+<!-- Fill in any that apply; delete the table if no prompt work in this PR -->
+
+| Item | Detail |
+|------|--------|
+| System prompt token delta | +N / −N tokens (static base) |
+| Per-turn injection delta | +N / −N tokens |
+| New LLM markers / blocks | e.g. `%%NEW_BLOCK%%` |
+| Models tested | e.g. Haiku, Groq 70B |
+| Format regression risk | Low / Medium / High — reason |
+
+## Test coverage
+
+<!-- Fill in counts for suites you added or meaningfully extended; leave blank if unchanged -->
+
+| Suite | New tests | Total after |
+|-------|-----------|-------------|
+| pytest | | |
+| Vitest | | |
+| Playwright live | | |
+| Playwright unit (mocked) | | |
+
+**Feature spec ACs covered:** <!-- e.g. session-state.feature AC-001 – AC-017 -->
+
+## Manual verification
+
+<!-- How to confirm the feature works end-to-end. Be specific enough that a reviewer can follow without asking. -->
+
+1. Boot a session in dev mode (Haiku)
+2. 
+3. Expected: 
+
+## Screenshots / recordings
+
+<!-- Paste screenshots or a short screen recording for any visible UI change. Delete if backend-only. -->
 
 ## Campaign impact
 
-<!-- Leave blank if this is infrastructure/UI only. -->
+<!-- Leave blank / delete if infrastructure-only -->
 
-**Book / Act affected:**
-**NPCs affected:**
-**World state changes:**
+**Book / Act:**
+**NPCs changed:**
+**World state flags:**
 
 ## Checklist
 
-- [ ] NPC `base.md` files follow the canonical format (aliases/locations before `<!-- REFERENCE -->`, metadata after)
-- [ ] New `outputs/` files are not committed (git-ignored)
+- [ ] `npx tsc --noEmit` passes
+- [ ] Relevant pytest / Vitest / Playwright suites pass locally
+- [ ] New feature has a spec file (`specs/*.feature`) or existing spec updated
+- [ ] `sessions/state.template.json` updated if `state.json` schema changed
+- [ ] `outputs/` files not committed (git-ignored)
 - [ ] `ui/node_modules/` not committed
-- [ ] README updated if setup steps or behaviour changed
+- [ ] README / TESTING.md updated if setup or commands changed
+- [ ] NPC `base.md` files follow canonical format (payload above `<!-- REFERENCE -->`)
