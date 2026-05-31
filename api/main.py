@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, set_active_character, stream_boot, stream_end_session, stream_resume_combat, stream_turn, write_session_state
+from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, set_active_character, stream_boot, stream_end_session, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -212,6 +212,22 @@ def delete_combat(session_id: str):
     session.combat_state = None
     write_session_state(session)
     return {"combat_state": None}
+
+
+@app.post("/api/sessions/{session_id}/combat/advance_turn")
+def post_advance_combat_turn(session_id: str):
+    """Advance the initiative to the next active combatant and write state.json.
+
+    Returns { current_actor: str | null, is_pc: bool }.
+    409 when no combat is active; 404 when session not found.
+    """
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.combat_state is None:
+        raise HTTPException(status_code=409, detail="No active combat")
+    result = advance_combat_turn(session)
+    return result
 
 
 class ActiveCharacterRequest(BaseModel):

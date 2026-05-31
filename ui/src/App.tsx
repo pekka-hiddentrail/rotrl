@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
-import type { Message, SessionInfo, CombatState, AttackPhase, AttackResult } from './types'
+import type { Message, SessionInfo, CombatState, AttackPhase, AttackResult, ActiveSpeaker } from './types'
 import type { CharacterData } from './data/characters'
 import Header from './components/Header'
 import ChatWindow from './components/ChatWindow'
@@ -14,7 +14,7 @@ import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
+import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
   const [imgOk, setImgOk] = useState(true)
@@ -157,15 +157,8 @@ export default function App() {
         if (event.type === 'combat_update') {
           const cs = event.combat_state
           setCombatState(cs)
-          if (cs) {
-            setCurrentCombatantName(prev => {
-              if (prev !== null) return prev
-              const s = [...cs.combatants].sort((a, b) => b.initiative - a.initiative)
-              return s.find(c => c.status === 'active')?.name ?? null
-            })
-          } else {
-            setCurrentCombatantName(null)
-          }
+          // AC-008: read current_actor from backend (authoritative) rather than computing client-side
+          setCurrentCombatantName(cs?.current_actor ?? null)
         }
         if (event.type === 'attack_request') setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
@@ -201,15 +194,8 @@ export default function App() {
         if (event.type === 'combat_update') {
           const cs = event.combat_state
           setCombatState(cs)
-          if (cs) {
-            setCurrentCombatantName(prev => {
-              if (prev !== null) return prev
-              const s = [...cs.combatants].sort((a, b) => b.initiative - a.initiative)
-              return s.find(c => c.status === 'active')?.name ?? null
-            })
-          } else {
-            setCurrentCombatantName(null)
-          }
+          // AC-008: read current_actor from backend (authoritative) rather than computing client-side
+          setCurrentCombatantName(cs?.current_actor ?? null)
         }
         if (event.type === 'error') throw new Error(event.message)
       }
@@ -220,14 +206,20 @@ export default function App() {
     }
   }
 
-  const handleAdvanceTurn = () => {
-    if (!combatState) return
-    const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
-    const active = sorted.filter(c => c.status === 'active')
-    if (active.length === 0) return
-    const idx = active.findIndex(c => c.name === currentCombatantName)
-    const next = (idx + 1) % active.length
-    setCurrentCombatantName(active[next].name)
+  // AC-009: advance_turn is authoritative server-side; updates state.json and returns new actor.
+  const handleAdvanceTurn = async () => {
+    if (!session || !combatState) return
+    try {
+      const result = await advanceCombatTurn(session.id)
+      setCurrentCombatantName(result.current_actor)
+    } catch {
+      // Fallback: advance client-side if endpoint fails (e.g. offline)
+      const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
+      const active = sorted.filter(c => c.status === 'active')
+      if (active.length === 0) return
+      const idx = active.findIndex(c => c.name === currentCombatantName)
+      setCurrentCombatantName(active[(idx + 1) % active.length].name)
+    }
   }
 
   const handleAttackRoll = async (rolled: number) => {
@@ -396,11 +388,36 @@ export default function App() {
   }
 
   const isBooted = session !== null
+
+  // AC-008 / AC-010: build activeSpeaker from current initiative actor when combat is active.
+  // PC turn → normal character speaker data; enemy turn → isEnemy:true with red color.
+  const inputActiveSpeaker: ActiveSpeaker | null = (() => {
+    if (combatState && currentCombatantName) {
+      const pcData = Object.values(characterMap).find(
+        c => c.name.toLowerCase() === currentCombatantName.toLowerCase()
+      )
+      if (pcData) {
+        return { name: pcData.name, rune: pcData.rune, color: pcData.color, isEnemy: false }
+      }
+      // Enemy / NPC — hostile variant
+      return { name: currentCombatantName, rune: '', color: '#cc2222', isEnemy: true }
+    }
+    // Out of combat: use player-selected character
+    return activeCharacter ? (characterMap[activeCharacter] ? { ...characterMap[activeCharacter], isEnemy: false } : null) : null
+  })()
+
   const pendingRollSpeakerName = pendingRoll?.speaker?.toLowerCase()
   const pendingRollSpeaker = pendingRollSpeakerName
     ? characters.find(c => c.name.toLowerCase() === pendingRollSpeakerName) ?? null
     : null
-  const diceSpeaker = activeCharacter ? characterMap[activeCharacter] : pendingRollSpeaker
+  // During combat with a pending roll, fall back to the current PC combatant so the
+  // dice banner shows the right portrait and the auto-bonus uses their skill modifier.
+  const combatRollSpeaker = (pendingRoll && currentCombatantName)
+    ? characters.find(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()) ?? null
+    : null
+  const diceSpeaker = activeCharacter
+    ? characterMap[activeCharacter]
+    : pendingRollSpeaker ?? combatRollSpeaker
 
   return (
     <div className="app">
@@ -467,7 +484,7 @@ export default function App() {
             <InputBar
               onSend={handleSend}
               disabled={streaming || ending}
-              activeSpeaker={activeCharacter ? characterMap[activeCharacter] : null}
+              activeSpeaker={inputActiveSpeaker}
             />
           )}
         </div>

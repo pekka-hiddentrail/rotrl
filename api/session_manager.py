@@ -456,7 +456,18 @@ def _parse_combat_block(
                     c.status = 'active'
             # New combatant (not in existing_state): use LLM-provided HP as-is.
 
-    return CombatState(round=round_num, combatants=combatants)
+    # current_actor: seed from initiative order on round 1; carry over on round 2+.
+    if existing_state is not None:
+        # Preserve whatever the backend last set (may have been advanced by the
+        # advance_turn endpoint between turns).
+        current_actor: Optional[str] = existing_state.current_actor
+    else:
+        # Round 1: highest-initiative active combatant is the first to act.
+        _sorted_for_init = sorted(combatants, key=lambda c: c.initiative, reverse=True)
+        _first_active = next((c for c in _sorted_for_init if c.status == "active"), None)
+        current_actor = _first_active.name if _first_active else None
+
+    return CombatState(round=round_num, combatants=combatants, current_actor=current_actor)
 
 
 def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
@@ -465,6 +476,7 @@ def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
         return None
     return {
         "round": state.round,
+        "current_actor": state.current_actor,
         "combatants": [
             {
                 "name": c.name,
@@ -961,6 +973,7 @@ class CombatState:
     """Current combat round and combatant list."""
     round: int
     combatants: list  # list[Combatant]
+    current_actor: Optional[str] = None  # name of whoever is acting this turn
 
 
 @dataclass
@@ -1042,9 +1055,53 @@ def _write_session_state(session: "GameSession") -> None:
         "mode":             "combat" if session.combat_state is not None else "social",
         "round":            session.combat_state.round if session.combat_state is not None else 0,
         "events":           [ev.event_id for ev in session.active_events],
-        "active_character": session.active_character,
+        # In combat, the current initiative actor drives active_character in state.json.
+        # Falls back to session.active_character when combat is inactive or no actor set.
+        "active_character": (
+            session.combat_state.current_actor
+            if session.combat_state is not None and session.combat_state.current_actor is not None
+            else session.active_character
+        ),
     }
     path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
+
+
+def advance_combat_turn(session: "GameSession") -> dict:
+    """Advance current_actor to the next active combatant in initiative order.
+
+    Wraps around at the end of the list.  Skips combatants whose status is not
+    "active".  Writes the updated state to state.json and returns:
+        { "current_actor": str | None, "is_pc": bool }
+
+    Raises ValueError when session.combat_state is None (caller should 409).
+    """
+    if session.combat_state is None:
+        raise ValueError("No active combat")
+
+    combat = session.combat_state
+    # Active combatants only, sorted highest-initiative first (the canonical order).
+    active = [c for c in sorted(combat.combatants, key=lambda c: c.initiative, reverse=True)
+              if c.status == "active"]
+
+    if not active:
+        # No one left to act — leave current_actor as-is.
+        _write_session_state(session)
+        is_pc = _is_pc_attacker(combat.current_actor or "", session)
+        return {"current_actor": combat.current_actor, "is_pc": is_pc}
+
+    # Find the current actor's position; advance to the next (with wrap-around).
+    names = [c.name for c in active]
+    try:
+        idx = names.index(combat.current_actor)
+        next_idx = (idx + 1) % len(names)
+    except ValueError:
+        # current_actor not found in active list (None, dead, etc.) → pick first.
+        next_idx = 0
+
+    combat.current_actor = names[next_idx]
+    _write_session_state(session)
+    is_pc = _is_pc_attacker(combat.current_actor, session)
+    return {"current_actor": combat.current_actor, "is_pc": is_pc}
 
 
 def _ts() -> str:

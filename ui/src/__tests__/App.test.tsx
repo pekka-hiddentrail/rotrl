@@ -25,6 +25,8 @@ vi.mock('../api', () => ({
   resolveAttackRoll: vi.fn(),
   resolveDamageRoll: vi.fn(),
   resumeCombat: vi.fn(),
+  setActiveCharacter: vi.fn().mockResolvedValue({}),
+  advanceCombatTurn: vi.fn().mockResolvedValue({ current_actor: null, is_pc: false }),
 }))
 
 vi.mock('../data/characters', () => ({

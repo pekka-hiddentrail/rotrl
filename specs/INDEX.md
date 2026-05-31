@@ -35,8 +35,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [coverage-matrix.feature](coverage-matrix.feature) | Backend \| Frontend \| Infrastructure | `@coverage` `@developer-tools` `@quality-of-life` | 7 | `scripts/build_coverage.py`, `outputs/coverage.json`, `GET /api/coverage`, `CoverageMatrix.tsx`, `Header.tsx` Coverage button |
 | [combat-system-prompt.feature](combat-system-prompt.feature) | Backend | `@combat` `@prompt` `@injection` `@per-turn` `@token` | 16 | `_build_combat_system_prompt()`, `_COMBAT_SECTION_SPECS`, `_inject_context` combat branch (live + pre-combat), `[INITIATIVE ORDER]`, `[CURRENT HP]`, `[PC COMBAT STATS]`, `[ACTIVE CONDITIONS]`, `tests/test_combat_prompt.py` |
 | [session-state.feature](session-state.feature) | Backend | `@session` `@state` `@persistence` `@boot` | 17 | `_write_session_state()`, `write_session_state()`, `set_active_character()`, `PUT /active_character`, `sessions/state.template.json`, `sessions/session_NNN/state.json`, `create_session()` boot init, `tests/test_session_state.py` |
+| [combat-active-character.feature](combat-active-character.feature) | Backend \| Frontend | `@combat` `@session` `@prompt` `@streaming` `@layout` | 14 | `CombatState.current_actor`, `advance_combat_turn()`, `POST /combat/advance_turn`, `_write_session_state` combat actor, `ActiveSpeaker.isEnemy`, `InputBar` hostile state + skull icon + taunting placeholder, `tests/test_combat_active_character.py`, `InputBarHostile.test.tsx` |
 
-**Total: 230 acceptance criteria across 27 feature files**
+**Total: 244 acceptance criteria across 28 feature files**
 
 ---
 

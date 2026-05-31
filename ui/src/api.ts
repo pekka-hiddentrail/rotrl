@@ -86,6 +86,14 @@ export async function endCombat(sessionId: string): Promise<void> {
   if (!res.ok) throw new Error(`End combat failed (${res.status})`)
 }
 
+export async function advanceCombatTurn(
+  sessionId: string,
+): Promise<{ current_actor: string | null; is_pc: boolean }> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/combat/advance_turn`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Advance turn failed (${res.status})`)
+  return res.json()
+}
+
 export async function logRoll(
   sessionId: string,
   expr: string,
