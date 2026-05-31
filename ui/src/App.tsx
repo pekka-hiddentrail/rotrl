@@ -54,10 +54,11 @@ export default function App() {
     location_npcs: string[]
     scene_npcs: string[]
   } | null>(null)
-  const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string } | null>(null)
+  const [pendingRoll, setPendingRoll] = useState<{ skill: string; dc: number; success: string; failure: string; speaker?: string | null } | null>(null)
   const [diceKey, setDiceKey] = useState(0)
   const [rateLimits, setRateLimits] = useState<{ rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string } | null>(null)
   const [combatState, setCombatState] = useState<CombatState | null>(null)
+  const [currentCombatantName, setCurrentCombatantName] = useState<string | null>(null)
   const [attackPhase, setAttackPhase] = useState<AttackPhase>(null)
   const [attackLog, setAttackLog] = useState<AttackResult[]>([])
   const [toast, setToast] = useState<string | null>(null)
@@ -153,7 +154,19 @@ export default function App() {
         }
         if (event.type === 'roll_request') setPendingRoll(event)
         if (event.type === 'rate_limits') setRateLimits(event)
-        if (event.type === 'combat_update') setCombatState(event.combat_state)
+        if (event.type === 'combat_update') {
+          const cs = event.combat_state
+          setCombatState(cs)
+          if (cs) {
+            setCurrentCombatantName(prev => {
+              if (prev !== null) return prev
+              const s = [...cs.combatants].sort((a, b) => b.initiative - a.initiative)
+              return s.find(c => c.status === 'active')?.name ?? null
+            })
+          } else {
+            setCurrentCombatantName(null)
+          }
+        }
         if (event.type === 'attack_request') setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
         if (event.type === 'error') throw new Error(event.message)
@@ -182,7 +195,19 @@ export default function App() {
             return prev
           })
         }
-        if (event.type === 'combat_update') setCombatState(event.combat_state)
+        if (event.type === 'combat_update') {
+          const cs = event.combat_state
+          setCombatState(cs)
+          if (cs) {
+            setCurrentCombatantName(prev => {
+              if (prev !== null) return prev
+              const s = [...cs.combatants].sort((a, b) => b.initiative - a.initiative)
+              return s.find(c => c.status === 'active')?.name ?? null
+            })
+          } else {
+            setCurrentCombatantName(null)
+          }
+        }
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
@@ -192,19 +217,30 @@ export default function App() {
     }
   }
 
+  const handleAdvanceTurn = () => {
+    if (!combatState) return
+    const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
+    const active = sorted.filter(c => c.status === 'active')
+    if (active.length === 0) return
+    const idx = active.findIndex(c => c.name === currentCombatantName)
+    const next = (idx + 1) % active.length
+    setCurrentCombatantName(active[next].name)
+  }
+
   const handleAttackRoll = async (rolled: number) => {
     if (!session) return
     try {
+      const phase = attackPhaseRef.current?.phase === 'to_hit' ? attackPhaseRef.current : null
       const result = await resolveAttackRoll(session.id, rolled)
       const resultEntry: AttackResult = {
-        attacker: attackPhaseRef.current && attackPhaseRef.current.phase !== null ? (attackPhaseRef.current as { attacker: string }).attacker : '?',
-        target: attackPhaseRef.current && attackPhaseRef.current.phase !== null ? (attackPhaseRef.current as { target: string }).target : '?',
+        attacker: phase?.attacker ?? '?',
+        target: phase?.target ?? '?',
         roll: result.roll, bonus: result.bonus, total: result.total, ac: result.ac,
         hit: result.hit, damage_rolls: [], damage_total: 0,
-        attack_type: 'melee', is_pc: true,
+        attack_type: phase?.attack_type ?? 'melee', is_pc: true,
       }
       if (result.hit) {
-        setAttackPhaseSync({ phase: 'damage', attacker: resultEntry.attacker, target: resultEntry.target, damage_expr: result.damage_expr!, hit_total: result.total })
+        setAttackPhaseSync({ phase: 'damage', attacker: resultEntry.attacker, target: resultEntry.target, damage_expr: result.damage_expr!, hit_total: result.total, attack_type: resultEntry.attack_type })
       } else {
         setAttackLogSync(prev => [resultEntry, ...prev])
         if (result.next_attack) {
@@ -221,13 +257,13 @@ export default function App() {
 
   const handleDamageRoll = async (rolls: number[], total: number) => {
     if (!session || !attackPhaseRef.current || attackPhaseRef.current.phase !== 'damage') return
-    const { attacker, target } = attackPhaseRef.current as { attacker: string; target: string }
+    const { attacker, target, attack_type } = attackPhaseRef.current
     try {
       const result = await resolveDamageRoll(session.id, rolls, total)
       const resultEntry: AttackResult = {
         attacker, target, roll: 0, bonus: 0, total: 0, ac: 0,
         hit: true, damage_rolls: result.damage_rolls, damage_total: result.damage_total,
-        attack_type: 'melee', is_pc: true,
+        attack_type, is_pc: true,
       }
       setAttackLogSync(prev => [resultEntry, ...prev])
       if (result.next_attack) {
@@ -248,6 +284,7 @@ export default function App() {
     setSession(null)
     setMessages([])
     setCombatState(null)
+    setCurrentCombatantName(null)
     setPendingRoll(null)
     setAttackPhaseSync(null)
     setAttackLogSync(() => [])
@@ -259,8 +296,10 @@ export default function App() {
     try {
       await endCombat(session.id)
       setCombatState(null)
+      setCurrentCombatantName(null)
     } catch {
-      setCombatState(null) // clear locally even if request fails
+      setCombatState(null)
+      setCurrentCombatantName(null) // clear locally even if request fails
     }
   }
 
@@ -312,6 +351,7 @@ export default function App() {
       setSession(null)
       setMessages([])
       setCombatState(null)
+      setCurrentCombatantName(null)
       setPendingRoll(null)
       setAttackPhaseSync(null)
       setAttackLogSync(() => [])
@@ -421,6 +461,8 @@ export default function App() {
           <CombatPanel
             combatState={combatState}
             disabled={streaming || ending}
+            currentCombatantName={currentCombatantName}
+            onAdvanceTurn={handleAdvanceTurn}
             onEndCombat={handleEndCombat}
           />
         )}
@@ -435,7 +477,9 @@ export default function App() {
           onAttackRoll={handleAttackRoll}
           onDamageRoll={handleDamageRoll}
           onRoll={async (expr: string, rolls: number[], total: number) => {
-            const speaker = activeCharacter ? characterMap[activeCharacter] : null
+            const speaker = activeCharacter
+              ? characterMap[activeCharacter]
+              : characters.find(c => c.name === pendingRoll?.speaker) ?? null
             const speakerName = speaker?.name ?? null
             const rawTotal = rolls.reduce((a, b) => a + b, 0)
             const modifier = total - rawTotal
@@ -448,7 +492,13 @@ export default function App() {
             } else {
               rollMsg = speakerName ? `${speakerName} rolled a ${rawTotal}.` : `Rolled ${rawTotal}.`
             }
-            setMessages(prev => [...prev, { role: 'player', content: rollMsg }])
+            setMessages(prev => [...prev, {
+              role: 'player',
+              content: rollMsg,
+              speaker: speaker
+                ? { name: speaker.name, portrait: speaker.portrait, color: speaker.color, rune: speaker.rune }
+                : null,
+            }])
             if (!session) return null
             logRoll(session.id, expr, rolls, total)
             if (pendingRoll) {

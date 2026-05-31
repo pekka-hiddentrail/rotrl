@@ -112,6 +112,39 @@ And   the patch_last event sends the correct clean narrative after streaming com
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-006 — Missing %%NARRATIVE%% triggers a buffered retry
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM response contains section markers but omits %%NARRATIVE%%
+
+```gherkin
+Given the LLM returns a section-format response (contains %% markers)
+And   the response has no %%NARRATIVE%% block, or %%NARRATIVE%% content is empty
+When  the turn stream completes server-side
+Then  the buffered tokens are discarded
+And   the LLM is called again (up to 1 retry, 2 total attempts)
+And   each attempt is logged independently via write_api_log
+And   if the retry returns a valid %%NARRATIVE%%, its tokens are released to the client
+And   if all retries are exhausted without %%NARRATIVE%%, the response is used as-is
+```
+
+**Scenario:** LLM response contains no %% markers at all (flat format)
+
+```gherkin
+Given the LLM returns a flat-format response with no %% section markers
+When  the turn stream completes
+Then  the guard is skipped — any non-empty content is accepted without retry
+```
+
+**Notes:**
+- The client sees only the spinner (no tokens) until a validated response is released.
+- A retry notice is appended to the session log via `_log()`.
+- LLM API errors (network failures, rate-limit exceptions) propagate immediately; no retry is attempted for hard errors.
+- The `%%NARRATIVE%%` presence check uses a direct regex (`^%%NARRATIVE%%`) — NOT `_parse_response_sections`, which applies a graceful NARRATIVE fallback for any non-section-format input.
+
+---
+
 ## Out of Scope
 
 - NPC profile content quality (prompt engineering)

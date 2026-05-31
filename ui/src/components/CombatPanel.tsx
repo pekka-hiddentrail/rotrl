@@ -4,6 +4,8 @@ import HpBar from './HpBar'
 interface Props {
   combatState: CombatState
   disabled?: boolean
+  currentCombatantName?: string | null
+  onAdvanceTurn?: () => void
   onEndCombat: () => void
 }
 
@@ -33,8 +35,9 @@ const CONDITION_TOOLTIPS: Record<string, string> = {
   exhausted:  'Exhausted: -6 Str and Dex; move at half speed; becomes fatigued after rest',
 }
 
-export default function CombatPanel({ combatState, disabled, onEndCombat }: Props) {
+export default function CombatPanel({ combatState, disabled, currentCombatantName, onAdvanceTurn, onEndCombat }: Props) {
   const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
+  const effectiveCurrent = currentCombatantName ?? sorted.find(c => c.status === 'active')?.name ?? null
 
   return (
     <aside className="combat-panel">
@@ -46,7 +49,7 @@ export default function CombatPanel({ combatState, disabled, onEndCombat }: Prop
       <div className="combat-initiative-list">
         {sorted.map((c, i) => {
           const isActive = c.status === 'active'
-          const isCurrent = i === 0 && isActive
+          const isCurrent = isActive && c.name === effectiveCurrent
           return (
             <div
               key={c.name}
@@ -85,6 +88,14 @@ export default function CombatPanel({ combatState, disabled, onEndCombat }: Prop
         })}
       </div>
 
+      <button
+        className="btn btn-secondary btn-sm combat-end-btn"
+        onClick={onAdvanceTurn}
+        disabled={disabled}
+        title="Advance the active-turn highlight to the next combatant"
+      >
+        Next Turn →
+      </button>
       <button
         className="btn btn-secondary btn-sm combat-end-btn"
         onClick={onEndCombat}

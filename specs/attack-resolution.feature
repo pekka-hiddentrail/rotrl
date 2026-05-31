@@ -174,6 +174,11 @@ Then  next_attack in the response describes Yanyeeku's attack
 - NPC HP changes use `_apply_hp_deltas` — same code path as `%%HP%%` deltas.
 - Frontend: `attackPhase` state drives DicePanel banners (to-hit → damage); `attackLog` shows
   results in DicePanel history. Auto-calls `/resume_combat` when `queue_remaining === 0`.
+- **`attack_type` is carried through the full attack lifecycle.** The `to_hit` phase carries
+  `attack_type` (e.g. `"ranged"`, `"melee"`). When a hit is confirmed, `attack_type` is explicitly
+  forwarded into the `damage` phase object so `handleDamageRoll` can read it. Both the to-hit miss
+  log entry and the damage log entry receive the correct type — neither defaults to `"melee"`.
+  `AttackPhase` damage variant has `attack_type: string` (added alongside the `to-hit` fix).
 - Related: [combat-tracker.feature](combat-tracker.feature) — initiative tracker the LLM updates after resolution
 - Related: [combat-hp.feature](combat-hp.feature) — HP authority that attack damage writes into
 - Related: [dice-panel.feature](dice-panel.feature) — DicePanel skill-check flow (unchanged by this feature)

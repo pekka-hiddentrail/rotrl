@@ -7,7 +7,7 @@ export type SseEvent =
   | { type: 'error'; message: string }
   | { type: 'context'; npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; location: string | null; location_npcs: string[]; scene_npcs: string[] }
   | { type: 'patch_last'; content: string }
-  | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string }
+  | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string; speaker?: string | null }
   | { type: 'rate_limits'; rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string }
   | { type: 'combat_update'; combat_state: import('./types').CombatState | null }
   | { type: 'attack_request'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
@@ -65,7 +65,7 @@ export async function endSession(sessionId: string): Promise<void> {
 export async function resolveRoll(
   sessionId: string,
   rolled: number,
-): Promise<{ passed: boolean; skill: string; dc: number; rolled: number; outcome: string }> {
+): Promise<{ passed: boolean; skill: string; dc: number; rolled: number; outcome: string; speaker?: string | null }> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/resolve_roll`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -5,10 +5,12 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 from api.session_manager import (
+    ActiveEvent,
     GameSession,
     CombatState,
     Combatant,
     _inject_context,
+    _build_pc_combat_roster,
     _DEV_MAX_HISTORY,
     _GROQ_MAX_HISTORY,
     _FULL_MAX_HISTORY,
@@ -677,3 +679,91 @@ class TestPcProfileInjection:
         content, _ = _call(session)
         # The first key match wins; exactly one narrative block injected
         assert content.count("## PC —") == 1
+
+
+# ── PC combat roster injection ────────────────────────────────────────────────
+
+def _pc_profiles_fixture() -> dict:
+    """Two minimal PC profiles with combat_stats populated."""
+    return {
+        "thaelion": {
+            "narrative": "## PC — Thaelion",
+            "mechanical": "## PC Stats — Thaelion\nHP: 22  AC: 16  Init: +3",
+            "combat_stats": {"name": "Thaelion", "hp_max": 22, "ac": 16, "initiative": "+3"},
+        },
+        "yanyeeku": {
+            "narrative": "## PC — Yanyeeku",
+            "mechanical": "## PC Stats — Yanyeeku\nHP: 9  AC: 16  Init: +2",
+            "combat_stats": {"name": "Yanyeeku", "hp_max": 9, "ac": 16, "initiative": "+2"},
+        },
+    }
+
+
+class TestPcCombatRoster:
+    """_build_pc_combat_roster and its injection into the combat-start context."""
+
+    def test_roster_contains_all_pc_names(self):
+        session = _make_session(pc_profiles=_pc_profiles_fixture())
+        roster = _build_pc_combat_roster(session)
+        assert "Thaelion" in roster
+        assert "Yanyeeku" in roster
+
+    def test_roster_uses_full_hp_on_round_1(self):
+        """HP line must be hp_max/hp_max — PCs start combat at full health."""
+        session = _make_session(pc_profiles=_pc_profiles_fixture())
+        roster = _build_pc_combat_roster(session)
+        assert "hp: 22/22" in roster
+        assert "hp: 9/9" in roster
+
+    def test_roster_includes_ac_and_initiative(self):
+        session = _make_session(pc_profiles=_pc_profiles_fixture())
+        roster = _build_pc_combat_roster(session)
+        assert "ac: 16" in roster
+        assert "init: +3" in roster
+
+    def test_roster_lines_use_combat_format(self):
+        """Every PC line must follow the exact %%COMBAT%% combatant format."""
+        session = _make_session(pc_profiles=_pc_profiles_fixture())
+        roster = _build_pc_combat_roster(session)
+        assert "· hp:" in roster
+        assert "· ac:" in roster
+        assert "· init:" in roster
+        assert "· status: active" in roster
+
+    def test_roster_empty_when_no_profiles(self):
+        session = _make_session(pc_profiles={})
+        assert _build_pc_combat_roster(session) == ""
+
+    def test_roster_injected_with_combat_start_spec(self):
+        """When active_events are present and no combat yet, the PC roster is in the system content."""
+        session = _make_session(
+            pc_profiles=_pc_profiles_fixture(),
+            active_events=[ActiveEvent(event_id="goblin_attack_starts", content="Goblins!", turns_remaining=3)],
+            messages=[{"role": "user", "content": "The goblins charge!"}],
+        )
+        content, _ = _call(session)
+        assert "PARTY ROSTER" in content
+        assert "Thaelion" in content
+        assert "Yanyeeku" in content
+
+    def test_roster_not_injected_without_active_events(self):
+        """Without active_events the roster must NOT appear — combat hasn't been signalled."""
+        session = _make_session(
+            pc_profiles=_pc_profiles_fixture(),
+            active_events=[],
+            messages=[{"role": "user", "content": "We explore the cathedral."}],
+        )
+        content, _ = _call(session)
+        assert "PARTY ROSTER" not in content
+
+    def test_roster_not_injected_during_ongoing_combat(self):
+        """Round 2+ uses the ongoing spec, not round-1 spec — roster must not repeat."""
+        session = _make_session(
+            pc_profiles=_pc_profiles_fixture(),
+            combat_state=CombatState(round=2, combatants=[
+                Combatant(name="Thaelion", hp_current=22, hp_max=22, ac=16, initiative=3),
+            ]),
+            messages=[{"role": "user", "content": "I attack again."}],
+        )
+        content, _ = _call(session)
+        assert "PARTY ROSTER" not in content

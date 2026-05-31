@@ -30,6 +30,7 @@ const DAMAGE_PHASE: AttackPhase = {
   target: 'Goblin 1',
   damage_expr: '1d8+3',
   hit_total: 20,
+  attack_type: 'melee',
 }
 
 const HIT_RESULT: AttackResult = {

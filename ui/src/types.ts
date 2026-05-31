@@ -34,7 +34,7 @@ export interface AttackResult {
 export type AttackPhase =
   | null
   | { phase: 'to_hit'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
-  | { phase: 'damage'; attacker: string; target: string; damage_expr: string; hit_total: number }
+  | { phase: 'damage'; attacker: string; target: string; damage_expr: string; hit_total: number; attack_type: string }
 
 export interface CombatState {
   round: number

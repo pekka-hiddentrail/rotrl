@@ -38,6 +38,7 @@ import {
   sendTurn,
   endSessionWithRecap,
   purgeSessionNpcs,
+  resolveRoll,
   resolveAttackRoll,
   resolveDamageRoll,
   resumeCombat,
@@ -48,6 +49,7 @@ const mockBoot = vi.mocked(bootSession)
 const mockSend = vi.mocked(sendTurn)
 const mockEnd = vi.mocked(endSessionWithRecap)
 const mockPurge = vi.mocked(purgeSessionNpcs)
+const mockResolveRoll = vi.mocked(resolveRoll)
 const mockResolveAttackRoll = vi.mocked(resolveAttackRoll)
 const mockResolveDamageRoll = vi.mocked(resolveDamageRoll)
 const mockResumeCombat = vi.mocked(resumeCombat)
@@ -540,6 +542,50 @@ describe('App - character speaker integration', () => {
     expect(screen.getByTitle(/Ani/)).not.toHaveClass('active')
     expect(screen.queryByText(/Speaking as/)).not.toBeInTheDocument()
   })
+
+  it('uses the roll_request speaker when resolving a prompted roll', async () => {
+    const vanx = makeCharacter({
+      id: 'vanx',
+      name: 'Vanx',
+      portrait: '/portraits/vanx.png',
+      color: '#60d0a0',
+      rune: 'V',
+    })
+    mockUseChars.mockReturnValue({
+      characters: [yanyeeku, ani, vanx],
+      characterMap: { yanyeeku, ani, vanx },
+      loading: false,
+      error: null,
+    })
+    mockSend.mockImplementationOnce(() =>
+      makeGen({
+        type: 'roll_request' as const,
+        skill: 'Perception',
+        dc: 10,
+        success: 'Vanx hears movement.',
+        failure: 'Vanx hears only festival noise.',
+        speaker: 'Vanx',
+      }),
+    )
+    mockResolveRoll.mockResolvedValueOnce({
+      passed: true,
+      skill: 'Perception',
+      dc: 10,
+      rolled: 17,
+      outcome: 'Vanx hears movement.',
+      speaker: 'Vanx',
+    })
+
+    await user.type(screen.getByRole('textbox'), 'I listen at the south wall.')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('Perception')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /Perception/i }))
+
+    await waitFor(() => expect(mockResolveRoll).toHaveBeenCalledWith('sess-test', expect.any(Number)))
+    expect(screen.getByText(/Vanx rolled a/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Vanx').length).toBeGreaterThan(0)
+  })
 })
 
 // ── Combat tracker layout (AC-006) ───────────────────────────────────────────
@@ -721,6 +767,63 @@ describe('App — attack resolution wiring', () => {
     // App auto-calls doResumeCombat
     await waitFor(() => expect(mockResumeCombat).toHaveBeenCalledWith('sess-test'))
     await waitFor(() => expect(screen.getByText('Goblin misses.')).toBeInTheDocument())
+  })
+
+  it('attack_type carried from to_hit phase into attack log — not hardcoded melee', async () => {
+    // Regression: handleAttackRoll hardcoded 'melee' regardless of the phase's attack_type.
+    mockSend.mockImplementation(() =>
+      makeGen({
+        type: 'attack_request' as const,
+        attacker: 'Thaelion', target: 'Goblin 1',
+        bonus: 3, ac: 13, damage_expr: '1d8', attack_type: 'ranged',
+      }),
+    )
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: false, ac: 13, roll: 13, bonus: 3, total: 16,
+      damage_expr: null, queue_remaining: 0, next_attack: null,
+    })
+    mockResumeCombat.mockImplementation(() => makeGen<never>())
+
+    await user.type(screen.getByRole('textbox'), 'shoot')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText(/Thaelion → Goblin 1/)).toBeInTheDocument())
+    await user.click(screen.getByTitle('Click to roll d20'))
+    await waitFor(() => expect(mockResolveAttackRoll).toHaveBeenCalledWith('sess-test', 13))
+    await waitFor(() => expect(mockResumeCombat).toHaveBeenCalled())
+  })
+
+  it('attack_type preserved across to_hit → damage phase transition', async () => {
+    // Regression: damage phase was constructed without attack_type, forcing handleDamageRoll
+    // to fall back to the hardcoded 'melee' string.
+    mockSend.mockImplementation(() =>
+      makeGen({
+        type: 'attack_request' as const,
+        attacker: 'Thaelion', target: 'Goblin 1',
+        bonus: 3, ac: 13, damage_expr: '1d8', attack_type: 'ranged',
+      }),
+    )
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: true, ac: 13, roll: 13, bonus: 3, total: 16,
+      damage_expr: '1d8', queue_remaining: 1, next_attack: null,
+    })
+    mockResolveDamageRoll.mockResolvedValue({
+      damage_rolls: [5], damage_total: 5, queue_remaining: 0, next_attack: null,
+    })
+    mockResumeCombat.mockImplementation(() => makeGen<never>())
+
+    await user.type(screen.getByRole('textbox'), 'shoot')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText(/Thaelion → Goblin 1/)).toBeInTheDocument())
+
+    await user.click(screen.getByTitle('Click to roll d20'))
+    await waitFor(() => expect(screen.getByText(/Roll damage/)).toBeInTheDocument())
+
+    // Math.random=0.6 → rollDie(8) = 5
+    await user.click(screen.getByTitle('d8'))
+    await user.click(screen.getByRole('button', { name: 'Roll Damage' }))
+    await waitFor(() =>
+      expect(mockResolveDamageRoll).toHaveBeenCalledWith('sess-test', [5], 5),
+    )
   })
 
   it('AC-009 — after miss, next attack banner appears with second attacker\'s stats', async () => {

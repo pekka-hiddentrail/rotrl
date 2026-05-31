@@ -14,7 +14,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [llm-providers.feature](llm-providers.feature) | Backend \| Frontend | `@llm` `@groq` `@ollama` `@provider` | 6 | Groq API, Ollama API, rate-limit headers, `stream_options` fallback, `Header.tsx` model dropdown |
 | [context-detection.feature](context-detection.feature) | Backend | `@context` `@npc` `@skill` `@location` `@token` | 7 | `NpcIndex`, `SkillIndex`, `context` SSE event, `format_short_context()` stub vs full-profile skill gate |
 | [location-system.feature](location-system.feature) | Backend | `@location` `@index` `@generator` `@context` `@injection` | 9 | `LocationIndex`, `location_lookup.py`, `03_locations/`, `scene_locations`, `%%GENERATE%%` stub |
-| [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 5 | Streaming filter, holdback buffer, `patch_last` event |
+| [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 6 | Streaming filter, holdback buffer, `patch_last` event, `%%NARRATIVE%%` retry guard |
 | [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `04_rules/skills/` |
 | [session-logging.feature](session-logging.feature) | Backend \| Frontend | `@logging` `@session-log` `@api-log` `@dice` | 10 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok`, `ApiLogPanel.tsx` |
@@ -34,7 +34,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [splash-hints.feature](splash-hints.feature) | Frontend | `@splash` `@hints` `@ui` `@rotation` | 6 | `SplashHint.tsx`, `hints.ts`, `App.tsx`, `index.css` |
 | [coverage-matrix.feature](coverage-matrix.feature) | Backend \| Frontend \| Infrastructure | `@coverage` `@developer-tools` `@quality-of-life` | 7 | `scripts/build_coverage.py`, `outputs/coverage.json`, `GET /api/coverage`, `CoverageMatrix.tsx`, `Header.tsx` Coverage button |
 
-**Total: 185 acceptance criteria across 25 feature files**
+**Total: 186 acceptance criteria across 25 feature files**
 
 ---
 

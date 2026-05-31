@@ -258,6 +258,35 @@ Then  combatant.conditions == [] and no chips are rendered
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-013 — Full party roster injected when combat starts
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM writes the first `%%COMBAT%%` block of the session
+
+```gherkin
+Given active_events are present (combat may start this turn)
+And   session.combat_state is None
+When  _inject_context assembles the system prompt
+Then  a [PARTY ROSTER] block is appended after _COMBAT_SPEC_ROUND1
+And   the block lists every PC with name, hp_max/hp_max, ac, initiative, status: active
+And   the format of each line matches the %%COMBAT%% combatant line format exactly
+
+Given session.combat_state is a CombatState with round ≥ 1 (combat already started)
+When  _inject_context assembles the system prompt
+Then  NO [PARTY ROSTER] block is present (ongoing spec does not repeat the roster)
+
+Given session.pc_profiles is empty
+When  _inject_context assembles the system prompt with active_events
+Then  NO [PARTY ROSTER] block is present
+```
+
+**Implementation:** `_build_pc_combat_roster(session)` reads `pc_profiles[*]["combat_stats"]`
+(a raw-value dict populated at boot from `player_*.json`). HP is initialised to `hp_max/hp_max`;
+backend takes HP authority from round 2 onward (see [combat-hp.feature](combat-hp.feature)).
+
+---
+
 ## Out of Scope (Tracker)
 
 - Map / grid positioning
@@ -269,7 +298,7 @@ Then  combatant.conditions == [] and no chips are rendered
 ## Notes
 
 - `%%COMBAT%%` is a **section marker** (like `%%DELTAS%%`), not an inline tag like `%%EVENT%%`.
-- Combat rule injection (AC-011) mirrors `SkillIndex` exactly: `CombatRulesIndex` in `api/context/combat_lookup.py`, same file format (`# Heading`, `**Triggers:**`, `<!-- REFERENCE -->`), longest-trigger-wins detection. Six rule files in `adventure_path/04_rules/combat/`. Only fires when `combat_state.round > 0` — never in out-of-combat turns.
+- Combat rule injection (AC-011) mirrors `SkillIndex` exactly: `CombatRulesIndex` in `api/context/combat_lookup.py`, same file format (`# Heading`, `**Triggers:**`, `<!-- REFERENCE -->`), longest-trigger-wins detection. Twelve rule files in `adventure_path/04_rules/combat/`. Only fires when `combat_state.round > 0` — never in out-of-combat turns.
 - Related: [skill-system.feature](skill-system.feature) — `SkillIndex` is the structural template `CombatRulesIndex` mirrors.
   Its content is multi-line: one `round:` line and one `-name:` line per combatant.
 - The combatant separator is `·` (U+00B7 MIDDLE DOT) or `•` (U+2022 BULLET).

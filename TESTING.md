@@ -38,6 +38,8 @@ python dev.py --skip-tests
 | [explore_session_controls.md](tests/exploratory/explore_session_controls.md) | session-controls | Chains A-F: header state, purge confirm, benchmarks/coverage buttons |
 | [explore_event_injection.md](tests/exploratory/explore_event_injection.md) | event-injection | Chains A-E: event fires, hidden from player, TTL expiry, wave transition, event map |
 | [explore_logging.md](tests/exploratory/explore_logging.md) | session-logging | Chains A-E: log structure, latency fields, error-path nulls, API log browser |
+| [explore_attack_resolution.md](tests/exploratory/explore_attack_resolution.md) | attack-resolution | Chains A-H: NPC auto-HP update, PC to-hit banner, hit→damage→HP, miss path, multi-attack queue, attack log visual, %%ATTACK%% hidden from player, End Combat clears queue |
+| [explore_combat_tracker.md](tests/exploratory/explore_combat_tracker.md) | combat-tracker | Chains A-D: panel appearance+initiative order, HP bar colour shift, condition chip+tooltip, End Combat cleanup |
 | [explore_edge_cases.md](tests/exploratory/explore_edge_cases.md) | (multi-feature) | Chains A-E: long input, NPC typo, two NPCs, stress, delta inspection |
 
 ---

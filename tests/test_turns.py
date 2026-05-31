@@ -250,6 +250,30 @@ def test_unbracketed_section_roll_block_sets_pending_roll(booted_session):
     assert "directing the warriors" in session.pending_roll["success"]
 
 
+def test_roll_request_preserves_active_speaker_for_resolution(booted_session):
+    """A roll prompted by @Vanx resolves as Vanx, not generic player."""
+    import api.session_manager as sm
+
+    client, session_id = booted_session
+    tokens = [
+        "%%NARRATIVE%%\n\nVanx listens at the south wall.\n\n",
+        "%%ROLL%%\n",
+        "[ skill: Perception  dc: 10  success: Vanx hears movement.  failure: Vanx hears only festival noise. ]",
+    ]
+    mock_resp = make_stream_response(tokens)
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        resp = _send(client, session_id, '@Vanx: "I listen at the south wall."')
+
+    roll_event = next(e for e in parse_sse(resp) if e["type"] == "roll_request")
+    assert roll_event["speaker"] == "Vanx"
+
+    resolved = client.post(f"/api/sessions/{session_id}/resolve_roll", json={"rolled": 11}).json()
+
+    assert resolved["speaker"] == "Vanx"
+    assert "Vanx's Perception check" in sm._sessions[session_id].messages[-1]["content"]
+
+
 def test_parse_response_sections_keeps_first_nonempty_duplicate_marker():
     """A repeated empty section marker must not erase the real section body."""
     import api.session_manager as sm

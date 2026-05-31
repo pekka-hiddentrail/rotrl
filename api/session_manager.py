@@ -1300,6 +1300,14 @@ def _build_pc_profiles(data_dir: Path) -> dict:
         profiles[name.lower()] = {
             "narrative": "\n".join(narr_lines),
             "mechanical": "\n".join(mech_lines),
+            # Raw values used by _build_pc_combat_roster to format %%COMBAT%% lines.
+            # hp_max is used as hp_current on round 1 (PCs start at full HP).
+            "combat_stats": {
+                "name": name,
+                "hp_max": int(hp_max) if str(hp_max).isdigit() else 0,
+                "ac": int(ac_total) if str(ac_total).isdigit() else 10,
+                "initiative": initiative or "+0",
+            },
         }
 
     return profiles
@@ -1451,6 +1459,15 @@ def log_roll(session: GameSession, expr: str, rolls: list[int], total: int) -> N
     _log(session, "---\n")
 
 
+def _speaker_from_user_input(text: str) -> Optional[str]:
+    """Extract an active-speaker prefix from UI payloads like @Vanx: "..."."""
+    m = re.match(r'^\s*@([^:\n]+):\s*"', text)
+    if not m:
+        return None
+    speaker = m.group(1).strip()
+    return speaker or None
+
+
 def resolve_roll(session: GameSession, rolled: int) -> dict:
     """Compare *rolled* against the pending roll DC and record the outcome.
 
@@ -1464,6 +1481,7 @@ def resolve_roll(session: GameSession, rolled: int) -> dict:
     passed = rolled >= pr["dc"]
     outcome = pr["success"] if passed else pr["failure"]
     label = "SUCCESS" if passed else "FAILURE"
+    speaker = pr.get("speaker")
 
     # Inform the LLM of the result so it has full context on the next turn
     session.messages.append({
@@ -1475,12 +1493,19 @@ def resolve_roll(session: GameSession, rolled: int) -> dict:
     })
 
     _log(session, f"\n### [{_ts()}] ROLL RESULT — {pr['skill']} DC {pr['dc']}")
+    if speaker:
+        session.messages[-1]["content"] = session.messages[-1]["content"].replace(
+            f"[{pr['skill']} check",
+            f"[{speaker}'s {pr['skill']} check",
+            1,
+        )
+
     _log(session, f"Rolled: {rolled}  |  {label}")
     _log(session, f"{outcome}\n")
     _log(session, "---\n")
 
     session.pending_roll = None
-    return {"passed": passed, "skill": pr["skill"], "dc": pr["dc"], "rolled": rolled, "outcome": outcome}
+    return {"passed": passed, "skill": pr["skill"], "dc": pr["dc"], "rolled": rolled, "outcome": outcome, "speaker": speaker}
 
 
 def save_session(session: GameSession) -> Path:
@@ -1811,6 +1836,27 @@ def _detect_narrative_npcs(text: str, session: GameSession) -> None:
         _log(session, f"\n> *[Suspected NPC detected in narrative: {_full_name} — added to scene tracking]*\n")
 
 
+def _build_pc_combat_roster(session: "GameSession") -> str:
+    """Return a [PARTY ROSTER] block with every PC as a ready-to-use %%COMBAT%% line.
+
+    Called only on the turn combat starts (round 1 injection).  HP is initialised
+    to full (hp_max) because PCs begin sessions at full health; the backend takes
+    authority over HP from round 2 onward via the existing HP-authority mechanism.
+    """
+    if not session.pc_profiles:
+        return ""
+    lines = ["[PARTY ROSTER — include ALL of these in your %%COMBAT%% block]"]
+    for profile in session.pc_profiles.values():
+        cs = profile.get("combat_stats", {})
+        name = cs.get("name", "")
+        hp   = cs.get("hp_max", 0)
+        ac   = cs.get("ac", 10)
+        init = cs.get("initiative", "+0")
+        if name:
+            lines.append(f"  - name: {name} · hp: {hp}/{hp} · ac: {ac} · init: {init} · status: active")
+    return "\n".join(lines)
+
+
 def _inject_context(session: GameSession) -> tuple[str, dict]:
     """Assemble the per-turn system prompt and context metadata.
 
@@ -2005,10 +2051,13 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     elif session.active_events:
         # Events are active but combat hasn't started yet.  Provide the round-1
         # format so the model can write a valid %%COMBAT%% block the moment it
-        # decides to start combat.
+        # decides to start combat.  The full party roster is injected so the LLM
+        # lists every PC — not just the one mentioned in the player's input.
+        _pc_roster = _build_pc_combat_roster(session)
         system_content += (
             f"\n\n---\n[COMBAT START FORMAT — use if starting combat this turn]\n"
             f"{_COMBAT_SPEC_ROUND1}"
+            + (f"\n\n{_pc_roster}" if _pc_roster else "")
         )
         _log(session, "\n> *[Combat round-1 spec injected (active events, no combat yet)]*\n")
 
@@ -2103,40 +2152,77 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
 
     _llm_start = _time.monotonic()
     _timing: dict = {"start": _llm_start}
-    _llm_error: Optional[str] = None
     _usage: dict = {}
-    try:
-        if session.provider == "groq":
-            _raw = _stream_groq(session, messages, accumulated, _usage, _timing)
-        elif session.provider == "anthropic":
-            _raw = _stream_anthropic(session, messages, accumulated, _usage, _timing)
+
+    # ── Buffer tokens; retry once if %%NARRATIVE%% is absent ─────────────────
+    # Tokens are held server-side until the full response is validated.  This
+    # prevents blank GM bubbles when the model omits the %%NARRATIVE%% marker.
+    # Flat-format responses (small models without %% markers) always pass.
+    _MAX_NARRATIVE_RETRIES = 1   # 2 total attempts
+    _buffered_sse: list[str] = []
+
+    for _attempt in range(_MAX_NARRATIVE_RETRIES + 1):
+        if _attempt > 0:
+            _log(session,
+                 f"\n> *[%%NARRATIVE%% missing — retry {_attempt}/{_MAX_NARRATIVE_RETRIES}]*\n")
+            accumulated.clear()
+            _usage.clear()
+            _timing = {"start": _time.monotonic()}
+            _buffered_sse.clear()
+
+        _llm_error: Optional[str] = None
+        try:
+            if session.provider == "groq":
+                _raw = _stream_groq(session, messages, accumulated, _usage, _timing)
+            elif session.provider == "anthropic":
+                _raw = _stream_anthropic(session, messages, accumulated, _usage, _timing)
+            else:
+                _raw = _stream_ollama(session, messages, options, accumulated, _timing)
+            for _sse_chunk in _stream_with_narrative_filter(_raw, session.dev_mode):
+                _buffered_sse.append(_sse_chunk)
+        except Exception as _llm_exc:
+            _llm_error = str(_llm_exc)
+            raise
+        finally:
+            _llm_ms = int((_time.monotonic() - _timing.get("start", _llm_start)) * 1000)
+            _response_text = "".join(accumulated)
+            # null when no content arrived (error before first token); bool otherwise.
+            _section_format_ok: Optional[bool] = (
+                bool(_HAS_SECTION_MARKERS_RE.search(_response_text)) if _response_text else None
+            )
+            write_api_log(
+                provider=session.provider,
+                session_id=session.id,
+                session_number=session.session_number,
+                turn=session.turn_number,
+                raw_request=_raw_request,
+                response_text=_response_text,
+                duration_ms=_llm_ms,
+                first_token_ms=_timing.get("first_token_ms"),
+                section_format_ok=_section_format_ok,
+                status="error" if _llm_error else "ok",
+                error=_llm_error,
+                usage=_usage or None,
+            )
+
+        # Validate: %%NARRATIVE%% must appear as an explicit marker in section format.
+        # Flat-format responses (no %% markers) pass unconditionally.
+        # NOTE: _parse_response_sections cannot be used here — it adds a NARRATIVE
+        # fallback for any input lacking the marker, which would defeat the guard.
+        _resp_v = "".join(accumulated)
+        if bool(_HAS_SECTION_MARKERS_RE.search(_resp_v)):
+            _narrative_ok = bool(re.search(r'^%%NARRATIVE%%', _resp_v, re.MULTILINE))
         else:
-            _raw = _stream_ollama(session, messages, options, accumulated, _timing)
-        yield from _stream_with_narrative_filter(_raw, session.dev_mode)
-    except Exception as _llm_exc:
-        _llm_error = str(_llm_exc)
-        raise
-    finally:
-        _llm_ms = int((_time.monotonic() - _llm_start) * 1000)
-        _response_text = "".join(accumulated)
-        # null when no content arrived (error before first token); bool otherwise.
-        _section_format_ok: Optional[bool] = (
-            bool(_HAS_SECTION_MARKERS_RE.search(_response_text)) if _response_text else None
-        )
-        write_api_log(
-            provider=session.provider,
-            session_id=session.id,
-            session_number=session.session_number,
-            turn=session.turn_number,
-            raw_request=_raw_request,
-            response_text=_response_text,
-            duration_ms=_llm_ms,
-            first_token_ms=_timing.get("first_token_ms"),
-            section_format_ok=_section_format_ok,
-            status="error" if _llm_error else "ok",
-            error=_llm_error,
-            usage=_usage or None,
-        )
+            _narrative_ok = bool(_resp_v.strip())
+
+        if _narrative_ok or _attempt >= _MAX_NARRATIVE_RETRIES:
+            if not _narrative_ok:
+                _log(session,
+                     f"\n> *[%%NARRATIVE%% still missing after {_MAX_NARRATIVE_RETRIES} "
+                     f"retries — proceeding with response as-is]*\n")
+            break
+
+    yield from _buffered_sse
 
     # Emit rate limit info captured from Groq response headers (Groq only; None for Ollama).
     # The UI uses this to show remaining requests/tokens in the header.
@@ -2205,6 +2291,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         "dc":      int(_rf.get("dc", 0)),
                         "success": _rf.get("success", "").strip(),
                         "failure": _rf.get("failure", "").strip(),
+                        "speaker": _speaker_from_user_input(session.messages[-1]["content"]) if session.messages else None,
                     }
                     session.pending_roll = roll_data
                     _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
@@ -2307,6 +2394,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                     "dc":      int(_roll_m.group("dc")),
                     "success": _roll_m.group("success").strip(),
                     "failure": _roll_m.group("failure").strip(),
+                    "speaker": _speaker_from_user_input(session.messages[-1]["content"]) if session.messages else None,
                 }
                 session.pending_roll = roll_data
                 display_text = _ROLL_BLOCK_RE.sub("", display_text).rstrip()

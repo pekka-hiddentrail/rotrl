@@ -21,6 +21,7 @@ interface PendingRoll {
   dc: number
   success: string
   failure: string
+  speaker?: string | null
 }
 
 interface ActiveSpeaker {
