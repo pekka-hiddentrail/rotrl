@@ -63,6 +63,8 @@ venv.bak/
 ui/node_modules/
 ui/dist/
 ui/.vite/
+ui/node_modules/.vite/
+node_modules/.vite/
 
 # Project-specific
 outputs/
