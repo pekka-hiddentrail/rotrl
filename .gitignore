@@ -63,6 +63,8 @@ venv.bak/
 ui/node_modules/
 ui/dist/
 ui/.vite/
+ui/node_modules/.vite/
+node_modules/.vite/
 
 # Project-specific
 outputs/
@@ -80,3 +82,4 @@ sessions/
 # base.md files are tracked; session_NNN.md deltas are not
 adventure_path/01_npcs/*/session_*.md
 adventure_path/01_npcs/*/knowledge.md
+adventure_path/01_npcs/.*

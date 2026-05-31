@@ -13,6 +13,26 @@ const STATUS_LABEL: Record<string, string> = {
   dead:        'dead',
 }
 
+const CONDITION_TOOLTIPS: Record<string, string> = {
+  prone:      'Prone: -4 melee attack; ranged attackers within 30 ft get -4; melee attackers get +4',
+  grappled:   'Grappled: no movement; -4 Dex; can attempt to break free (Escape Artist or CMB)',
+  pinned:     'Pinned: helpless; can only attempt to break free; +4 to attacks against you',
+  blinded:    'Blinded: -2 AC; loses Dex bonus; -4 on most Str/Dex checks; 50% miss chance',
+  deafened:   'Deafened: -4 initiative; 20% spell failure (verbal); cannot hear anything',
+  shaken:     'Shaken: -2 attack rolls, saving throws, skill and ability checks',
+  frightened: 'Frightened: -2 attack/saves/checks; must flee from source of fear if possible',
+  panicked:   'Panicked: -2 attack/saves/checks; drops held items; flees at max speed',
+  sickened:   'Sickened: -2 attack rolls, weapon damage, saving throws, skill and ability checks',
+  nauseated:  'Nauseated: can only take a single move action per turn; no attacks or spells',
+  dazed:      'Dazed: can take no actions; +2 AC (counts as standing still)',
+  stunned:    'Stunned: drops everything; -2 AC; loses Dex bonus; attackers get +2',
+  entangled:  'Entangled: -2 attack; -4 Dex; must make concentration check (DC 15) to cast',
+  paralyzed:  'Paralyzed: Str and Dex drop to 0; helpless; subject to coup de grace',
+  helpless:   'Helpless: Dex 0; subject to coup de grace; melee attackers get +4',
+  fatigued:   'Fatigued: -2 Str and Dex; cannot charge or run; becomes exhausted on fatigue',
+  exhausted:  'Exhausted: -6 Str and Dex; move at half speed; becomes fatigued after rest',
+}
+
 export default function CombatPanel({ combatState, disabled, onEndCombat }: Props) {
   const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
 
@@ -51,6 +71,15 @@ export default function CombatPanel({ combatState, disabled, onEndCombat }: Prop
                   </span>
                 )}
               </div>
+              {c.conditions && c.conditions.length > 0 && (
+                <div className="combatant-conditions">
+                  {c.conditions.map(cond => (
+                    <span key={cond} className="condition-chip" title={CONDITION_TOOLTIPS[cond] ?? cond}>
+                      {cond}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}

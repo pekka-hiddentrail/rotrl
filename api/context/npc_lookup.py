@@ -287,6 +287,31 @@ class NpcIndex:
             parts += ["", f"### What {match.canonical_name} Knows", "", match.knowledge_text]
         return "\n".join(parts)
 
+    def format_short_context(self, match: NpcMatch) -> str:
+        """Return a compact NPC stub (~250 chars) for turns with no active social check.
+
+        Includes: canonical name, first sentence of Personality (the hook),
+        primary Diplomacy DC, and current disposition + location from status.
+        Use format_context() instead when a skill/social check is active.
+        """
+        hook = _extract_personality_hook(match.profile_text)
+        dc_hint = _extract_primary_dc(match.profile_text)
+        disposition, location = _extract_status_fields(match.status)
+
+        parts = [f"## NPC — {match.canonical_name}"]
+        if hook:
+            parts.append(hook)
+        meta: list[str] = []
+        if dc_hint:
+            meta.append(dc_hint)
+        if disposition:
+            meta.append(disposition)
+        if location:
+            meta.append(location)
+        if meta:
+            parts.append(" | ".join(meta))
+        return "\n".join(parts)
+
     # ── Introspection ─────────────────────────────────────────────────────────
 
     def canonical_for(self, word: str) -> str | None:
@@ -309,6 +334,58 @@ class NpcIndex:
     def known_aliases(self) -> dict[str, str]:
         self._ensure_loaded()
         return dict(self._aliases)
+
+
+# ── Short-context helpers ─────────────────────────────────────────────────────
+
+def _extract_personality_hook(profile_text: str) -> str:
+    """Return the first sentence of the ## Personality section."""
+    in_section = False
+    for line in profile_text.splitlines():
+        if re.match(r"^## Personality", line, re.IGNORECASE):
+            in_section = True
+            continue
+        if in_section:
+            if line.startswith("## "):
+                break
+            line = line.strip()
+            if line:
+                dot = line.find(".")
+                return line[: dot + 1] if dot >= 0 else line
+    return ""
+
+
+def _extract_primary_dc(profile_text: str) -> str:
+    """Return 'Diplomacy DC N' from ## Social Checks, or '' if not found."""
+    in_section = False
+    for line in profile_text.splitlines():
+        if re.match(r"^## Social Checks", line, re.IGNORECASE):
+            in_section = True
+            continue
+        if in_section:
+            if line.startswith("## "):
+                break
+            m = re.search(r"\*\*Diplomacy:\*\*\s*DC\s*(\d+)", line, re.IGNORECASE)
+            if m:
+                return f"Diplomacy DC {m.group(1)}"
+    return ""
+
+
+def _extract_status_fields(status: str) -> tuple[str, str]:
+    """Return (current_disposition, location) from a session status block."""
+    disposition = ""
+    location = ""
+    for line in status.splitlines():
+        m = re.match(r"\*\*Disposition:\*\*\s*(.+)", line)
+        if m:
+            disp = m.group(1).strip()
+            if "\u2192" in disp:
+                disp = disp.split("\u2192")[-1].strip()
+            disposition = disp
+        m = re.match(r"\*\*Location:\*\*\s*(.+)", line)
+        if m:
+            location = m.group(1).strip()
+    return disposition, location
 
 
 # ── base.md parser ────────────────────────────────────────────────────────────

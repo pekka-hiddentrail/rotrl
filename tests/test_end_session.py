@@ -171,14 +171,15 @@ def test_stream_end_session_no_log_file(client):
     import api.session_manager as sm
 
     resp = client.post("/api/sessions", json={
-        "session_number": 99,
+        "session_number": 1,
         "model": "qwen3:4b",
         "provider": "ollama",
         "dev_mode": True,
     })
     from tests.conftest import parse_sse
     events = parse_sse(resp)
-    done = next(e for e in events if e["type"] == "done")
+    done = next((e for e in events if e["type"] == "done"), None)
+    assert done is not None, f"Boot did not return a 'done' event; got: {events}"
     session_id = done["session_id"]
 
     # Patch log_path to a non-existent path so stream_end_session hits the error branch.
@@ -197,14 +198,15 @@ def test_stream_end_session_empty_turns(client, tmp_path):
     import api.session_manager as sm
 
     resp = client.post("/api/sessions", json={
-        "session_number": 98,
+        "session_number": 1,
         "model": "qwen3:4b",
         "provider": "ollama",
         "dev_mode": True,
     })
     from tests.conftest import parse_sse
     events = parse_sse(resp)
-    done = next(e for e in events if e["type"] == "done")
+    done = next((e for e in events if e["type"] == "done"), None)
+    assert done is not None, f"Boot did not return a 'done' event; got: {events}"
     session_id = done["session_id"]
 
     # Write an empty log file.

@@ -72,13 +72,19 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 │      → session log: ### [HH:MM:SS] PLAYER\n{input}
 │
 ├─ 3. Build context-augmented system prompt copy
-│      ├─ NpcIndex.detect(input)
-│      │    → if alias match: prepend NPC profile (base.md up to <!-- REFERENCE -->)
-│      │    → add NPC to session.scene_npcs
-│      ├─ SkillIndex.detect(input)
+│      ├─ SkillIndex.detect(input)                   [detected first — gates NPC format below]
 │      │    → if trigger match: prepend skill rules (longest trigger wins)
-│      ├─ Location NPC profiles
-│      │    → for each NPC in scene_npcs: prepend current status from session_NNN.md
+│      ├─ NpcIndex.detect(input)                     [only explicitly named NPCs]
+│      │    → if alias match AND skill active: prepend full NPC profile (base.md up to <!-- REFERENCE -->)
+│      │    → if alias match AND no skill:    prepend short NPC stub (~60 tokens)
+│      │         stub = first Personality sentence + Diplomacy DC + current disposition + location
+│      │    → add NPC to session.scene_npcs
+│      │    NOTE: detect_by_location is disabled — NPCs associated with a mentioned location
+│      │          are NOT auto-injected unless the player explicitly names them
+│      ├─ CombatRulesIndex.detect(input)  [only when combat_state.round > 0]
+│      │    → if trigger match: prepend combat rule body from 04_rules/combat/
+│      │         labelled "## Combat Reference — {rule_name}"
+│      │         body up to <!-- REFERENCE --> only
 │      └─ GM directive (_build_turn_directive)
 │           → if scene_npcs present: append %%DELTAS%% reminder + %%GENERATE%% warning
 │           → if skill match: append %%ROLL%% instruction with skill name
@@ -241,6 +247,7 @@ EVENT MAP
 | NPCs in scene or detected | %%DELTAS%% spec |
 | Turn 1 only | Full format example (`_FORMAT_EXAMPLE` — Gerhard Pickle) |
 | Combat active (round > 0) | Full combat format + rules (`_COMBAT_FULL_SPEC`) |
+| Combat active + rule trigger detected | PF1e rule reference from `04_rules/combat/` (`CombatRulesIndex`) |
 | PC name in input | PC narrative profile (appearance) |
 | PC name + skill detected | PC narrative + mechanical profile (HP/AC/saves/spells) |
 | NPC alias detected | NPC profile (base.md + status + knowledge) |

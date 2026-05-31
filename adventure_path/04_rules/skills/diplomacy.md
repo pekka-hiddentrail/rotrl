@@ -1,6 +1,6 @@
 # Diplomacy
 
-**Triggers:** diplomacy, persuade, persuading, convince, convincing, negotiate, negotiating, appeal, request, make a case, talk them into, reason with, plead
+**Triggers:** diplomacy, persuade, persuading, negotiate, negotiating, make a case, talk them into, reason with, plead, win them over, change their mind, improve attitude, gather information
 
 ## Attitude Scale
 

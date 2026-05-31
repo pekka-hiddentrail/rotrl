@@ -1,6 +1,6 @@
 # Bluff
 
-**Triggers:** bluff, bluffing, lie, lying, deceive, deceiving, deception, trick, tricking, mislead, misleading, fast talk, feint, create a distraction, pretend, fabricate, fool, fooling, convince, convincing, make believe, make her believe, make him believe, make them believe, act as if, act like, pass off, pass as, impersonate, claim falsely, deny falsely
+**Triggers:** bluff, bluffing, lie, lying, deceive, deceiving, deception, trick, tricking, mislead, misleading, fast talk, feint, create a distraction, pretend, fabricate, fool, fooling, make believe, make her believe, make him believe, make them believe, act as if, act like, pass off, pass as, impersonate, claim falsely, deny falsely
 
 ## Resolution
 

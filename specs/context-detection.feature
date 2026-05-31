@@ -3,7 +3,7 @@
 **ID:** context-detection
 **Status:** Approved
 **Area:** Backend
-**Tags:** @context @npc @skill @location @injection
+**Tags:** @context @npc @skill @location @injection @token
 
 ---
 
@@ -27,16 +27,17 @@ Detection is pure text matching (alias/trigger/location keyword against player i
 ## Acceptance Criteria
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-001 — NPC profile injected when alias is mentioned
+### AC-001 — Short NPC stub injected when alias is mentioned (no skill active)
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-**Scenario:** Player mentions an NPC by alias
+**Scenario:** Player mentions an NPC by alias but no skill trigger fires
 
 ```gherkin
 Given Ameiko Kaijitsu has aliases: "ameiko", "kaijitsu", "innkeeper"
 When  the player inputs "I ask the innkeeper about the goblins"
-Then  the per-turn prompt includes the Ameiko NPC Reference block
-And   the block contains her profile text, current status, and knowledge facts
+And   no skill trigger is present in the input
+Then  the per-turn prompt includes a short NPC stub for Ameiko (~60 tokens)
+And   the stub contains her first Personality sentence, Diplomacy DC, disposition, and location
 And   the context SSE event contains npc="Ameiko Kaijitsu" and npc_trigger="innkeeper"
 ```
 
@@ -63,26 +64,32 @@ Then  the matched alias is "ameiko kaijitsu" (the longer match wins)
 **Scenario:** Player input contains a skill trigger phrase
 
 ```gherkin
-Given Diplomacy has trigger "convince"
-When  the player inputs "I try to convince the guard to let us through"
+Given Diplomacy has trigger "persuade"
+When  the player inputs "I persuade the guard to let us through"
 Then  the per-turn prompt includes the Diplomacy Skill Reference block
-And   the context SSE event contains skill="Diplomacy" and skill_trigger="convince"
+And   skill detection runs before NPC detection (skill result gates NPC format)
+And   the context SSE event contains skill="Diplomacy" and skill_trigger="persuade"
 ```
 
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-004 — Location keyword returns NPCs stationed there
+### AC-004 — Location keyword injects location profile only; no implicit NPC injection
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-**Scenario:** Player input mentions a location where NPCs are stationed
+**Scenario:** Player input mentions a location without naming any NPC
 
 ```gherkin
-Given Belor Hemlock has location keyword "garrison"
-When  the player inputs "I head to the garrison to report what happened"
-Then  the per-turn prompt includes Hemlock's NPC Reference block
-And   the context SSE event contains location="garrison" and location_npcs=["Belor Hemlock"]
+Given the player inputs "I head to the garrison to report what happened"
+And   "Hemlock" or "Belor" does not appear in the input
+When  the turn is processed
+Then  the per-turn prompt includes the Sandpoint Garrison location block
+And   Hemlock's NPC block is NOT injected
+And   the context SSE event contains location="Sandpoint Garrison" and location_npcs=[]
 ```
+
+> **Note:** `detect_by_location` (auto-injecting NPCs tagged to a location) is disabled.
+> NPCs are only injected when the player explicitly names them in the input.
 
 ---
 
@@ -97,6 +104,40 @@ Given the player inputs "I look around the room"
 When  the turn completes
 Then  the context SSE event contains npc=null, skill=null, location=null
 And   no context block is injected into the per-turn prompt
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-006 — Full NPC profile injected when skill is also active
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Player names an NPC and uses an explicit skill trigger in the same input
+
+```gherkin
+Given Belor Hemlock is an NPC and Diplomacy has trigger "persuade"
+When  the player inputs "I persuade Hemlock to reveal what he knows about Nualia"
+Then  skill detection fires first (Diplomacy matched)
+And   NPC detection fires next (Hemlock matched)
+And   the per-turn prompt includes the full Hemlock NPC Reference block (~500 tokens)
+And   the full block contains his complete Personality, Social Checks, and State Handling sections
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-007 — Skill detection order precedes NPC detection
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Both NPC and skill are detected on the same turn
+
+```gherkin
+Given a turn input that matches both an NPC alias and a skill trigger
+When  _inject_context processes the turn
+Then  SkillIndex.detect() is called before NpcIndex.detect()
+And   the result of the skill detection is used to decide whether to call
+        NpcIndex.format_context() (full, ~500 tokens) or
+        NpcIndex.format_short_context() (stub, ~60 tokens)
 ```
 
 ---

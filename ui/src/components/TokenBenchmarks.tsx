@@ -8,6 +8,9 @@ const SERIES = [
   { key: 'total_tokens'      as const, label: 'total',      color: '#c06060' },
 ]
 
+const CHART_MAX_TOKENS = 5000
+const CHART_TICK_STEP = 1000
+
 const TURN_LABELS: Record<number, string> = {
   1: 'Turn 1 — Swallowtail Festival',
   2: 'Turn 2 — Convince Hemlock',
@@ -34,16 +37,14 @@ function LineChart({ rows, title }: ChartProps) {
   const iW = W - PAD.left - PAD.right
   const iH = H - PAD.top - PAD.bottom
 
-  const allVals = SERIES.flatMap(s => rows.map(r => Number(r[s.key]) || 0))
-  const maxVal = Math.max(...allVals, 1)
-
   const xOf = (i: number) =>
     rows.length === 1 ? iW / 2 : (i / (rows.length - 1)) * iW
-  const yOf = (v: number) => iH - (v / maxVal) * iH
+  const yOf = (v: number) => iH - (Math.min(v, CHART_MAX_TOKENS) / CHART_MAX_TOKENS) * iH
 
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
-    y: iH - t * iH,
-    label: Math.round(t * maxVal).toLocaleString(),
+  const yTicks = Array.from({ length: CHART_MAX_TOKENS / CHART_TICK_STEP + 1 }, (_, i) => i * CHART_TICK_STEP)
+    .map(value => ({
+    y: iH - (value / CHART_MAX_TOKENS) * iH,
+    label: value.toLocaleString(),
   }))
 
   return (
@@ -116,6 +117,8 @@ function LineChart({ rows, title }: ChartProps) {
   )
 }
 
+const PAGE_SIZE = 9
+
 interface Props {
   onClose: () => void
 }
@@ -124,6 +127,7 @@ export default function TokenBenchmarks({ onClose }: Props) {
   const [rows, setRows] = useState<BenchmarkRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
 
   useEffect(() => {
     fetchBenchmarks()
@@ -180,7 +184,7 @@ export default function TokenBenchmarks({ onClose }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
+                  {rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE).map((r, i) => (
                     <tr key={i} className={`bm-row bm-row--t${r.turn}`}>
                       <td className="bm-ts">{r.timestamp.replace('T', ' ')}</td>
                       <td className="bm-model">{r.provider} / {r.model}</td>
@@ -210,6 +214,28 @@ export default function TokenBenchmarks({ onClose }: Props) {
                 </tbody>
               </table>
             </div>
+
+            {rows.length > PAGE_SIZE && (() => {
+              const totalPages = Math.ceil(rows.length / PAGE_SIZE)
+              return (
+                <div className="bm-paginator">
+                  <button
+                    className="bm-page-btn"
+                    onClick={() => setPage(p => p - 1)}
+                    disabled={page === 0}
+                  >‹ Prev</button>
+                  <span className="bm-page-info">
+                    {page + 1} / {totalPages}
+                    <span className="bm-page-total"> ({rows.length} rows)</span>
+                  </span>
+                  <button
+                    className="bm-page-btn"
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={page >= totalPages - 1}
+                  >Next ›</button>
+                </div>
+              )
+            })()}
 
             <div className="bm-charts">
               {([1, 2, 3] as const).map(t => (

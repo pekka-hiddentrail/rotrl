@@ -16,6 +16,9 @@ from api.session_manager import (
     _parse_combatant_line,
     _parse_combat_block,
     _serialize_combat_state,
+    _VALID_CONDITIONS,
+    _inject_context,
+    get_session,
 )
 from .conftest import make_stream_response, parse_sse
 
@@ -90,6 +93,37 @@ class TestParseCombatantLine:
         assert c.status == "unconscious"
         assert c.hp_current == 0
 
+    def test_bare_name_format(self):
+        """Anthropic-style: 'Goblin Warrior 1 · hp: 5/5 · ac: 16 · ...' (no 'name:' label)."""
+        c = _parse_combatant_line("Goblin Warrior 1 · hp: 5/5 · ac: 16 · init: +4 · status: active")
+        assert c is not None
+        assert c.name == "Goblin Warrior 1"
+        assert c.hp_current == 5
+        assert c.hp_max == 5
+        assert c.ac == 16
+
+    def test_middle_dot_prefix_bare_name(self):
+        """Groq-style: '· Vanx · hp: 10/10 · ac: 18 · ...' (middle-dot prefix, no 'name:' label)."""
+        c = _parse_combatant_line("· Vanx · hp: 10/10 · ac: 18 · init: +2 · status: active")
+        assert c is not None
+        assert c.name == "Vanx"
+        assert c.hp_current == 10
+        assert c.hp_max == 10
+        assert c.ac == 18
+
+    def test_init_em_dash_defaults_to_zero(self):
+        """'init: —' (em-dash) should not crash — falls back to 0."""
+        c = _parse_combatant_line("Goblin Warchanter · hp: 8/8 · ac: 14 · init: — · status: active")
+        assert c is not None
+        assert c.name == "Goblin Warchanter"
+        assert c.initiative == 0
+
+    def test_trailing_extra_field_ignored(self):
+        """Extra non-key fields after status (e.g. '· singing') are silently ignored."""
+        c = _parse_combatant_line("Goblin Warchanter · hp: 8/8 · ac: 14 · init: — · status: active · singing")
+        assert c is not None
+        assert c.status == "active"
+
 
 # ── _parse_combat_block ───────────────────────────────────────────────────────
 
@@ -117,6 +151,36 @@ class TestParseCombatBlock:
         assert result is not None
         assert result.round == 0
         assert result.combatants == []
+
+    def test_bare_name_format_block(self):
+        """Anthropic-style block: name as first unlabeled segment, no leading bullet."""
+        block = (
+            "round: 1\n"
+            "Goblin Warrior 1 · hp: 5/5 · ac: 16 · init: — · status: active\n"
+            "Goblin Warrior 2 · hp: 5/5 · ac: 16 · init: — · status: active\n"
+            "Goblin Warchanter · hp: 8/8 · ac: 14 · init: — · status: active · singing\n"
+        )
+        state = _parse_combat_block(block)
+        assert state is not None
+        assert state.round == 1
+        assert len(state.combatants) == 3
+        assert state.combatants[0].name == "Goblin Warrior 1"
+        assert state.combatants[2].name == "Goblin Warchanter"
+        assert state.combatants[2].status == "active"
+
+    def test_groq_middle_dot_prefix_block(self):
+        """Groq-style block: middle-dot prefix on each row, name unlabeled."""
+        block = (
+            "round: 1\n"
+            "· Vanx · hp: 10/10 · ac: 18 · init: +2 · status: active\n"
+            "· Goblin warrior 1 · hp: 5/5 · ac: 16 · init: +4 · status: active\n"
+        )
+        state = _parse_combat_block(block)
+        assert state is not None
+        assert state.round == 1
+        assert len(state.combatants) == 2
+        assert state.combatants[0].name == "Vanx"
+        assert state.combatants[1].name == "Goblin warrior 1"
 
     def test_no_round_field_returns_none(self):
         """Block with combatants but no round: line is a parse failure → None (preserve state)."""
@@ -360,3 +424,146 @@ class TestEndCombatEndpoint:
     def test_delete_combat_missing_session(self, client):
         resp = client.delete("/api/sessions/nonexistent/combat")
         assert resp.status_code == 404
+
+
+# ── Combatant conditions (Tier 1.5 extension) ────────────────────────────────
+
+class TestCombatantConditions:
+    def test_conditions_parsed_from_line(self):
+        line = "- name: Shalelu · ac: 17 · init: 14 · status: active · conditions: [prone, shaken]"
+        c = _parse_combatant_line(line)
+        assert c is not None
+        assert "prone" in c.conditions
+        assert "shaken" in c.conditions
+
+    def test_unknown_condition_dropped(self):
+        line = "- name: X · ac: 10 · init: 5 · status: active · conditions: [prone, banana]"
+        c = _parse_combatant_line(line)
+        assert "prone" in c.conditions
+        assert "banana" not in c.conditions
+
+    def test_no_conditions_field_returns_empty_list(self):
+        line = "- name: X · hp: 5/5 · ac: 10 · init: 5 · status: active"
+        c = _parse_combatant_line(line)
+        assert c.conditions == []
+
+    def test_conditions_in_serialized_state(self):
+        state = CombatState(round=1, combatants=[
+            Combatant(name="Shalelu", hp_current=18, hp_max=24, ac=17, initiative=14,
+                      conditions=["prone"]),
+        ])
+        d = _serialize_combat_state(state)
+        assert d["combatants"][0]["conditions"] == ["prone"]
+
+    def test_all_valid_conditions_accepted(self):
+        for cond in _VALID_CONDITIONS:
+            c = Combatant(name="X", hp_current=5, hp_max=5, ac=10, initiative=0,
+                          conditions=[cond])
+            assert cond in c.conditions
+
+
+# ── P1 — AC-010 combat reminder injection ────────────────────────────────────
+
+class TestCombatRoundReminderInjection:  # AC-010
+    """_inject_context appends [COMBAT ONGOING — round N] when combat is active."""
+
+    def test_reminder_includes_round_number(self, booted_session):
+        """system_content contains the correct round number when combat is active."""
+        client, session_id = booted_session
+        session = get_session(session_id)
+        assert session is not None
+
+        session.combat_state = CombatState(
+            round=3,
+            combatants=[Combatant(name="Goblin", hp_current=5, hp_max=5, ac=13, initiative=8)],
+        )
+
+        system_content, _ = _inject_context(session)
+        assert "COMBAT ONGOING — round 3" in system_content
+
+    def test_reminder_absent_when_no_combat_state(self, booted_session):
+        """No combat reminder when session.combat_state is None."""
+        client, session_id = booted_session
+        session = get_session(session_id)
+        assert session is not None
+        assert session.combat_state is None
+
+        system_content, _ = _inject_context(session)
+        assert "COMBAT ONGOING" not in system_content
+
+    def test_reminder_absent_when_round_zero(self, booted_session):
+        """round: 0 is the clear sentinel — no reminder injected even though state is set."""
+        client, session_id = booted_session
+        session = get_session(session_id)
+        assert session is not None
+
+        session.combat_state = CombatState(round=0, combatants=[])
+
+        system_content, _ = _inject_context(session)
+        assert "COMBAT ONGOING" not in system_content
+
+
+# ── P2 — AC-012 conditions chain end-to-end (parse → Combatant → serialize) ──
+
+class TestConditionsChainEndToEnd:  # AC-012
+    """Full chain: raw combatant line → Combatant.conditions → serialized dict."""
+
+    def test_known_conditions_survive_full_chain(self):
+        line = "- name: Vanx · hp: 8/12 · ac: 15 · init: 10 · status: active · conditions: [prone, shaken]"
+        c = _parse_combatant_line(line)
+        assert c is not None
+        assert c.conditions == ["prone", "shaken"]
+
+        state = CombatState(round=1, combatants=[c])
+        d = _serialize_combat_state(state)
+        assert d is not None
+        assert d["combatants"][0]["conditions"] == ["prone", "shaken"]
+
+    def test_unknown_condition_dropped_in_full_chain(self):
+        line = "- name: Vanx · hp: 8/12 · ac: 15 · init: 10 · status: active · conditions: [prone, banana]"
+        c = _parse_combatant_line(line)
+        assert c is not None
+        assert "banana" not in c.conditions
+        assert "prone" in c.conditions
+
+        state = CombatState(round=1, combatants=[c])
+        d = _serialize_combat_state(state)
+        assert d["combatants"][0]["conditions"] == ["prone"]
+
+
+# ── P3 — AC-008 session isolation on DELETE /combat ──────────────────────────
+
+class TestDeleteCombatSessionIsolation:  # AC-008
+    """DELETE /combat on one session must not affect other sessions."""
+
+    def test_other_session_unaffected(self, client):
+        """Clearing combat on session A leaves session B's combat state intact."""
+        # Boot two separate sessions
+        boot_a = client.post("/api/sessions", json={
+            "session_number": 1, "model": "qwen3:4b",
+            "host": "http://localhost:11434", "temperature": 0.3, "dev_mode": True,
+        })
+        sid_a = next(e["session_id"] for e in parse_sse(boot_a) if e["type"] == "done")
+
+        boot_b = client.post("/api/sessions", json={
+            "session_number": 2, "model": "qwen3:4b",
+            "host": "http://localhost:11434", "temperature": 0.3, "dev_mode": True,
+        })
+        sid_b = next(e["session_id"] for e in parse_sse(boot_b) if e["type"] == "done")
+
+        # Give session B an active combat state
+        session_b = get_session(sid_b)
+        assert session_b is not None
+        session_b.combat_state = CombatState(
+            round=2,
+            combatants=[Combatant(name="Orc", hp_current=10, hp_max=10, ac=14, initiative=6)],
+        )
+
+        # Clear combat on session A
+        resp = client.delete(f"/api/sessions/{sid_a}/combat")
+        assert resp.status_code == 200
+
+        # Session B's state must be intact
+        assert session_b.combat_state is not None
+        assert session_b.combat_state.round == 2
+        assert session_b.combat_state.combatants[0].name == "Orc"

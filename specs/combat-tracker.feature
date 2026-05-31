@@ -211,12 +211,57 @@ Then  no combat reminder block is appended
 
 ---
 
-## Out of Scope (Tier 1)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-011 — Combat rules reference injected from 04_rules/combat/ during active combat
+<!-- ─────────────────────────────────────────────────────────────────────── -->
 
-- Automatic dice resolution for attacks (Tier 2 — `%%ATTACK%%` block)
-- Map / grid positioning (Tier 3)
-- Condition tracking beyond the four status values (Tier 3)
-- Spell slot tracking (Tier 3)
+**Scenario:** Player input contains a combat rule trigger while combat is in progress
+
+```gherkin
+Given session.combat_state is a CombatState with round ≥ 1
+And   the player's input contains a trigger phrase from a combat rule file (e.g. "attack of opportunity", "initiative", "charge")
+When  _inject_context assembles the system prompt for the turn
+Then  the matching combat rule file body is appended to [CONTEXT FOR THIS TURN]
+And   the block is labelled "## Combat Reference — {rule_name}"
+And   content after <!-- REFERENCE --> is NOT included
+
+Given session.combat_state is None
+And   the player's input contains a combat rule trigger phrase
+When  _inject_context assembles the system prompt
+Then  NO combat reference block is appended (rules only injected during active combat)
+
+Given session.combat_state is a CombatState with round ≥ 1
+And   the player's input contains NO recognised trigger phrase
+When  _inject_context assembles the system prompt
+Then  NO combat reference block is appended
+```
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-012 — Combatant conditions displayed as chips
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM writes a conditions field on a combatant line
+
+```gherkin
+Given a combatant line includes "· conditions: [prone, shaken]"
+When  _parse_combatant_line processes this line
+Then  combatant.conditions == ["prone", "shaken"]
+And   CombatPanel renders a chip for each condition below the HP bar
+And   each chip has a tooltip with the PF1e mechanical effect
+
+Given a combatant line with an unrecognised condition "banana"
+Then  "banana" is silently dropped from the conditions list
+
+Given a combatant line with no conditions field
+Then  combatant.conditions == [] and no chips are rendered
+```
+
+---
+
+## Out of Scope (Tracker)
+
+- Map / grid positioning
+- Spell slot tracking
 - Per-turn initiative reordering (movement within a round not modelled)
 
 ---
@@ -224,13 +269,18 @@ Then  no combat reminder block is appended
 ## Notes
 
 - `%%COMBAT%%` is a **section marker** (like `%%DELTAS%%`), not an inline tag like `%%EVENT%%`.
+- Combat rule injection (AC-011) mirrors `SkillIndex` exactly: `CombatRulesIndex` in `api/context/combat_lookup.py`, same file format (`# Heading`, `**Triggers:**`, `<!-- REFERENCE -->`), longest-trigger-wins detection. Six rule files in `adventure_path/04_rules/combat/`. Only fires when `combat_state.round > 0` — never in out-of-combat turns.
+- Related: [skill-system.feature](skill-system.feature) — `SkillIndex` is the structural template `CombatRulesIndex` mirrors.
   Its content is multi-line: one `round:` line and one `-name:` line per combatant.
 - The combatant separator is `·` (U+00B7 MIDDLE DOT) or `•` (U+2022 BULLET).
   Parser splits on either.
-- The LLM owns HP values — they are written into the block each turn, not computed by the server.
-  Server-owned deltas are a Tier 2 concern (automatic attack resolution).
+- HP values are **backend-owned** from round 2 onward (see [combat-hp.feature](combat-hp.feature)).
+  The LLM initialises HP on round 1 and reads current values from `[CURRENT HP]` context injection.
+  Non-attack deltas use the `%%HP%%` block.
 - `session.combat_state` is not persisted across sessions; the session-end recap is the continuity record.
 - Layout reversion on session end: `setCombatState(null)` is called in both `handleEnd` and `handleKillEnd`.
+- Related: [combat-hp.feature](combat-hp.feature) — HP authority, `%%HP%%` deltas, `[CURRENT HP]` injection
+- Related: [attack-resolution.feature](attack-resolution.feature) — `%%ATTACK%%` block, interactive PC dice flow
 - Related: [response-parsing.feature](response-parsing.feature) — `%%COMBAT%%` extends the section marker set
-- Related: [event-injection.feature](event-injection.feature) — `goblin_attack_starts` event typically co-fires with the first `%%COMBAT%%` block. Combat-starting event files (`02_events/goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`) include a `### REQUIRED — Combat tracker` section in their injectable content that instructs the LLM to write `%%COMBAT%%` every turn the event is active. `attack_repelled.md` instructs `round: 0` to clear the panel.
+- Related: [event-injection.feature](event-injection.feature) — `goblin_attack_starts` event co-fires with the first `%%COMBAT%%` block
 - Related: [dice-panel.feature](dice-panel.feature) — DicePanel repositions during combat

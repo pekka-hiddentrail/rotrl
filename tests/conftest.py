@@ -10,44 +10,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 _REAL_OUTPUTS = Path(__file__).resolve().parent.parent / "outputs"
-_BENCHMARK_CSV = _REAL_OUTPUTS / "token_benchmarks.csv"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_outputs():
-    """Remove only api_log files and session logs that were created DURING this test run.
+    """Safety-net fixture — kept as a no-op.
 
-    Snapshots existing files before tests start so real session data written
-    before the test run is preserved (prompt_trend.csv depends on these files).
-
-    Exception: API logs referenced in token_benchmarks.csv are always preserved
-    so the benchmark UI can link back to the raw request/response.
+    The client fixture redirects all writes to tmp_path so the real
+    outputs/ directory is never touched during test runs.  Real api_log
+    and session log files are intentionally preserved for post-run
+    inspection; this fixture no longer deletes them.
     """
-    api_log_dir = _REAL_OUTPUTS / "api_log"
-    before_logs = set(api_log_dir.glob("*.json")) if api_log_dir.exists() else set()
-    before_sessions = set(_REAL_OUTPUTS.glob("*.log.md"))
-
     yield
-
-    # Collect log filenames referenced by any benchmark row — must not delete these.
-    import csv as _csv
-    benchmark_logs: set[str] = set()
-    if _BENCHMARK_CSV.exists():
-        try:
-            with _BENCHMARK_CSV.open(newline="", encoding="utf-8") as fh:
-                for row in _csv.DictReader(fh):
-                    if row.get("log_file"):
-                        benchmark_logs.add(row["log_file"])
-        except Exception:
-            pass
-
-    if api_log_dir.exists():
-        for f in api_log_dir.glob("*.json"):
-            if f not in before_logs and f.name not in benchmark_logs:
-                f.unlink(missing_ok=True)
-    for f in _REAL_OUTPUTS.glob("*.log.md"):
-        if f not in before_sessions:
-            f.unlink(missing_ok=True)
 
 
 # ── SSE helper ────────────────────────────────────────────────────────────────

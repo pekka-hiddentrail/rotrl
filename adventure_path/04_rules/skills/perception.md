@@ -1,11 +1,12 @@
 # Perception
 
-**Triggers:** perception, look, look around, look at, look for, search, searching, examine, examining, inspect, notice, spot, listen, hear, hearing, scan, keep watch, watch for, do i see, do i notice, check for traps, check for, peer, peer at, peer into, investigate
+**Triggers:** perception, look for, look at, search, searching, examine, examining, inspect, notice, spot, listen, hear, hearing, scan, keep watch, watch for, do i see, do i notice, check for traps, check for, peer, peer at, peer into, investigate
 
 ## Resolution
 
-Most common use: **opposed check vs opponent's Stealth** to notice them and avoid surprise.
-For environmental details: fixed DC from the table below.
+**Detecting hidden creatures:** always an opposed check — Perception vs the creature's Stealth result. Do NOT use a fixed DC for this. Never set dc: 0 for a roll meant to detect a creature that may be hiding or not yet visible.
+
+**Environmental details:** fixed DC from the table below.
 
 ## DC Reference
 
@@ -15,7 +16,7 @@ For environmental details: fixed DC from the table below.
 | Notice the stench of rotting garbage | −10 |
 | Detect the smell of smoke | 0 |
 | Hear the details of a conversation | 0 |
-| Notice a visible creature | 0 |
+| Notice a **clearly visible, non-hiding** creature | 0 (**no roll needed**) |
 | Determine if food is spoiled | 5 |
 | Hear the sound of a creature walking | 10 |
 | Hear the details of a whispered conversation | 15 |

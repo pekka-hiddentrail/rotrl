@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import shutil
 import uuid
@@ -29,6 +30,7 @@ from api.context.npc_lookup import NpcIndex
 from api.context.skill_lookup import SkillIndex
 from api.context.location_lookup import LocationIndex
 from api.context.event_index import EventIndex
+from api.context.combat_lookup import CombatRulesIndex
 from api.api_logger import write_api_log
 from api.npc_generator import generate_base_md, generate_location_base_md, slugify as _slugify
 
@@ -40,6 +42,7 @@ _npc_index: Optional[NpcIndex] = None
 _skill_index: Optional[SkillIndex] = None
 _location_index: Optional[LocationIndex] = None
 _event_index: Optional[EventIndex] = None
+_combat_rules_index: Optional[CombatRulesIndex] = None
 
 
 def _get_npc_index() -> NpcIndex:
@@ -81,6 +84,13 @@ def _invalidate_location_index() -> None:
     """
     global _location_index
     _location_index = None
+
+
+def _get_combat_rules_index() -> CombatRulesIndex:
+    global _combat_rules_index
+    if _combat_rules_index is None:
+        _combat_rules_index = CombatRulesIndex(_repo_root=_REPO_ROOT)
+    return _combat_rules_index
 
 
 def _get_event_index() -> EventIndex:
@@ -260,9 +270,10 @@ _NAME_EXCLUDE_WORDS_FALLBACK: frozenset[str] = frozenset({
     "baron", "duke", "earl", "count", "prince", "princess", "king", "queen",
     "square", "hall", "street", "road", "lane", "alley", "avenue",
     "cathedral", "temple", "church", "shrine",
-    "inn", "tavern", "lodge",
+    "inn", "tavern", "lodge", "stage", "grounds", "plaza",
     "gate", "bridge", "market", "district", "quarter",
-    "tower", "keep", "castle", "fort",
+    "tower", "keep", "castle", "fort", "garrison",
+    "shop", "store", "stall", "dock", "docks", "wharf",
     "rise", "runelords", "varisia", "sandpoint", "desna",
     "festival", "swallowtail", "lost", "coast",
     "burnt", "offerings", "pathfinder",
@@ -329,6 +340,15 @@ def _parse_combatant_line(line: str) -> Optional["Combatant"]:
 
     name = fields.get('name', '').strip()
     if not name:
+        # Bare format: "Goblin Warrior 1 · hp: 5/5 · ..." or "· Vanx · hp: ..."
+        # The line may start with a leading separator making parts[0] empty — check
+        # the first two segments for a non-empty, non-"key: value" candidate.
+        for part in parts[:2]:
+            candidate = re.sub(r'^\s*[-•·]\s*', '', part).strip()
+            if candidate and ':' not in candidate:
+                name = candidate
+                break
+    if not name:
         return None
 
     hp_raw = fields.get('hp', '0/0')
@@ -350,6 +370,14 @@ def _parse_combatant_line(line: str) -> Optional["Combatant"]:
         initiative = 0
 
     status = fields.get('status', 'active').lower().strip()
+
+    # Parse optional conditions: "conditions: [prone, shaken]"
+    conditions_raw = fields.get('conditions', '').strip()
+    conditions: list = []
+    if conditions_raw:
+        inner = conditions_raw.strip('[]')
+        conditions = [c.strip().lower() for c in inner.split(',') if c.strip()]
+
     return Combatant(
         name=name,
         hp_current=hp_current,
@@ -357,6 +385,7 @@ def _parse_combatant_line(line: str) -> Optional["Combatant"]:
         ac=ac,
         initiative=initiative,
         status=status,
+        conditions=conditions,
     )
 
 
@@ -395,7 +424,8 @@ def _parse_combat_block(
             round_num = int(round_m.group(1))
             found_round = True
             continue
-        if re.match(r'^\s*[-•]\s*name:', line, re.IGNORECASE):
+        # Match both labeled ("- name: Foo · hp: ...") and bare ("Foo · hp: ...") formats.
+        if re.match(r'^\s*[-•·]\s*name:', line, re.IGNORECASE) or re.search(r'[·•]\s*hp\s*:', line, re.IGNORECASE):
             c = _parse_combatant_line(line)
             if c is not None:
                 combatants.append(c)
@@ -437,6 +467,7 @@ def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
                 "ac": c.ac,
                 "initiative": c.initiative,
                 "status": c.status,
+                "conditions": list(c.conditions),
             }
             for c in state.combatants
         ],
@@ -458,7 +489,12 @@ def _parse_response_sections(text: str) -> dict[str, str]:
     sections: dict[str, str] = {}
     i = 1
     while i + 1 < len(parts):
-        sections[parts[i].strip()] = parts[i + 1].strip()
+        name = parts[i].strip()
+        content = parts[i + 1].strip()
+        if name in sections and sections[name] and content:
+            sections[name] = f"{sections[name]}\n\n{content}"
+        elif name not in sections or content:
+            sections[name] = content
         i += 2
     if "NARRATIVE" not in sections:
         sections["NARRATIVE"] = text.strip()
@@ -597,6 +633,281 @@ def _apply_hp_deltas(combat_state: Optional["CombatState"], deltas: list) -> Non
         if combatant is not None:
             combatant.hp_current = max(0, min(combatant.hp_current + delta, combatant.hp_max))
 
+
+# ── Tier 1.5 — Attack resolution helpers ─────────────────────────────────────
+
+# Matches a %%ATTACK%% block (same structure as _COMBAT_BLOCK_RE).
+_ATTACK_BLOCK_RE = re.compile(
+    r'^%%ATTACK%%[ \t]*\n(.*?)(?=^%%|\Z)',
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+
+# Dice expression: NdN, NdN+M, NdN-M  (e.g. "2d6+3", "1d8", "1d4-1")
+_DICE_EXPR_RE = re.compile(r'^(?P<n>\d+)d(?P<f>\d+)(?P<mod>[+-]\d+)?$', re.IGNORECASE)
+
+# Valid PF1e conditions for combatants.
+_VALID_CONDITIONS = frozenset({
+    "prone", "grappled", "pinned", "blinded", "deafened", "shaken",
+    "frightened", "panicked", "sickened", "nauseated", "dazed", "stunned",
+    "entangled", "paralyzed", "helpless", "fatigued", "exhausted",
+})
+
+
+def _roll_dice(expr: str) -> tuple:
+    """Roll a PF1e dice expression such as '2d6+3', '1d8', '1d4-1'.
+
+    Returns ``(individual_rolls: list[int], total: int)``.
+    On invalid or empty expression returns ``([], 0)``.
+    """
+    if not expr:
+        return ([], 0)
+    m = _DICE_EXPR_RE.match(expr.strip())
+    if not m:
+        return ([], 0)
+    n = int(m.group("n"))
+    faces = int(m.group("f"))
+    mod = int(m.group("mod")) if m.group("mod") else 0
+    rolls = [random.randint(1, faces) for _ in range(n)]
+    return (rolls, sum(rolls) + mod)
+
+
+def _parse_attack_line(line: str) -> Optional[dict]:
+    """Parse a single attack row from a %%ATTACK%% block.
+
+    Expected format (middle-dot separated):
+        - attacker: Thaelion · target: Goblin 1 · bonus: +5 · damage: 1d8+3 · type: melee
+    Returns a dict with keys attacker/target/bonus/damage/type, or None if the line
+    is missing attacker or target.
+    """
+    line = re.sub(r'^\s*[-•]\s*', '', line)
+    parts = re.split(r'\s*[·•]\s*', line)
+    fields: dict[str, str] = {}
+    for part in parts:
+        if ':' in part:
+            key, _, val = part.partition(':')
+            fields[key.strip().lower()] = val.strip()
+
+    attacker = fields.get('attacker', '').strip()
+    target = fields.get('target', '').strip()
+    if not attacker or not target:
+        return None
+
+    # Parse bonus: "+4" → 4, "-1" → -1, "4" → 4
+    bonus_raw = fields.get('bonus', '+0').strip().lstrip('+')
+    try:
+        bonus = int(bonus_raw)
+    except ValueError:
+        bonus = 0
+
+    return {
+        "attacker": attacker,
+        "target": target,
+        "bonus": bonus,
+        "damage": fields.get('damage', '1d4').strip(),
+        "type": fields.get('type', 'melee').strip().lower(),
+    }
+
+
+def _parse_attack_block(text: Optional[str]) -> list:
+    """Parse the body of a %%ATTACK%% section into a list of attack dicts.
+
+    Returns an empty list on empty/None input or if no valid lines found.
+    """
+    if not text:
+        return []
+    attacks = []
+    for line in text.splitlines():
+        if re.match(r'^\s*[-•]\s*attacker:', line, re.IGNORECASE):
+            a = _parse_attack_line(line)
+            if a is not None:
+                attacks.append(a)
+    return attacks
+
+
+def _get_combatant_ac(name: str, combat_state: Optional["CombatState"]) -> int:
+    """Look up a combatant's AC by name (case-insensitive). Returns 10 if not found."""
+    if combat_state is None:
+        return 10
+    for c in combat_state.combatants:
+        if c.name.lower() == name.lower():
+            return c.ac
+    return 10
+
+
+def _is_pc_attacker(name: str, session: "GameSession") -> bool:
+    """Return True if *name* matches a known PC (from session.pc_profiles)."""
+    return name.lower() in session.pc_profiles
+
+
+def _resolve_npc_attack(attack: dict, session: "GameSession") -> dict:
+    """Auto-resolve a single NPC attack. Rolls d20 + bonus vs target AC.
+    On hit, rolls damage and applies HP delta to combat_state.
+    Returns a result dict suitable for the attack_result SSE event.
+    """
+    ac = _get_combatant_ac(attack["target"], session.combat_state)
+    roll = random.randint(1, 20)
+    total = roll + attack["bonus"]
+    hit = total >= ac
+
+    damage_rolls: list = []
+    damage_total = 0
+    if hit and session.combat_state is not None:
+        damage_rolls, damage_total = _roll_dice(attack["damage"])
+        _apply_hp_deltas(session.combat_state, [(attack["target"], -damage_total)])
+        _log(session, (
+            f"\n> *[NPC attack: {attack['attacker']}→{attack['target']} "
+            f"rolled {roll}+{attack['bonus']}={total} vs AC {ac} — "
+            f"HIT, {damage_total} damage]*\n"
+        ))
+    else:
+        _log(session, (
+            f"\n> *[NPC attack: {attack['attacker']}→{attack['target']} "
+            f"rolled {roll}+{attack['bonus']}={total} vs AC {ac} — MISS]*\n"
+        ))
+
+    return {
+        "attacker": attack["attacker"],
+        "target": attack["target"],
+        "roll": roll,
+        "bonus": attack["bonus"],
+        "total": total,
+        "ac": ac,
+        "hit": hit,
+        "damage_rolls": damage_rolls,
+        "damage_total": damage_total,
+        "attack_type": attack["type"],
+        "is_pc": False,
+    }
+
+
+def _build_attack_history_message(results: list, round_num: int) -> str:
+    """Format resolved attack results as a user message for session history injection."""
+    lines = [f"[ATTACK RESULTS — round {round_num}]"]
+    for r in results:
+        attacker = r.get("attacker", "?")
+        target = r.get("target", "?")
+        roll = r.get("roll", 0)
+        bonus = r.get("bonus", 0)
+        total = r.get("total", 0)
+        ac = r.get("ac", 10)
+        hit = r.get("hit", False)
+        if hit:
+            dmg_rolls = r.get("damage_rolls", [])
+            dmg_total = r.get("damage_total", 0)
+            lines.append(
+                f"{attacker} → {target}: rolled {roll}{'+' if bonus >= 0 else ''}{bonus}={total} "
+                f"vs AC {ac} — HIT, {dmg_rolls}={dmg_total} damage"
+            )
+        else:
+            lines.append(
+                f"{attacker} → {target}: rolled {roll}{'+' if bonus >= 0 else ''}{bonus}={total} "
+                f"vs AC {ac} — MISS"
+            )
+    return "\n".join(lines)
+
+
+def _next_attack_info(session: "GameSession") -> Optional[dict]:
+    """Return info about the next PC attack in the queue, or None if queue is empty
+    or the first item is currently in the damage-roll phase (hit=True, not yet resolved)."""
+    if not session.attack_queue:
+        return None
+    first = session.attack_queue[0]
+    # If first item hit but damage not yet rolled, it's waiting for damage — not "next attack"
+    if first.hit is True:
+        return None
+    return {
+        "attacker": first.attacker,
+        "target": first.target,
+        "bonus": first.bonus,
+        "ac": _get_combatant_ac(first.target, session.combat_state),
+        "damage_expr": first.damage_expr,
+        "attack_type": first.attack_type,
+    }
+
+
+def resolve_attack_roll(session: "GameSession", rolled: int) -> dict:
+    """Process a player's to-hit roll for the first queued PC attack.
+
+    On miss: finalises the attack, removes it from the queue, populates next_attack.
+    On hit: marks hit=True but leaves the attack in queue waiting for damage roll.
+    Returns a dict the endpoint sends back to the frontend.
+    """
+    if not session.attack_queue:
+        raise ValueError("No pending attack roll")
+    attack = session.attack_queue[0]
+    # Only process if we're in the to-hit phase (hit not yet determined)
+    if attack.hit is not None:
+        raise ValueError("Attack already resolved — submit damage roll instead")
+    ac = _get_combatant_ac(attack.target, session.combat_state)
+    total = rolled + attack.bonus
+    hit = total >= ac
+    attack.hit_roll = rolled
+    attack.hit_total = total
+    attack.hit = hit
+
+    if not hit:
+        result = {
+            "attacker": attack.attacker, "target": attack.target,
+            "roll": rolled, "bonus": attack.bonus, "total": total, "ac": ac,
+            "hit": False, "damage_rolls": [], "damage_total": 0,
+            "attack_type": attack.attack_type, "is_pc": True,
+        }
+        session.attack_results.append(result)
+        session.attack_queue.pop(0)
+        _log(session, (
+            f"\n> *[PC attack: {attack.attacker}→{attack.target} "
+            f"rolled {rolled}+{attack.bonus}={total} vs AC {ac} — MISS]*\n"
+        ))
+
+    next_attack = _next_attack_info(session)
+    return {
+        "hit": hit,
+        "ac": ac,
+        "roll": rolled,
+        "bonus": attack.bonus,
+        "total": total,
+        "damage_expr": attack.damage_expr if hit else None,
+        "queue_remaining": len(session.attack_queue),
+        "next_attack": next_attack,
+    }
+
+
+def resolve_damage_roll(session: "GameSession", rolls: list, total: int) -> dict:
+    """Process a player's damage roll for the current hit PC attack.
+
+    Applies HP delta, finalises the attack, removes it from the queue.
+    Returns a dict the endpoint sends back to the frontend.
+    """
+    if not session.attack_queue or session.attack_queue[0].hit is not True:
+        raise ValueError("No pending damage roll")
+    attack = session.attack_queue[0]
+    attack.damage_rolls = list(rolls)
+    attack.damage_total = total
+    if session.combat_state is not None:
+        _apply_hp_deltas(session.combat_state, [(attack.target, -total)])
+    result = {
+        "attacker": attack.attacker, "target": attack.target,
+        "roll": attack.hit_roll, "bonus": attack.bonus,
+        "total": attack.hit_total,
+        "ac": _get_combatant_ac(attack.target, session.combat_state),
+        "hit": True, "damage_rolls": list(rolls), "damage_total": total,
+        "attack_type": attack.attack_type, "is_pc": True,
+    }
+    session.attack_results.append(result)
+    session.attack_queue.pop(0)
+    _log(session, (
+        f"\n> *[PC damage: {attack.attacker}→{attack.target} "
+        f"rolled {rolls} = {total} damage]*\n"
+    ))
+    next_attack = _next_attack_info(session)
+    return {
+        "damage_rolls": list(rolls),
+        "damage_total": total,
+        "queue_remaining": len(session.attack_queue),
+        "next_attack": next_attack,
+    }
+
+
 _ROLL_BLOCK_RE = re.compile(
     r'\s*%%ROLL%%\s*\n'
     r'(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n'
@@ -629,11 +940,14 @@ class Combatant:
     ac: int
     initiative: int
     status: str = "active"  # "active" | "unconscious" | "fled" | "dead"
+    conditions: list = field(default_factory=list)  # list[str] — PF1e condition names
 
     def __post_init__(self) -> None:
         self.hp_current = max(0, min(self.hp_current, self.hp_max))
         if self.status not in ("active", "unconscious", "fled", "dead"):
             self.status = "active"
+        # Validate conditions — silently drop unknown values
+        self.conditions = [c for c in self.conditions if c in _VALID_CONDITIONS]
 
 
 @dataclass
@@ -641,6 +955,23 @@ class CombatState:
     """Current combat round and combatant list."""
     round: int
     combatants: list  # list[Combatant]
+
+
+@dataclass
+class PendingAttack:
+    """A single queued PC attack awaiting player dice rolls (Tier 1.5)."""
+    attacker: str
+    target: str
+    bonus: int
+    damage_expr: str
+    attack_type: str = "melee"   # "melee" | "ranged" | "spell"
+    is_pc: bool = False
+    # Filled progressively during resolution
+    hit_roll: Optional[int] = None
+    hit_total: Optional[int] = None
+    hit: Optional[bool] = None
+    damage_rolls: list = field(default_factory=list)
+    damage_total: int = 0
 
 
 @dataclass
@@ -675,6 +1006,11 @@ class GameSession:
     # Slim PC profiles built once at boot. Keys are lowercase canonical names.
     # Each entry has "narrative" (appearance + personality) and "mechanical" (stats).
     pc_profiles: dict = field(default_factory=dict)
+    # Tier 1.5 — PC attack queue and resolved results for this combat round.
+    # attack_queue: PC attacks awaiting player dice; attack_results: all resolved
+    # attacks collected until /resume_combat injects them into history and calls LLM.
+    attack_queue: list = field(default_factory=list)   # list[PendingAttack]
+    attack_results: list = field(default_factory=list) # list[dict]
 
 
 _sessions: dict[str, GameSession] = {}
@@ -743,6 +1079,11 @@ summary: Abstalar Zantus asked Yanyeeku to fetch him a drink from the tavern.
 # Injected on the turn combat STARTS (session.combat_state is None when _inject_context runs).
 # LLM must supply hp: cur/max for every combatant so the backend can initialise HP values.
 _COMBAT_SPEC_ROUND1 = """\
+COMBAT CONDUCT (binding for every combat turn):
+- Always write %%NARRATIVE%% first — narrate the action and its immediate result.
+- Never ask the player for initiative, equipment choice, or tactical decisions. Assign initiative now from stat blocks; for PCs use their init modifier from their profile (or DEX mod + 10 if unknown).
+- Never question or comment on the player's declared action. Accept it and resolve it.
+
 Format (round 1 — include hp for backend initialisation):
 %%COMBAT%%
 round: 1
@@ -754,16 +1095,24 @@ Rules: sort descending by initiative; round: 0 ends combat and clears the tracke
 # existing combatants (they are ignored). New combatants entering after round 1 still need hp:.
 # Non-attack HP changes (traps, poison, healing) use the %%HP%% block instead.
 _COMBAT_SPEC_ONGOING = """\
+COMBAT CONDUCT (binding):
+- Always write %%NARRATIVE%% first. Never ask the player for information. Never question their declared action. Resolve it.
+
 Format (ongoing — backend manages HP; omit hp field for existing combatants):
 %%COMBAT%%
 round: N
 combatants:
-  - name: <Name> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead
+  - name: <Name> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead [· conditions: [prone,shaken]]
   [NEW combatants only: add hp: <cur>/<max>]
 
 Non-attack HP changes (traps, poison, healing):
 %%HP%%
 - name: <Name> · delta: -N   (negative = damage, positive = healing)
+
+Attacks (write alongside %%COMBAT%% when attacks happen this round):
+%%ATTACK%%
+- attacker: <Name> · target: <Name> · bonus: +N · damage: NdN+N · type: melee|ranged|spell
+[one line per attack; omit %%ATTACK%% on rounds with no attacks]
 
 Rules: sort descending by initiative; increment round when all combatants have acted; \
 round: 0 ends combat and clears the tracker; list ALL combatants every turn."""
@@ -786,10 +1135,12 @@ _GENERATE_SPEC = (
 )
 
 _DELTAS_SPEC = (
-    "%%DELTAS%%  — one block per NPC active in the scene:\n"
+    "%%DELTAS%%  — one bracket block per named NPC active in the scene.\n"
+    "RULES: named NPCs only — NEVER a PC, a group, a crowd, an object, or scene state.\n"
+    "FORMAT: use this exact bracket notation only — never bullet points, never prose:\n"
     "[ npc: <name>  disposition: <old→new>  location: <place>"
     "  knowledge: [tag] <fact>  summary: <sentence> ]\n"
-    "Tags: [persistent] [pcs] [quest] [world] [npcs] [trivia]"
+    "Tags (use exactly one): [persistent] [pcs] [quest] [world] [npcs] [trivia] [threat]"
 )
 
 
@@ -850,16 +1201,21 @@ CURRENT SITUATION
 {situation}
 
 RESPONSE STRUCTURE — per-turn instructions list which sections are active this turn.
+Only write sections listed in [SECTIONS ACTIVE THIS TURN]. Exception: %%EVENT%% and %%GENERATE%% may always be added when triggered. %%DELTAS%% MUST NOT be written unless it appears in [SECTIONS ACTIVE THIS TURN].
 Markers in order: %%NARRATIVE%%  %%ROLL%%  %%GENERATE%%  %%DELTAS%%  %%EVENT%%  %%COMBAT%%
 
-SCENE EVENT — append after %%DELTAS%% on the first turn a trigger is met:
+SCENE EVENT — append after %%DELTAS%% (or %%GENERATE%% if %%DELTAS%% is not active) on the first turn a trigger is met:
 %%EVENT%% <event_id>   ← ID on the SAME LINE; nothing else on this line
 CORRECT: %%EVENT%% goblin_attack_starts
 WRONG:   %%EVENT%%  |  %%EVENT%%\\n%%EVENT%% id  |  %%EVENT%% id (Note: …)
 
-%%COMBAT%% — include each turn combat is active; omit otherwise:
-round: N  · one row per combatant: name · hp: cur/max · ac: N · init: N · status: active|unconscious|fled|dead
-round: 0 ends combat. Full format rules injected per-turn when active.
+%%COMBAT%% — write when starting or continuing combat; omit when no combat.
+round: 0 ends and clears combat. Compact round-1 format (use when starting combat):
+%%COMBAT%%
+round: 1
+combatants:
+  - name: <Name> · hp: <cur>/<max> · ac: <AC> · init: <init> · status: active
+Full spec re-injected per-turn when active events or combat is ongoing.
 
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
@@ -1358,7 +1714,7 @@ def _stream_with_narrative_filter(
         return
 
     _NARRATIVE_START = "%%NARRATIVE%%\n"
-    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%", "\n%%HP%%")
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%", "\n%%HP%%", "\n%%ATTACK%%")
     _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14; also covers "%%COMBAT%%\n" = 12
 
     buf           = ""      # not-yet-emitted accumulation
@@ -1504,22 +1860,26 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     )
     injected: list[str] = []
 
-    npc_match = _get_npc_index().detect(last_user)
-    if npc_match:
-        injected.append(_get_npc_index().format_context(npc_match))
-        _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (alias: \"{npc_match.matched_alias}\")]*\n")
-
+    # Detect skill first — needed to choose full vs short NPC profile below.
     skill_match = _get_skill_index().detect(last_user)
     if skill_match:
         injected.append(_get_skill_index().format_context(skill_match))
         _log(session, f"\n> *[Skill context injected: {skill_match.skill_name} (trigger: \"{skill_match.matched_trigger}\")]*\n")
 
-    already_injected = {npc_match.canonical_name} if npc_match else set()
-    location_matches = _get_npc_index().detect_by_location(last_user)
-    location_matches = [m for m in location_matches if m.canonical_name not in already_injected]
-    for loc_match in location_matches:
-        injected.append(_get_npc_index().format_context(loc_match))
-        _log(session, f"\n> *[Location context injected: {loc_match.canonical_name} at \"{loc_match.matched_location}\"]*\n")
+    # NPC injection: full profile when a social/skill check is active this turn;
+    # short stub (name + hook + DC + current state) otherwise.
+    npc_match = _get_npc_index().detect(last_user)
+    if npc_match:
+        if skill_match:
+            injected.append(_get_npc_index().format_context(npc_match))
+            _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (full — skill active, alias: \"{npc_match.matched_alias}\")]*\n")
+        else:
+            injected.append(_get_npc_index().format_short_context(npc_match))
+            _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (short, alias: \"{npc_match.matched_alias}\")]*\n")
+
+    # Location-based NPC injection removed — only inject NPCs the player
+    # explicitly named or directly interacted with (not all NPCs at a location).
+    location_matches: list = []
 
     # Location profile detection (LocationIndex — separate from NPC-at-location)
     loc_match = _get_location_index().detect(last_user)
@@ -1545,9 +1905,6 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
 
     if npc_match and npc_match.canonical_name not in session.scene_npcs:
         session.scene_npcs.append(npc_match.canonical_name)
-    for _loc in location_matches:
-        if _loc.canonical_name not in session.scene_npcs:
-            session.scene_npcs.append(_loc.canonical_name)
 
     # ── Sections active this turn ─────────────────────────────────────────────
     # Inject only the specs that are relevant based on detection results.
@@ -1558,7 +1915,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     if skill_match:
         _active_specs.append(_ROLL_SPEC)
         _active_spec_names.append("ROLL")
-    if session.scene_npcs or npc_match or location_matches:
+    if session.scene_npcs or npc_match:
         _active_specs.append(_DELTAS_SPEC)
         _active_spec_names.append("DELTAS")
     system_content += (
@@ -1595,6 +1952,13 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
 
     active_event_ids = [e.event_id for e in session.active_events]
 
+    # ── Combat rules lookup — only when combat is active ─────────────────────
+    if session.combat_state is not None and session.combat_state.round > 0:
+        combat_rule_match = _get_combat_rules_index().detect(last_user)
+        if combat_rule_match:
+            injected.append(_get_combat_rules_index().format_context(combat_rule_match))
+            _log(session, f"\n> *[Combat rules injected: {combat_rule_match.rule_name} (trigger: \"{combat_rule_match.matched_trigger}\")]*\n")
+
     if injected:
         block = "\n\n---\n".join(injected)
         directive = _build_turn_directive(npc_match, skill_match, location_matches, session.scene_npcs)
@@ -1620,6 +1984,11 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     # everything it needs without paying the token cost when not in combat.
     # Tier 1.1: HP values are backend-owned from round 2 onward.  We inject
     # current HP so the LLM can narrate accurately without recomputing.
+    #
+    # Round-1 spec: injected when active events are present but combat hasn't
+    # started yet.  Events often require a %%COMBAT%% block, and without the
+    # format spec the model has no field-level guidance (the base prompt only
+    # carries a brief hint).
     if session.combat_state is not None and session.combat_state.round > 0:
         _combat_spec = _COMBAT_SPEC_ONGOING
         _hp_lines = "  ".join(
@@ -1633,6 +2002,15 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
             f"[CURRENT HP]\n  {_hp_lines}"
         )
         _log(session, f"\n> *[Combat reminder injected: round {session.combat_state.round}]*\n")
+    elif session.active_events:
+        # Events are active but combat hasn't started yet.  Provide the round-1
+        # format so the model can write a valid %%COMBAT%% block the moment it
+        # decides to start combat.
+        system_content += (
+            f"\n\n---\n[COMBAT START FORMAT — use if starting combat this turn]\n"
+            f"{_COMBAT_SPEC_ROUND1}"
+        )
+        _log(session, "\n> *[Combat round-1 spec injected (active events, no combat yet)]*\n")
 
     context_info: dict = {
         "npc":           npc_match.canonical_name    if npc_match else None,
@@ -1782,6 +2160,43 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         _roll_section = _sections.get("ROLL", "")
         if _roll_section:
             _roll_blocks = _parse_bracket_blocks(_roll_section)
+            if not _roll_blocks:
+                # Fallback: single-line bracket format (what the spec shows):
+                #   [ skill: X  dc: N  success: long text  failure: long text ]
+                # _BRACKET_BLOCK_RE requires [ on its own line; this handles inline.
+                _inline_m = re.search(
+                    r"skill:\s*(?P<skill>.+?)\s+dc:\s*(?P<dc>\d+)\s+success:\s*(?P<success>.+?)\s+failure:\s*(?P<failure>.+?)\s*\]",
+                    _roll_section,
+                    re.DOTALL | re.IGNORECASE,
+                )
+                if _inline_m:
+                    _roll_blocks = [{
+                        "skill":   _inline_m.group("skill").strip(),
+                        "dc":      _inline_m.group("dc").strip(),
+                        "success": _inline_m.group("success").strip(),
+                        "failure": _inline_m.group("failure").strip(),
+                    }]
+            if not _roll_blocks:
+                # Live models sometimes write the section body as plain fields:
+                # skill: Perception
+                # dc: 15
+                # success: ...
+                # failure: ...
+                _line_m = re.search(
+                    r"(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n"
+                    r"dc:\s*(?P<dc>\d+)\s*\n"
+                    r"success:\s*(?P<success>.*?)\n"
+                    r"failure:\s*(?P<failure>.*)\s*$",
+                    _roll_section.strip(),
+                    re.DOTALL | re.IGNORECASE,
+                )
+                if _line_m:
+                    _roll_blocks = [{
+                        "skill":   _line_m.group("skill").strip(),
+                        "dc":      _line_m.group("dc").strip(),
+                        "success": _line_m.group("success").strip(),
+                        "failure": _line_m.group("failure").strip(),
+                    }]
             if _roll_blocks:
                 _rf = _roll_blocks[0]
                 try:
@@ -1857,6 +2272,27 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 # None → parse failure; leave session.combat_state unchanged
             except Exception as _e:
                 _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
+
+        # ── %%ATTACK%% (Tier 1.5) ─────────────────────────────────────────────
+        _attack_section = _sections.get("ATTACK", "")
+        if _attack_section and session.combat_state is not None:
+            try:
+                _attacks = _parse_attack_block(_attack_section)
+                for _att in _attacks:
+                    if _is_pc_attacker(_att["attacker"], session):
+                        session.attack_queue.append(PendingAttack(
+                            attacker=_att["attacker"], target=_att["target"],
+                            bonus=_att["bonus"], damage_expr=_att["damage"],
+                            attack_type=_att.get("type", "melee"), is_pc=True,
+                        ))
+                    else:
+                        _npc_result = _resolve_npc_attack(_att, session)
+                        session.attack_results.append(_npc_result)
+                        yield f"data: {json.dumps({'type': 'attack_result', **_npc_result})}\n\n"
+                _log(session, f"\n> *[%%ATTACK%%: {len(_attacks)} attack(s) parsed, "
+                              f"{len(session.attack_queue)} queued for player]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%ATTACK%% processing error: {_e}]*\n")
 
     else:
         # ── Fallback: old flat-block format ───────────────────────────────────
@@ -1942,6 +2378,25 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
             except Exception as _e:
                 _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
 
+        # %%ATTACK%% (flat-block fallback path — Tier 1.5)
+        _attack_m = _ATTACK_BLOCK_RE.search(response_text)
+        if _attack_m and session.combat_state is not None:
+            try:
+                _attacks = _parse_attack_block(_attack_m.group(1))
+                for _att in _attacks:
+                    if _is_pc_attacker(_att["attacker"], session):
+                        session.attack_queue.append(PendingAttack(
+                            attacker=_att["attacker"], target=_att["target"],
+                            bonus=_att["bonus"], damage_expr=_att["damage"],
+                            attack_type=_att.get("type", "melee"), is_pc=True,
+                        ))
+                    else:
+                        _npc_result = _resolve_npc_attack(_att, session)
+                        session.attack_results.append(_npc_result)
+                        yield f"data: {json.dumps({'type': 'attack_result', **_npc_result})}\n\n"
+            except Exception as _e:
+                _log(session, f"\n> *[%%ATTACK%% processing error (flat): {_e}]*\n")
+
     # ── Single patch_last if anything was stripped ────────────────────────────
     # Emitting one event after all stripping avoids the UI briefly flashing
     # intermediate states (e.g. showing delta markup while the roll block is gone).
@@ -1957,6 +2412,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
 
     # Combat state — always emitted (null when no combat) so UI can show/hide panel.
     yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+
+    # Tier 1.5 — if PC attacks are queued, emit attack_request for the first one.
+    if session.attack_queue:
+        _first = session.attack_queue[0]
+        _first_ac = _get_combatant_ac(_first.target, session.combat_state)
+        yield f"data: {json.dumps({'type': 'attack_request', 'attacker': _first.attacker, 'target': _first.target, 'bonus': _first.bonus, 'ac': _first_ac, 'damage_expr': _first.damage_expr, 'attack_type': _first.attack_type})}\n\n"
 
     session.messages.append({"role": "assistant", "content": history_text})
     _log(session, f"\n### [{_ts()}] GM")
@@ -2080,13 +2541,17 @@ def _stream_anthropic(
     system_text = next((m["content"] for m in messages if m["role"] == "system"), "")
     non_system = [m for m in messages if m["role"] != "system"]
 
+    # temperature is deprecated for Claude 4+ models.
+    _claude4 = bool(re.search(r'claude-\w+-4', session.model))
+    _stream_kwargs: dict = {"temperature": session.temperature} if not _claude4 else {}
+
     client = _anthropic.Anthropic(api_key=api_key)
     with client.messages.stream(
         model=session.model,
         system=system_text,
         messages=non_system,
-        temperature=session.temperature,
         max_tokens=1024,
+        **_stream_kwargs,
     ) as stream:
         for text in stream.text_stream:
             if text:
@@ -2266,13 +2731,15 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set.")
+        _claude4 = bool(re.search(r'claude-\w+-4', session.model))
+        _create_kwargs: dict = {"temperature": 0.5} if not _claude4 else {}
         client = _anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
             model=session.model,
             system=system,
             messages=[{"role": "user", "content": user}],
-            temperature=0.5,
             max_tokens=2048,
+            **_create_kwargs,
         )
         return (msg.content[0].text if msg.content else "").strip()
     else:
@@ -2292,6 +2759,22 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
         )
         resp.raise_for_status()
         return (resp.json().get("message") or {}).get("content", "").strip()
+
+
+def stream_resume_combat(session: GameSession) -> Generator[str, None, None]:
+    """Inject resolved attack results into history, then call LLM to narrate outcomes.
+
+    Called after all PC attack dice have been resolved (attack_queue is empty).
+    Clears attack_results after injection.  Streams the same SSE events as stream_turn.
+    """
+    round_num = session.combat_state.round if session.combat_state else 0
+    history_msg = _build_attack_history_message(session.attack_results, round_num)
+    session.messages.append({"role": "user", "content": history_msg})
+    _log(session, f"\n> *[Combat resume: injecting {len(session.attack_results)} attack result(s)]*\n")
+    session.attack_results = []
+    # Delegate to the main turn streamer — the attack results message is already
+    # appended to session.messages, so the LLM sees them as the latest user turn.
+    yield from _stream_chat(session)
 
 
 def stream_end_session(session: GameSession) -> Generator[str, None, None]:

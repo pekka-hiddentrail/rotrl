@@ -142,6 +142,7 @@ def _npc_idx_with_match(match):
     idx.detect.return_value = match
     idx.detect_by_location.return_value = []
     idx.format_context.return_value = f"NPC profile: {match.canonical_name}"
+    idx.format_short_context.return_value = f"NPC stub: {match.canonical_name}"
     return idx
 
 
@@ -153,12 +154,26 @@ class TestNpcDetection:
         assert ctx["npc"] == "Abstalar Zantus"
         assert ctx["npc_trigger"] == "zantus"
 
-    def test_npc_profile_injected_into_system_content(self):
+    def test_npc_short_context_injected_without_skill(self):
+        """No skill match → short NPC stub (format_short_context)."""
         npc = _npc_match()
         session = _make_session(messages=[{"role": "user", "content": "Talk to Zantus"}])
         content, _ = _call(session, npc_idx=_npc_idx_with_match(npc))
-        assert "NPC profile: Abstalar Zantus" in content
+        assert "NPC stub: Abstalar Zantus" in content
         assert "[CONTEXT FOR THIS TURN]" in content
+
+    def test_npc_full_context_injected_with_skill(self):
+        """Skill match present → full NPC profile (format_context)."""
+        npc = _npc_match()
+        skill = _skill_match()
+        session = _make_session(messages=[{"role": "user", "content": "I talk to Zantus"}])
+        content, _ = _call(
+            session,
+            npc_idx=_npc_idx_with_match(npc),
+            skill_idx=_skill_idx_with_match(skill),
+        )
+        assert "NPC profile: Abstalar Zantus" in content
+        assert "NPC stub:" not in content
 
     def test_npc_added_to_scene_npcs(self):
         npc = _npc_match("Kendra Deverin", "deverin")
@@ -238,34 +253,38 @@ def _npc_idx_with_location(loc_matches, direct_match=None):
 
 
 class TestLocationDetection:
-    def test_location_sets_context_info_fields(self):
+    def test_location_npc_not_injected_via_location_match(self):
+        """Location-based NPC injection is disabled; only directly-named NPCs are injected."""
         lm = _loc_match("Hemlock", "garrison")
         session = _make_session(messages=[{"role": "user", "content": "Go to the garrison"}])
         _, ctx = _call(session, npc_idx=_npc_idx_with_location([lm]))
-        assert ctx["location"] == "garrison"
-        assert "Hemlock" in ctx["location_npcs"]
+        assert ctx["location"] is None
+        assert ctx["location_npcs"] == []
 
-    def test_location_npc_added_to_scene_npcs(self):
+    def test_location_npc_not_added_to_scene_npcs(self):
+        """Location-based NPCs are no longer tracked in scene_npcs."""
         lm = _loc_match("Hemlock", "garrison")
         session = _make_session(messages=[{"role": "user", "content": "Go to the garrison"}])
         _call(session, npc_idx=_npc_idx_with_location([lm]))
-        assert "Hemlock" in session.scene_npcs
+        assert "Hemlock" not in session.scene_npcs
 
-    def test_npc_matched_by_name_excluded_from_location_list(self):
-        """An NPC already injected by direct name match is not re-injected via location."""
+    def test_directly_named_npc_still_injected(self):
+        """An NPC matched by name is injected even when a location is also mentioned."""
         npc = _loc_match("Hemlock", "garrison")
         npc.matched_alias = "hemlock"
 
         idx = MagicMock()
         idx.detect.return_value = npc
         idx.detect_by_location.return_value = [npc]
-        idx.format_context.return_value = "Profile: Hemlock"
+        idx.format_context.return_value = "NPC profile: Hemlock"
+        idx.format_short_context.return_value = "NPC stub: Hemlock"
 
         session = _make_session(messages=[{"role": "user", "content": "Talk to Hemlock at garrison"}])
         content, ctx = _call(session, npc_idx=idx)
 
         assert ctx["location_npcs"] == []
-        assert content.count("Profile: Hemlock") == 1
+        # Short context used (no skill match); profile injected exactly once
+        assert content.count("NPC stub: Hemlock") == 1
 
     def test_no_location_match_returns_empty(self):
         session = _make_session(messages=[{"role": "user", "content": "We rest"}])

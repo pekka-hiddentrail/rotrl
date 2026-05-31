@@ -1,6 +1,6 @@
 # Knowledge (Arcana)
 
-**Triggers:** knowledge arcana, arcane knowledge, know arcana, identify spell, identify magic, identify aura, detect magic, what school, what spell, magical beast, dragon, construct, what is this magic, magical tradition, ancient mystery, arcane symbol, arcane rune, magical properties, enchanted, what kind of magic, is this magical, what does this do magically, how does this work magically
+**Triggers:** knowledge arcana, arcane knowledge, know arcana, identify spell, identify magic, identify aura, detect magic, what school, what spell, magical beast, dragon creature, dragon type, identify dragon, dragon attack, construct creature, what is this magic, magical tradition, ancient mystery, arcane symbol, arcane rune, magical properties, enchanted, what kind of magic, is this magical, what does this do magically, how does this work magically
 
 ## Resolution
 

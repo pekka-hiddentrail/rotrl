@@ -59,7 +59,7 @@ describe('Header - AC-001 pre-boot controls', () => {
     expect(screen.getByRole('spinbutton')).toHaveValue(1)
     expect(screen.getByRole('combobox')).toHaveValue('llama-3.3-70b-versatile')
     expect(screen.getByLabelText('Dev')).not.toBeChecked()
-    expect(screen.getByRole('button', { name: 'Purge NPCs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tools/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Boot Session' })).not.toBeDisabled()
   })
 })
@@ -111,10 +111,12 @@ describe('Header - AC-004 post-boot controls', () => {
 
     expect(screen.getByText(/Session 2/)).toBeInTheDocument()
     expect(screen.getByText(/llama-3.3-70b-versatile/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'View Log' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'API Logs' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'End Session' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Purge NPCs' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tools/ })).toBeInTheDocument()
+    // View Log and API Logs are inside the Tools dropdown
+    fireEvent.click(screen.getByRole('button', { name: /Tools/ }))
+    expect(screen.getByRole('button', { name: /View Session Log/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /API Logs/ })).toBeInTheDocument()
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
   })
 })
@@ -123,7 +125,8 @@ describe('Header - AC-005 View Log', () => {
   it('calls the View Log handler without leaving the current UI', () => {
     renderHeader({ session })
 
-    fireEvent.click(screen.getByRole('button', { name: 'View Log' }))
+    fireEvent.click(screen.getByRole('button', { name: /Tools/ }))
+    fireEvent.click(screen.getByRole('button', { name: /View Session Log/ }))
     expect(callbacks.onViewLog).toHaveBeenCalledOnce()
   })
 })
@@ -133,18 +136,23 @@ describe('Header - AC-006 purge confirmation', () => {
     const confirmSpy = vi.spyOn(window, 'confirm')
     renderHeader()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Purge NPCs' }))
+    // Open Tools dropdown and click Purge
+    fireEvent.click(screen.getByRole('button', { name: /Tools/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Purge Session NPCs/ }))
     expect(screen.getByText('Purge session NPCs?')).toBeInTheDocument()
     expect(confirmSpy).not.toHaveBeenCalled()
 
+    // Cancel — dropdown toggle should be back
     fireEvent.click(screen.getByRole('button', { name: 'No' }))
     expect(callbacks.onPurgeNpcs).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Purge NPCs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tools/ })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Purge NPCs' }))
+    // Open again and confirm
+    fireEvent.click(screen.getByRole('button', { name: /Tools/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Purge Session NPCs/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
     expect(callbacks.onPurgeNpcs).toHaveBeenCalledOnce()
-    expect(screen.getByRole('button', { name: 'Purge NPCs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tools/ })).toBeInTheDocument()
   })
 })
 

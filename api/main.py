@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_roll, save_session, stream_boot, stream_end_session, stream_turn
+from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, stream_boot, stream_end_session, stream_resume_combat, stream_turn
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -155,6 +155,54 @@ def post_resolve_roll(session_id: str, req: ResolveRollRequest):
     return result
 
 
+class ResolveAttackRollRequest(BaseModel):
+    rolled: int
+
+
+class ResolveDamageRollRequest(BaseModel):
+    rolls: list[int]
+    total: int
+
+
+@app.post("/api/sessions/{session_id}/resolve_attack_roll")
+def post_resolve_attack_roll(session_id: str, req: ResolveAttackRollRequest):
+    """Process a player's to-hit roll for the first queued PC attack."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.attack_queue:
+        raise HTTPException(status_code=409, detail="No pending attack roll")
+    try:
+        return resolve_attack_roll(session, req.rolled)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.post("/api/sessions/{session_id}/resolve_damage_roll")
+def post_resolve_damage_roll(session_id: str, req: ResolveDamageRollRequest):
+    """Process a player's damage roll for the current hit PC attack."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.attack_queue or not session.attack_queue[0].hit:
+        raise HTTPException(status_code=409, detail="No pending damage roll")
+    try:
+        return resolve_damage_roll(session, req.rolls, req.total)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.post("/api/sessions/{session_id}/resume_combat")
+def post_resume_combat(session_id: str):
+    """Inject resolved attack results into history and call LLM to narrate outcomes."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.attack_queue:
+        raise HTTPException(status_code=409, detail="Attack queue not empty — resolve all PC attacks first")
+    return StreamingResponse(stream_resume_combat(session), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
 @app.delete("/api/sessions/{session_id}/combat")
 def delete_combat(session_id: str):
     """Clear the active combat state (End Combat button in UI)."""
@@ -258,6 +306,57 @@ def get_benchmarks():
                     row[k] = 0
             rows.append(row)
     return JSONResponse({"rows": rows})
+
+
+@app.get("/api/coverage")
+def get_coverage():
+    """Return the feature AC coverage matrix built by scripts/build_coverage.py.
+
+    Returns an empty matrix if outputs/coverage.json does not exist yet.
+    Run `python scripts/build_coverage.py` to generate it.
+    """
+    import json as _json
+    path = _REPO_ROOT / "outputs" / "coverage.json"
+    if not path.exists():
+        return JSONResponse({"generated": None, "summary": {"total": 0, "covered": 0, "gap": 0}, "rows": []})
+    return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
+
+
+@app.get("/api/code-coverage")
+def get_code_coverage():
+    """Return pytest-cov line coverage data.
+
+    Generate with: pytest --cov --cov-report=json
+    The .coveragerc [json] section writes to outputs/code_coverage.json.
+    """
+    import json as _json
+    path = _REPO_ROOT / "outputs" / "code_coverage.json"
+    if not path.exists():
+        return JSONResponse({"generated": None, "files": [], "total_stmts": 0, "total_miss": 0, "total_pct": 0})
+    raw = _json.loads(path.read_text(encoding="utf-8"))
+    files = []
+    for fname, fdata in raw.get("files", {}).items():
+        summary = fdata.get("summary", {})
+        stmts = summary.get("num_statements", 0)
+        miss = summary.get("missing_lines", 0)
+        pct = round(summary.get("percent_covered", 0))
+        files.append({
+            "name": fname.replace("\\", "/"),
+            "stmts": stmts,
+            "miss": miss,
+            "covered": stmts - miss,
+            "pct": pct,
+            "missing_lines": fdata.get("missing_lines", []),
+        })
+    files.sort(key=lambda f: f["pct"])
+    totals = raw.get("totals", {})
+    return JSONResponse({
+        "generated": raw.get("meta", {}).get("timestamp"),
+        "files": files,
+        "total_stmts": totals.get("num_statements", 0),
+        "total_miss": totals.get("missing_lines", 0),
+        "total_pct": round(totals.get("percent_covered", 0)),
+    })
 
 
 @app.delete("/api/sessions/{session_id}")

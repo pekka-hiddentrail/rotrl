@@ -62,3 +62,26 @@ def test_single_turn(tmp_path):
     assert len(turns) == 1
     assert turns[0]["role"] == "PLAYER"
     assert "Just one message" in turns[0]["content"]
+
+
+def test_corrupt_partially_written_log_recovers_complete_turns(tmp_path):
+    """A truncated log should preserve complete turns and ignore raw payload tail."""
+    log = tmp_path / "corrupt_partial.log.md"
+    log.write_text(
+        "# Session 001\n\n"
+        "### [10:00:00] PLAYER\n"
+        "I ask Hemlock what is happening.\n\n"
+        "<details><summary>LLM payload — turn 1</summary>\n"
+        "**[SYSTEM]**\n"
+        "raw prompt that was never closed because the process died\n"
+        "### [10:01:00] GM\n"
+        "This line is inside the corrupt payload and must not be parsed.\n",
+        encoding="utf-8",
+    )
+
+    turns = _parse_turns_from_log(log)
+
+    assert turns == [{
+        "role": "PLAYER",
+        "content": "I ask Hemlock what is happening.",
+    }]
