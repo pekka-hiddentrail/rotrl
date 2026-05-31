@@ -74,9 +74,11 @@ models/
 
 # Generated session files (recap.md, boot.md created at session end)
 # Keep session_001/ — it contains hand-crafted intro.md and boot.md
+# Keep state.template.json — it's a template for new sessions' state.json
 sessions/
 !sessions/session_001/
 !sessions/session_001/**
+!sessions/state.template.json
 
 # NPC delta files — session-specific state changes, one file per session per NPC
 # base.md files are tracked; session_NNN.md deltas are not

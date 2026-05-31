@@ -211,6 +211,19 @@ export async function* resumeCombat(sessionId: string): AsyncGenerator<SseEvent>
   yield* parseSseStream(res)
 }
 
+export async function setActiveCharacter(
+  sessionId: string,
+  name: string,
+): Promise<{ active_character: string }> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/active_character`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) throw new Error(`Set active character failed (${res.status})`)
+  return res.json()
+}
+
 export async function fetchApiLogList(): Promise<string[]> {
   const res = await fetch(`${BASE}/log/api`)
   if (!res.ok) throw new Error(`API log list failed (${res.status})`)

@@ -1017,9 +1017,34 @@ class GameSession:
     # attacks collected until /resume_combat injects them into history and calls LLM.
     attack_queue: list = field(default_factory=list)   # list[PendingAttack]
     attack_results: list = field(default_factory=list) # list[dict]
+    # Active character in the UI — PC name when a character is selected, "party" otherwise.
+    # Set by the frontend via PUT /sessions/{id}/active_character.
+    active_character: str = "party"
 
 
 _sessions: dict[str, GameSession] = {}
+
+
+def _session_state_path(session: "GameSession") -> Path:
+    return _REPO_ROOT / "sessions" / f"session_{session.session_number:03d}" / "state.json"
+
+
+def _write_session_state(session: "GameSession") -> None:
+    """Write a minimal state snapshot to sessions/session_NNN/state.json.
+
+    Current fields: mode, round, events.
+    Grows over time as more state becomes worth persisting.
+    """
+    import json as _json
+    path = _session_state_path(session)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "mode":             "combat" if session.combat_state is not None else "social",
+        "round":            session.combat_state.round if session.combat_state is not None else 0,
+        "events":           [ev.event_id for ev in session.active_events],
+        "active_character": session.active_character,
+    }
+    path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
 
 
 def _ts() -> str:
@@ -1391,6 +1416,14 @@ def create_session(
         pc_profiles=_build_pc_profiles(_REPO_ROOT / "ui" / "public" / "data"),
     )
 
+    # Initialise session state file from template (resets mode to 'social' each boot).
+    _template = _REPO_ROOT / "sessions" / "state.template.json"
+    _state_path = _session_state_path(session)
+    _state_path.parent.mkdir(parents=True, exist_ok=True)
+    if _template.exists():
+        import shutil as _shutil
+        _shutil.copy2(_template, _state_path)
+
     # Boot cleanup — runs against adventure_path/01_npcs/ on every session start.
     #
     # 1. SESSION NPC folders: auto-created stubs are deleted unless the GM has
@@ -1553,6 +1586,21 @@ def resolve_roll(session: GameSession, rolled: int) -> dict:
 
     session.pending_roll = None
     return {"passed": passed, "skill": pr["skill"], "dc": pr["dc"], "rolled": rolled, "outcome": outcome, "speaker": speaker}
+
+
+def write_session_state(session: GameSession) -> None:
+    """Public alias for _write_session_state — callable from main.py."""
+    _write_session_state(session)
+
+
+def set_active_character(session: GameSession, name: str) -> None:
+    """Set the active character and persist to state.json.
+
+    Pass "party" to deselect all characters (default social state).
+    Any non-empty string is accepted — validation is the caller's responsibility.
+    """
+    session.active_character = name.strip() or "party"
+    _write_session_state(session)
 
 
 def save_session(session: GameSession) -> Path:
@@ -1967,6 +2015,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         if _expired_ids:
             session.active_events = [e for e in session.active_events if e.event_id not in _expired_ids]
             _log(session, f"\n> *[Events expired: {', '.join(_expired_ids)}]*\n")
+            _write_session_state(session)
 
         _combat_injected: list[str] = []
         for _ev in session.active_events:
@@ -2165,6 +2214,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     if expired_ids:
         session.active_events = [e for e in session.active_events if e.event_id not in expired_ids]
         _log(session, f"\n> *[Events expired: {', '.join(expired_ids)}]*\n")
+        _write_session_state(session)
 
     for _ev in session.active_events:
         injected.append(f"## Active Event — {_ev.event_id}\n\n{_ev.content}")
@@ -2480,6 +2530,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _write_session_state(session)
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
@@ -2506,6 +2557,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                     else:                                   # valid update
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
+                    _write_session_state(session)
                 # None → parse failure; leave session.combat_state unchanged
             except Exception as _e:
                 _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
@@ -2587,6 +2639,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _write_session_state(session)
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
@@ -2613,6 +2666,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                     else:
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
+                    _write_session_state(session)
             except Exception as _e:
                 _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
 

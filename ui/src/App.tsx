@@ -14,7 +14,7 @@ import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat, resolveAttackRoll, resolveDamageRoll, resumeCombat } from './api'
+import { bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
   const [imgOk, setImgOk] = useState(true)
@@ -381,7 +381,14 @@ export default function App() {
   }
 
   const handleCharacterSelect = (id: string) => {
-    setActiveCharacter(prev => (prev === id ? null : id))
+    setActiveCharacter(prev => {
+      const next = prev === id ? null : id
+      if (session) {
+        const name = next ? (characterMap[next]?.name ?? next) : 'party'
+        setActiveCharacterApi(session.id, name).catch(() => {/* non-blocking */})
+      }
+      return next
+    })
   }
 
   const handleOpenSheet = (id: string) => {

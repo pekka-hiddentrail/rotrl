@@ -322,7 +322,7 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     }
   })
 
-  // Covers: event-injection.feature AC-001
+  // Covers: event-injection.feature AC-001, session-state.feature AC-008
   test('L9 - live turn triggers goblin_attack_starts event', async () => {
     await sendTurnAndWait(
       page,
@@ -337,9 +337,18 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     const gmBubble = page.locator('.bubble-gm').last()
     await expect(gmBubble).toContainText('%%EVENT%%', { timeout: 60_000 })
     await expect(gmBubble).toContainText('goblin_attack_starts')
+
+    // session-state AC-008: state.json reflects the active event
+    const statePath = path.join(repoRoot, 'sessions', 'session_001', 'state.json')
+    await expect.poll(() => {
+      try {
+        const s = JSON.parse(readFileSync(statePath, 'utf8'))
+        return s.events ?? []
+      } catch { return [] }
+    }, { timeout: 5_000 }).toContain('goblin_attack_starts')
   })
 
-  // Covers: combat-tracker.feature AC-001, AC-004, AC-005, AC-006
+  // Covers: combat-tracker.feature AC-001, AC-004, AC-005, AC-006, session-state.feature AC-004
   test('L10 - spotting goblins produces %%COMBAT%% round 1', async () => {
     await sendTurnAndWait(
       page,
@@ -367,6 +376,12 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     expect(diceBox.x + diceBox.width, 'dice panel should be left of combat tracker').toBeLessThan(combatBox.x)
     expect(characterBox.x, 'character sidebar should start on the left side').toBeLessThan(viewport!.width / 2)
     expect(diceBox.x, 'dice panel should start on the left side').toBeLessThan(viewport!.width / 2)
+
+    // session-state AC-004: state.json switches to combat mode at round 1
+    const statePath = path.join(repoRoot, 'sessions', 'session_001', 'state.json')
+    await expect.poll(() => {
+      try { return JSON.parse(readFileSync(statePath, 'utf8')) } catch { return {} }
+    }, { timeout: 5_000 }).toMatchObject({ mode: 'combat', round: 1 })
   })
 
   // Covers: dice-panel.feature AC-001, AC-002, AC-004
@@ -383,11 +398,24 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     )
 
     await expect(page.locator('.bubble-gm').last()).toContainText('%%ROLL%%', { timeout: 60_000 })
-    await expect(page.locator('.dice-panel-active')).toBeVisible({ timeout: 15_000 })
+
+    // The dice panel activates only if the backend successfully parsed the %%ROLL%% block
+    // (i.e. a roll_request SSE was emitted). Live LLMs occasionally deviate from the exact
+    // format even when instructed — if the panel is not active we skip the interaction
+    // but still fail clearly so the format regression is visible in the test title.
+    const panelActive = page.locator('.dice-panel-active')
+    const panelVisible = await panelActive.isVisible().catch(() => false) ||
+      await panelActive.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false)
+
+    if (!panelVisible) {
+      test.fail(true, 'dice-panel-active did not appear — roll_request SSE not emitted; LLM deviated from %%ROLL%% format')
+      return
+    }
+
     await expect(page.locator('.roll-request-skill')).toContainText('Perception')
     await expect(page.locator('.roll-request-dc')).toContainText('DC 15')
 
-    await page.locator('.roll-request-prompt').filter({ hasText: 'Perception' }).click()
+    await page.locator('.roll-request-prompt').click()
 
     await expect(page.locator('.history-row').first()).toContainText(/PASSED|FAILED/, { timeout: 15_000 })
     await expect(page.getByText(/rolled (?:a )?\d+/i).last()).toBeVisible()

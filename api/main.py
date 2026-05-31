@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, stream_boot, stream_end_session, stream_resume_combat, stream_turn
+from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, set_active_character, stream_boot, stream_end_session, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -210,7 +210,22 @@ def delete_combat(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     session.combat_state = None
+    write_session_state(session)
     return {"combat_state": None}
+
+
+class ActiveCharacterRequest(BaseModel):
+    name: str  # PC name, or "party" to deselect
+
+
+@app.put("/api/sessions/{session_id}/active_character")
+def put_active_character(session_id: str, req: ActiveCharacterRequest):
+    """Set the active character for the session (syncs UI selection to state.json)."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    set_active_character(session, req.name)
+    return {"active_character": session.active_character}
 
 
 @app.post("/api/sessions/{session_id}/end")
