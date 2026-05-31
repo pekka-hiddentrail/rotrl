@@ -2,7 +2,7 @@
  * CombatPanel and HpBar — combat tracker UI tests.
  *
  * Spec: specs/combat-tracker.feature
- * Covers: AC-007, AC-008, AC-009, AC-012
+ * Covers: AC-007, AC-008, AC-009, AC-012, AC-014, AC-015
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -141,5 +141,90 @@ describe('CombatPanel — AC-012 conditions chips', () => {
   it('V12 — a combatant with no conditions renders zero chips', () => {
     render(<CombatPanel combatState={stateNoConditions} onEndCombat={vi.fn()} />)
     expect(document.querySelectorAll('.condition-chip')).toHaveLength(0)
+  })
+})
+
+// ─── AC-014 — active-turn highlight advances ──────────────────────────────────
+
+describe('CombatPanel — AC-014 active-turn highlight advances', () => {
+  it('V13 — currentCombatantName prop selects which row gets combatant-current', () => {
+    // THREE_COMBATANTS: Shalelu (init 14 active), Thaelion (init 8 active), Goblin 1 (init 6 unconscious)
+    const { container } = render(
+      <CombatPanel
+        combatState={THREE_COMBATANTS}
+        onEndCombat={vi.fn()}
+        currentCombatantName="Thaelion"
+      />,
+    )
+    const rows = Array.from(container.querySelectorAll('.combatant-row'))
+    const thaelionRow = rows.find(r => r.textContent?.includes('Thaelion'))
+    const shalelRow   = rows.find(r => r.textContent?.includes('Shalelu'))
+    expect(thaelionRow).toHaveClass('combatant-current')
+    expect(shalelRow).not.toHaveClass('combatant-current')
+  })
+
+  it('V14 — "Next Turn →" button is rendered', () => {
+    render(<CombatPanel combatState={THREE_COMBATANTS} onEndCombat={vi.fn()} onAdvanceTurn={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Next Turn →' })).toBeInTheDocument()
+  })
+
+  it('V15 — clicking "Next Turn →" fires the onAdvanceTurn callback', () => {
+    const onAdvanceTurn = vi.fn()
+    render(
+      <CombatPanel
+        combatState={THREE_COMBATANTS}
+        onEndCombat={vi.fn()}
+        onAdvanceTurn={onAdvanceTurn}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Next Turn →' }))
+    expect(onAdvanceTurn).toHaveBeenCalledOnce()
+  })
+
+  it('V16 — when currentCombatantName is null, fallback highlights the first active combatant', () => {
+    const { container } = render(
+      <CombatPanel
+        combatState={THREE_COMBATANTS}
+        onEndCombat={vi.fn()}
+        currentCombatantName={null}
+      />,
+    )
+    const rows = Array.from(container.querySelectorAll('.combatant-row'))
+    const shalelRow = rows.find(r => r.textContent?.includes('Shalelu'))
+    // Shalelu has highest initiative among active combatants → gets the fallback highlight
+    expect(shalelRow).toHaveClass('combatant-current')
+  })
+})
+
+// ─── AC-015 — dead combatant styling ─────────────────────────────────────────
+
+describe('CombatPanel — AC-015 dead combatant name styling', () => {
+  const stateWithDead: CombatState = {
+    round: 3,
+    combatants: [
+      { name: 'Shalelu',  hp_current: 18, hp_max: 24, ac: 17, initiative: 14, status: 'active', conditions: [] },
+      { name: 'Goblin 1', hp_current: 0,  hp_max: 5,  ac: 13, initiative: 6,  status: 'dead',   conditions: [] },
+    ],
+  }
+
+  it('V17 — a dead combatant row has the combatant-dead class', () => {
+    const { container } = render(<CombatPanel combatState={stateWithDead} onEndCombat={vi.fn()} />)
+    const rows = Array.from(container.querySelectorAll('.combatant-row'))
+    const goblinRow = rows.find(r => r.textContent?.includes('Goblin 1'))
+    expect(goblinRow).toHaveClass('combatant-dead')
+  })
+
+  it('V18 — a dead combatant row also has combatant-inactive', () => {
+    const { container } = render(<CombatPanel combatState={stateWithDead} onEndCombat={vi.fn()} />)
+    const rows = Array.from(container.querySelectorAll('.combatant-row'))
+    const goblinRow = rows.find(r => r.textContent?.includes('Goblin 1'))
+    expect(goblinRow).toHaveClass('combatant-inactive')
+  })
+
+  it('V19 — a dead combatant row does NOT get combatant-current', () => {
+    const { container } = render(<CombatPanel combatState={stateWithDead} onEndCombat={vi.fn()} />)
+    const rows = Array.from(container.querySelectorAll('.combatant-row'))
+    const goblinRow = rows.find(r => r.textContent?.includes('Goblin 1'))
+    expect(goblinRow).not.toHaveClass('combatant-current')
   })
 })

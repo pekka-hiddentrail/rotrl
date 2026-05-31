@@ -19,22 +19,22 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `04_rules/skills/` |
 | [session-logging.feature](session-logging.feature) | Backend \| Frontend | `@logging` `@session-log` `@api-log` `@dice` | 10 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok`, `ApiLogPanel.tsx` |
 | [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button, API Logs button |
-| [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 6 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
+| [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 7 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
 | [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 11 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration |
 | [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 12 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
 | [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 10 | `_build_slim_system_prompt()`, per-turn copy, Groq cap, `_FORMAT_EXAMPLE`, `_COMBAT_FULL_SPEC`, `_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC`, `_build_pc_profiles()` |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 | [event-injection.feature](event-injection.feature) | Backend | `@event` `@injection` `@context` `@parsing` `@session` | 8 | `EventIndex`, `active_events`, `%%EVENT%%` parser, event map in system prompt |
-| [combat-tracker.feature](combat-tracker.feature) | Backend \| Frontend | `@combat` `@parsing` `@session` `@streaming` `@layout` | 12 | `CombatState`, `Combatant`, `_parse_combat_block`, `CombatPanel.tsx`, `HpBar.tsx`, `combat_update` SSE, `DELETE /combat`, per-turn combat reminder, `CombatRulesIndex`, condition chips |
-| [combat-hp.feature](combat-hp.feature) | Backend | `@combat` `@hp` `@session` `@parsing` | 9 | `_parse_combat_block(existing_state)`, `_parse_hp_deltas`, `_apply_hp_deltas`, `%%HP%%` block, `[CURRENT HP]` context injection, `_COMBAT_SPEC_ROUND1`, `_COMBAT_SPEC_ONGOING` |
+| [combat-tracker.feature](combat-tracker.feature) | Backend \| Frontend | `@combat` `@parsing` `@session` `@streaming` `@layout` | 15 | `CombatState`, `Combatant`, `_parse_combat_block`, `CombatPanel.tsx`, `HpBar.tsx`, `combat_update` SSE, `DELETE /combat`, per-turn combat reminder, `CombatRulesIndex`, condition chips, `currentCombatantName`, highlight advance |
+| [combat-hp.feature](combat-hp.feature) | Backend | `@combat` `@hp` `@session` `@parsing` | 10 | `_parse_combat_block(existing_state)`, `_parse_hp_deltas`, `_apply_hp_deltas`, `%%HP%%` block, `[CURRENT HP]` context injection, `_COMBAT_SPEC_ROUND1`, `_COMBAT_SPEC_ONGOING`, HP-status guard |
 | [attack-resolution.feature](attack-resolution.feature) | Backend \| Frontend | `@combat` `@attack` `@dice` `@session` `@streaming` `@parsing` | 9 | `_parse_attack_block`, `_roll_dice`, `PendingAttack`, `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `stream_resume_combat`, `attack_request`/`attack_result` SSE, `AttackPhase`, `DicePanel` attack banners |
 | [player-bubble-speaker.feature](player-bubble-speaker.feature) | Frontend | `@chat` `@bubbles` `@character` `@speaker` `@identity` | 6 | `MessageBubble.tsx`, `types.ts` `MessageSpeaker`, `App.tsx` speaker snapshot, `index.css` |
 | [token-benchmark.feature](token-benchmark.feature) | Backend \| Frontend \| Infrastructure | `@benchmark` `@api-log` `@token` `@quality-of-life` | 7 | `GET /api/benchmarks`, `outputs/token_benchmarks.csv`, `TokenBenchmarks.tsx`, `test_token_benchmark.py`, `Header.tsx` Benchmarks button |
 | [splash-hints.feature](splash-hints.feature) | Frontend | `@splash` `@hints` `@ui` `@rotation` | 6 | `SplashHint.tsx`, `hints.ts`, `App.tsx`, `index.css` |
 | [coverage-matrix.feature](coverage-matrix.feature) | Backend \| Frontend \| Infrastructure | `@coverage` `@developer-tools` `@quality-of-life` | 7 | `scripts/build_coverage.py`, `outputs/coverage.json`, `GET /api/coverage`, `CoverageMatrix.tsx`, `Header.tsx` Coverage button |
 
-**Total: 186 acceptance criteria across 25 feature files**
+**Total: 191 acceptance criteria across 25 feature files**
 
 ---
 

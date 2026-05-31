@@ -185,6 +185,9 @@ export default function App() {
   const doResumeCombat = async (sessionId: string) => {
     setStreaming(true)
     setAttackLogSync(() => [])
+    // Seed a new GM bubble so the combat resolution narrative doesn't append
+    // to the previous turn's response in the chat window.
+    setMessages(prev => [...prev, { role: 'gm', content: '' }])
     try {
       for await (const event of resumeCombat(sessionId)) {
         if (event.type === 'token') appendToken(event.content)

@@ -1,3 +1,9 @@
+/**
+ * DicePanel — dice roller, skill bonus, roll history, and banner tests.
+ *
+ * Spec: specs/dice-panel.feature
+ * Covers: AC-001 through AC-013
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import DicePanel, { normaliseSkill, lookupSkillBonus } from '../DicePanel'
@@ -6,6 +12,9 @@ import DicePanel, { normaliseSkill, lookupSkillBonus } from '../DicePanel'
 
 const YANYEEKU_SPEAKER = {
   name: 'Yanyeeku',
+  portrait: '/portraits/yanyeeku.png',
+  color: '#a060d0',
+  rune: 'Y',
   skills: [
     { name: 'Perception', total: 7 },
     { name: 'Sense Motive', total: 4 },
@@ -415,6 +424,48 @@ describe('DicePanel — AC-012 click banner to quick-roll d20', () => {
     renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
     fireEvent.click(screen.getByTitle('Click to roll d20'))
     await waitFor(() => expect(screen.getByText('PASSED')).toBeInTheDocument())
+  })
+})
+
+// ─── AC-013 — character portrait and name in roll banner ─────────────────────
+
+describe('DicePanel — AC-013 character badge in pending roll banner', () => {
+  it('shows the character name in the banner when active speaker is set', () => {
+    renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER })
+    expect(screen.getByText('Yanyeeku')).toBeInTheDocument()
+  })
+
+  it('renders the portrait image with the character colour as border', () => {
+    const { container } = renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER })
+    const avatar = container.querySelector('.roll-request-avatar') as HTMLElement
+    expect(avatar).toBeInTheDocument()
+    expect(avatar.style.borderColor).toBe('rgb(160, 96, 208)')
+    const img = avatar.querySelector('img') as HTMLImageElement
+    expect(img.src).toContain('/portraits/yanyeeku.png')
+  })
+
+  it('renders the rune fallback letter inside the avatar', () => {
+    const { container } = renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER })
+    const rune = container.querySelector('.roll-request-rune')
+    expect(rune).toBeInTheDocument()
+    expect(rune?.textContent).toBe('Y')
+  })
+
+  it('character name is coloured with the character colour', () => {
+    const { container } = renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER })
+    const name = container.querySelector('.roll-request-name') as HTMLElement
+    expect(name).toBeInTheDocument()
+    expect(name.style.color).toBe('rgb(160, 96, 208)')
+  })
+
+  it('no character badge when activeSpeaker is null', () => {
+    const { container } = renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: null })
+    expect(container.querySelector('.roll-request-character')).not.toBeInTheDocument()
+  })
+
+  it('no character badge when no pending roll', () => {
+    const { container } = renderPanel({ pendingRoll: null, activeSpeaker: YANYEEKU_SPEAKER })
+    expect(container.querySelector('.roll-request-character')).not.toBeInTheDocument()
   })
 })
 

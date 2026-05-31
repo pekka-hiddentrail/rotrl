@@ -149,15 +149,18 @@ export interface CodeCoverageFile {
   miss:          number
   covered:       number
   pct:           number
+  delta:         number | null
   missing_lines: number[]
 }
 
 export interface CodeCoverageData {
-  generated:   string | null
-  files:       CodeCoverageFile[]
-  total_stmts: number
-  total_miss:  number
-  total_pct:   number
+  generated:       string | null
+  files:           CodeCoverageFile[]
+  has_prev:        boolean
+  total_stmts:     number
+  total_miss:      number
+  total_pct:       number
+  total_pct_delta: number | null
 }
 
 export async function fetchCodeCoverage(): Promise<CodeCoverageData> {

@@ -77,7 +77,13 @@ class TestHpInheritance:
         assert goblin.hp_current == 3    # preserved — not 5
 
     def test_ac002_status_still_updated_from_llm(self):
-        """Even when HP is inherited, status changes from the LLM ARE applied."""
+        """Status changes from the LLM are applied, but guarded by backend HP.
+
+        If the backend HP is still positive the LLM cannot mark the combatant as
+        dead or unconscious — the guard overrides status back to 'active'.  This
+        prevents the LLM from speculatively killing a combatant before damage is
+        actually applied.
+        """
         existing = _state(1, _combatant("Goblin 1", hp_current=1, hp_max=5))
         block = (
             "round: 2\n"
@@ -87,8 +93,50 @@ class TestHpInheritance:
         result = _parse_combat_block(block, existing_state=existing)
         assert result is not None
         goblin = result.combatants[0]
-        assert goblin.hp_current == 1       # HP preserved from backend
-        assert goblin.status == "unconscious"  # status updated from LLM
+        assert goblin.hp_current == 1   # HP preserved from backend
+        assert goblin.status == "active"  # guard: hp_current > 0 overrides unconscious
+
+    def test_ac002b_status_unconscious_accepted_at_zero_hp(self):
+        """When backend HP reaches 0 the LLM may mark the combatant unconscious."""
+        existing = _state(1, _combatant("Goblin 1", hp_current=0, hp_max=5))
+        block = (
+            "round: 2\n"
+            "combatants:\n"
+            "  - name: Goblin 1 · hp: 0/5 · ac: 13 · init: 10 · status: unconscious\n"
+        )
+        result = _parse_combat_block(block, existing_state=existing)
+        assert result is not None
+        goblin = result.combatants[0]
+        assert goblin.hp_current == 0
+        assert goblin.status == "unconscious"
+
+    def test_ac002c_status_dead_accepted_at_zero_hp(self):
+        """When backend HP is 0 the LLM may mark the combatant dead."""
+        existing = _state(1, _combatant("Goblin 1", hp_current=0, hp_max=5))
+        block = (
+            "round: 2\n"
+            "combatants:\n"
+            "  - name: Goblin 1 · hp: 0/5 · ac: 13 · init: 10 · status: dead\n"
+        )
+        result = _parse_combat_block(block, existing_state=existing)
+        assert result is not None
+        goblin = result.combatants[0]
+        assert goblin.hp_current == 0
+        assert goblin.status == "dead"
+
+    def test_ac002d_status_dead_blocked_when_hp_positive(self):
+        """LLM writing status: dead for a combatant with HP > 0 is overridden to active."""
+        existing = _state(1, _combatant("Goblin 1", hp_current=3, hp_max=5))
+        block = (
+            "round: 2\n"
+            "combatants:\n"
+            "  - name: Goblin 1 · hp: 0/5 · ac: 13 · init: 10 · status: dead\n"
+        )
+        result = _parse_combat_block(block, existing_state=existing)
+        assert result is not None
+        goblin = result.combatants[0]
+        assert goblin.hp_current == 3   # backend HP preserved
+        assert goblin.status == "active"  # guard: cannot be dead with HP > 0
 
     def test_ac003_new_combatant_gets_llm_hp(self):
         """A combatant name not in existing_state is initialised with LLM-provided HP."""

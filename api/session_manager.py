@@ -448,6 +448,12 @@ def _parse_combat_block(
                 # Keep backend HP; update status and other fields from LLM.
                 c.hp_current = existing.hp_current
                 c.hp_max = existing.hp_max
+                # Guard: LLM may speculatively mark a combatant dead/unconscious
+                # before damage is actually applied (HP is owned by the backend in
+                # round 2+).  If the backend HP is still positive the combatant is
+                # alive — force status back to active.
+                if c.hp_current > 0 and c.status in ('dead', 'unconscious'):
+                    c.status = 'active'
             # New combatant (not in existing_state): use LLM-provided HP as-is.
 
     return CombatState(round=round_num, combatants=combatants)

@@ -191,3 +191,41 @@ And   "%%HP%%", "delta:", and "name:" from the HP block are NOT in any token eve
 - Attack damage from `%%ATTACK%%` also uses `_apply_hp_deltas` — same code path.
 - Related: [combat-tracker.feature](combat-tracker.feature) — visual tracker foundation
 - Related: [attack-resolution.feature](attack-resolution.feature) — attack HP changes via the same delta path
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-010 — HP-status guard: LLM cannot mark a combatant dead or unconscious while HP > 0
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM speculatively kills a combatant before damage is applied
+
+```gherkin
+Given session.combat_state has "Goblin 1" with hp_current=3, hp_max=5 (round 2+)
+And   the LLM writes a %%COMBAT%% block with "Goblin 1" status: dead
+When  the turn is processed
+Then  the combatant's status is overridden to "active"
+And   hp_current remains 3
+
+Given session.combat_state has "Goblin 1" with hp_current=3, hp_max=5 (round 2+)
+And   the LLM writes a %%COMBAT%% block with "Goblin 1" status: unconscious
+When  the turn is processed
+Then  the combatant's status is overridden to "active"
+
+Given session.combat_state has "Goblin 1" with hp_current=0, hp_max=5 (round 2+)
+And   the LLM writes a %%COMBAT%% block with "Goblin 1" status: dead
+When  the turn is processed
+Then  the combatant's status is "dead"  (HP is 0; guard allows the transition)
+
+Given session.combat_state has "Goblin 1" with hp_current=0, hp_max=5 (round 2+)
+And   the LLM writes a %%COMBAT%% block with "Goblin 1" status: unconscious
+When  the turn is processed
+Then  the combatant's status is "unconscious"  (HP is 0; guard allows the transition)
+```
+
+**Implementation note:** `_parse_combat_block` applies this guard inside the
+`existing_state` HP-inheritance loop — after `c.hp_current` is set from the
+backend, any LLM-written `status in ('dead', 'unconscious')` is overridden to
+`'active'` when `c.hp_current > 0`.  The guard has no effect on round-1 blocks
+(where `existing_state is None`) or on new combatants entering mid-combat
+(whose HP comes from the LLM, so the guard would not be needed anyway).

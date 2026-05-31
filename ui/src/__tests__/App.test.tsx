@@ -769,6 +769,43 @@ describe('App — attack resolution wiring', () => {
     await waitFor(() => expect(screen.getByText('Goblin misses.')).toBeInTheDocument())
   })
 
+  it('chat-display AC-007 — doResumeCombat tokens land in a NEW GM bubble, not the previous one', async () => {
+    // Regression guard: before the fix, doResumeCombat appended to the last existing GM bubble.
+    // The fix seeds an empty { role: 'gm', content: '' } before the stream begins.
+    mockSend.mockImplementation(() =>
+      makeGen(
+        { type: 'token' as const, content: 'Attack setup narrative.' },
+        {
+          type: 'attack_request' as const,
+          attacker: 'Thaelion', target: 'Goblin 1',
+          bonus: 5, ac: 13, damage_expr: '1d8+3', attack_type: 'melee' as const,
+        },
+      ),
+    )
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: false, ac: 13, roll: 13, bonus: 5, total: 18,
+      damage_expr: null, queue_remaining: 0, next_attack: null,
+    })
+    mockResumeCombat.mockImplementation(() =>
+      makeGen({ type: 'token' as const, content: 'Combat resolved.' }),
+    )
+
+    await user.type(screen.getByRole('textbox'), 'attack')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText(/Thaelion → Goblin 1/)).toBeInTheDocument())
+    await user.click(screen.getByTitle('Click to roll d20'))
+
+    await waitFor(() => expect(screen.getByText('Combat resolved.')).toBeInTheDocument())
+
+    // The two pieces of GM narrative must be in SEPARATE bubble-row elements
+    const gmBubbles = document.querySelectorAll('.bubble-row.gm')
+    const setupBubble  = Array.from(gmBubbles).find(b => b.textContent?.includes('Attack setup narrative.'))
+    const resumeBubble = Array.from(gmBubbles).find(b => b.textContent?.includes('Combat resolved.'))
+    expect(setupBubble).toBeTruthy()
+    expect(resumeBubble).toBeTruthy()
+    expect(setupBubble).not.toBe(resumeBubble)
+  })
+
   it('attack_type carried from to_hit phase into attack log — not hardcoded melee', async () => {
     // Regression: handleAttackRoll hardcoded 'melee' regardless of the phase's attack_type.
     mockSend.mockImplementation(() =>

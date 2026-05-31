@@ -214,6 +214,54 @@ And   the auto-bonus is applied
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-012 — Clicking the roll-request banner fires a quick d20 roll
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Player clicks the banner area instead of queuing a d20 manually
+
+```gherkin
+Given a pending roll for Perception DC 18 is active
+And   Yanyeeku is the active character with Perception +7
+When  the player clicks the roll-request-prompt area (the banner itself)
+Then  a single d20 is rolled immediately (without the player queuing it)
+And   the auto-bonus is applied as normal
+And   any dice already in the manual queue are NOT cleared
+And   POST /api/sessions/{id}/resolve_roll is called with the final total
+
+Given the auto-bonus toggle is OFF
+When  the player clicks the banner
+Then  the raw d20 total is submitted (no modifier)
+
+Given no active character is set
+When  the player clicks the banner
+Then  the raw d20 total is submitted and "No active character" note appears in history
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-013 — Active character portrait and name shown in the roll banner
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Pending roll banner with an active character
+
+```gherkin
+Given a pending roll_request SSE event is received
+And   an active character (e.g. Ani) is set
+When  the roll-request banner renders
+Then  the character's portrait is shown as a small circular avatar
+And   the character's name is displayed next to the avatar in the character's colour
+And   the avatar uses the character's rune letter as a fallback if the portrait fails to load
+And   the layout is: [avatar] [name] / skill / DC / hint (top to bottom)
+
+Given no active character is set
+When  the roll-request banner renders
+Then  no portrait or name is shown — only the skill, DC, and hint
+```
+
+---
+
 ## Out of Scope
 
 - Backend DC storage (covered by SPEC-006 %%ROLL%% parsing)
@@ -232,8 +280,8 @@ And   the auto-bonus is applied
 - The bubble is local-only. It is **not** sent to the backend as a player turn.
 - `InputBar` no longer has `injectedValue` / `injectionId` props — injection was removed in favour of the speech bubble.
 - `POST /api/sessions/{id}/roll` only fires when a session is active; silently skipped otherwise
-- AC-007 through AC-011 implemented in `DicePanel.tsx`. Key exports: `normaliseSkill(s)`, `lookupSkillBonus(skill, speaker)` (pure helpers, independently testable).
+- AC-007 through AC-013 implemented in `DicePanel.tsx`. Key exports: `normaliseSkill(s)`, `lookupSkillBonus(skill, speaker)` (pure helpers, independently testable).
 - `onRoll` callback signature changed to `(expr, rolls, total) => Promise<{ passed: boolean } | null>`. App.tsx returns `{ passed }` from `resolveRoll`; DicePanel awaits and updates the history record to show PASSED/FAILED badge.
 - `autoBonus` toggle state lives in DicePanel; resets to ON on session boot (DicePanel is keyed with `diceKey` which increments on boot).
-- Skill modifier read from `activeSpeaker.skills[i].total` (matches `CharacterData.skills[i]`). DicePanel accepts a narrower `ActiveSpeaker` interface so it does not depend on the full `CharacterData` type.
-- Skill name normalisation: `trim → lowercase → collapse whitespace/hyphens/underscores → single space` before map lookup.
+- `ActiveSpeaker` interface (local to DicePanel): `name`, `portrait`, `color`, `rune`, `skills[{name, total}]`. App.tsx passes the full `CharacterData` object which satisfies this interface. The portrait is used in the roll banner (AC-013); `color` and `rune` are used for the avatar border and fallback letter respectively.
+- Skill modifier read from `activeSpeaker.skills[i].total`. Skill name normalisation: `trim → lowercase → collapse whitespace/hyphens/underscores → single space` before map lookup.

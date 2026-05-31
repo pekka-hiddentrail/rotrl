@@ -295,6 +295,53 @@ backend takes HP authority from round 2 onward (see [combat-hp.feature](combat-h
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-014 — Active-turn highlight advances via "Next Turn →" button
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** GM manually steps through the initiative order
+
+```gherkin
+Given CombatPanel renders with currentCombatantName="Shalelu" (init 14, active)
+And   combatants are Shalelu (init 14, active), Thaelion (init 8, active), Goblin 1 (init 6, unconscious)
+When  the GM clicks "Next Turn →"
+Then  onAdvanceTurn is called
+And   the next active combatant in initiative order (Thaelion) receives combatant-current
+And   Shalelu no longer has combatant-current
+
+Given Thaelion is highlighted (currentCombatantName="Thaelion")
+When  the GM clicks "Next Turn →" again
+Then  the highlight wraps back to Shalelu (only two active combatants remain)
+
+Given currentCombatantName is null (combat just started, no explicit tracking yet)
+When  CombatPanel renders
+Then  the highlight falls back to the first active combatant by initiative order
+```
+
+**Implementation:** `currentCombatantName: string | null` state in `App.tsx`,
+initialised on the first `combat_update` of a new combat by selecting the
+highest-initiative active combatant.  `handleAdvanceTurn()` sorts combatants,
+filters to `status === 'active'`, and sets the next name (wrapping with modulo).
+Passed to `CombatPanel` as `currentCombatantName` + `onAdvanceTurn` props.
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-015 — Dead combatant name is visually marked with a muted red colour
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** A combatant's status is "dead"
+
+```gherkin
+Given a combatant row has status: "dead"
+Then  the row has the "combatant-dead" CSS class
+And   the combatant name text colour is muted red (#8b3333)
+And   the row also has "combatant-inactive" (opacity 0.5)
+And   the row does NOT have "combatant-current"
+```
+
+---
+
 ## Notes
 
 - `%%COMBAT%%` is a **section marker** (like `%%DELTAS%%`), not an inline tag like `%%EVENT%%`.

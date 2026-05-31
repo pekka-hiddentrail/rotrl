@@ -55,8 +55,9 @@ export default function CombatPanel({ combatState, disabled, currentCombatantNam
               key={c.name}
               className={[
                 'combatant-row',
-                isCurrent ? 'combatant-current' : '',
-                !isActive  ? 'combatant-inactive' : '',
+                isCurrent        ? 'combatant-current'  : '',
+                !isActive        ? 'combatant-inactive' : '',
+                c.status === 'dead' ? 'combatant-dead'  : '',
               ].filter(Boolean).join(' ')}
             >
               <div className="combatant-name-row">
