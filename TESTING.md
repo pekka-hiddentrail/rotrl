@@ -46,5 +46,7 @@ python dev.py --skip-tests
 
 ## Coverage
 
-Run `python scripts/build_coverage.py` then click **Coverage** in the header to see which spec ACs
-are covered by each of the four suites (pytest / Vitest / Playwright / Exploratory).
+Click **Coverage** in the header to rebuild and view the current feature AC matrix. The API
+also writes the refreshed data to `outputs/coverage.json`; `python scripts/build_coverage.py`
+does the same from the CLI. The script scans `specs/**/*.feature`, including newly added
+features and AC headings, and maps coverage across pytest / Vitest / Playwright / Exploratory.

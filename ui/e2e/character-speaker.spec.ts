@@ -1,10 +1,13 @@
 /**
- * Character speaker activation and dice-panel roll banner tests.
+ * Character speaker activation, dice-panel roll banner, and active_character
+ * state persistence tests.
  *
- * Spec: specs/character-system.feature, specs/dice-panel.feature
+ * Spec: specs/character-system.feature, specs/dice-panel.feature,
+ *       specs/session-state.feature
  * Covers: character-system AC-004 (active speaker), AC-005 (speaker badge),
  *         AC-006 (clear active); dice-panel AC-007 (auto-bonus), AC-012
- *         (banner click), AC-013 (portrait in banner)
+ *         (banner click), AC-013 (portrait in banner);
+ *         session-state AC-014 (PUT sets name), AC-015 (party on deselect)
  *
  * All network calls are mocked — no real backend required.
  */
@@ -182,4 +185,43 @@ test('CS-E2E-002 — Ani active: portrait in roll banner, Perception roll with a
 
   // Chat shows the player bubble with Ani's roll
   await expect(page.getByText(/Ani rolled/)).toBeVisible()
+})
+
+// Covers: session-state.feature AC-014
+test('CS-E2E-003 — selecting a character fires PUT /active_character with the PC name', async ({ page }) => {
+  const putCalls: { name: string }[] = []
+
+  await page.route('**/api/sessions/sess-e2e/active_character', async route => {
+    const body = JSON.parse(route.request().postData() ?? '{}')
+    putCalls.push(body)
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ active_character: body.name }) })
+  })
+
+  await boot(page)
+  await setActiveCharacter(page, 'Ani')
+
+  await expect(async () => {
+    expect(putCalls.some(c => c.name === 'Ani')).toBe(true)
+  }).toPass()
+})
+
+// Covers: session-state.feature AC-015
+test('CS-E2E-004 — clearing a character fires PUT /active_character with "party"', async ({ page }) => {
+  const putCalls: { name: string }[] = []
+
+  await page.route('**/api/sessions/sess-e2e/active_character', async route => {
+    const body = JSON.parse(route.request().postData() ?? '{}')
+    putCalls.push(body)
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ active_character: body.name }) })
+  })
+
+  await boot(page)
+  await setActiveCharacter(page, 'Ani')
+  await clearActiveCharacter(page, 'Ani')
+
+  await expect(async () => {
+    expect(putCalls.some(c => c.name === 'party')).toBe(true)
+  }).toPass()
 })

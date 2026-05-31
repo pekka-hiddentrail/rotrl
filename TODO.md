@@ -17,8 +17,6 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## Quality and Testing
 
-- [x] **Vitest — attack resolution UI** — 15 tests in `DicePanelAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
-- [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DicePanel.tsx `handleDamageRollClick`)*
 - [ ] **Playwright — attack resolution E2E** — one live flow `attack-resolution-flow` in `live-flows.spec.ts`: boot → trigger combat with mixed NPC+PC attack block → assert `attack_result` SSE updates CombatPanel HP → assert `attack_request` fires and DicePanel shows to-hit banner → roll d20 → hit path: damage banner appears, roll damage, assert `combat_update` reduces HP → assert `POST /resume_combat` called and GM resumes streaming. *(spec: `attack-resolution.feature` AC-002 through AC-005)*
 - [ ] **Generate HTML coverage heatmap** — combine code line coverage and feature AC coverage into one visual; dark = no tests, red = code covered but no AC, green = both
 - [ ] **Define risk register** — identify high-risk areas (LLM compliance, session state loss, data corruption); map each risk to covering tests or flag as gap
@@ -28,7 +26,17 @@ This file is a working backlog for the RotRL automation project. Items are group
 - [ ] Test `_enforce_recap_header` against real LLM output samples collected from past sessions to catch title/date extraction edge cases. *(low — synthetic coverage in `test_recap_header.py` is solid; real-sample gap is narrow)*
 - [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low — single-die case covered in `test_roll_logged`; multi-die breakdown not tested)*
 - [ ] **Live Playwright — dice roller scenario coverage** — extend `ui/e2e/live-flows.spec.ts` with dedicated dice scenarios against a real booted session: (1) basic multi-die queue (2d6+1d20) rolls and result appears in history; (2) auto-bonus applies when active character has a matching skill modifier; (3) auto-bonus absent when toggle is OFF; (4) pending roll banner clears after resolve and PASSED/FAILED badge appears; (5) history cap at 10 rolls — 12th roll evicts the oldest entry; (6) roll-while-streaming is blocked — send button disabled during GM response.
+- [ ] **Combat initiative active character state** — when combat is active, the current combatant in initiative order should drive `active_character`. Add an API/update path that writes the current initiative actor into the UI and `sessions/session_NNN/state.json`, including enemy turns. When the active actor is an enemy, the input field should switch to a red-ish hostile state with taunting prompt text, show a skull-style icon instead of the character rune, and label the enemy by name (for example `Goblin Warrior 1`).
+- [ ] **Combat turn ownership model** — make the backend, not the LLM, the source of truth for the current combatant and initiative advancement. Store current actor, round, and acted/remaining turn state; emit it to the UI; inject it into the combat prompt as authoritative. The LLM may describe outcomes, but should not be able to drift initiative order or choose whose turn is next.
+- [ ] **Backend-hydrated combat encounter start** — when a combat event starts, resolve the encounter from backend-owned event/encounter descriptions plus canonical bestiary data instead of trusting the LLM to invent monster stats. Determine the minimum LLM responsibility: likely narrative framing, enemy intent, and choosing among valid tactics; backend should supply combatants, HP, AC, initiative modifiers, attacks, saves, XP, and encounter metadata wherever the data exists.
+- [ ] **Combat prompt: PC vs enemy turn behavior** — clarify and test the combat prompt contract: on a PC turn, the GM should present the immediate situation and wait for/resolve the player's declared action; on an enemy turn, the GM may choose and narrate the enemy action using `%%ATTACK%%`/`%%HP%%` as needed. This should align with the active-character/enemy input-state UI.
+- [ ] **Combat action economy rules** — add prompt guidance and backend/test support for PF1e action economy: standard/move/swift/immediate/full-round actions, attacks of opportunity, readied/delayed actions, and limits on how much one combatant can do per turn.
+- [ ] **Enemy stat authority for combat** — stop relying on model-invented enemy stats after initial setup. Load enemies from canonical NPC/monster stat blocks where possible, persist generated combatants into session state, and validate AC/HP/initiative/attack bonuses against those sources.
+- [ ] **Combat end conditions** — define when combat should emit `round: 0` and clear the tracker: all enemies dead/fled/surrendered, encounter defused, or GM/player explicitly ends combat. Add tests so victory, surrender, fleeing enemies, and manual End Combat behave consistently.
+- [ ] **Condition duration tracking** — extend combat state to track condition durations and expiry rules, not just condition labels. Include prompt/backend behavior for one-round effects, save-ends effects, prone/standing, bleed, poison, fear states, and other common PF1e combat conditions.
 - [ ] **Skill-use rules for trained-only skills** — define and enforce when a PC can attempt skill checks they do not have trained. Knowledge skills should follow PF1e trained-only behavior where appropriate; if a character lacks the relevant Knowledge skill, fall back to an untrained general ability check only for common information, likely INT-based with a higher DC (for example +10), and make the GM state the limitation instead of silently granting full expert knowledge.
+- [x] **Vitest — attack resolution UI** — 15 tests in `DicePanelAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
+- [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DicePanel.tsx `handleDamageRollClick`)*
 - [x] **Add pytest-cov to backend** — generate per-file line coverage report; identify untested paths in streaming and fallback parsers. **Done:** `pytest-cov>=4.0.0` in requirements; `.coveragerc` (source=api, show_missing, json→outputs/code_coverage.json); `GET /api/code-coverage` endpoint; "Code Lines" tab added to the Coverage modal showing per-file bars, %, and missing line numbers.
 - [x] **Build feature coverage matrix** — map each of the 178 spec ACs to the test(s) that cover it; flag ACs with zero test coverage. **Done:** `scripts/build_coverage.py` reads all `specs/*.feature` files and all test suites (pytest / Vitest / Playwright), writes `outputs/coverage.json` (45/178 covered, 133 gaps as of first run). `GET /api/coverage` serves the data. `CoverageMatrix.tsx` modal opens from a "Coverage" button in the header — filterable by feature and by gap status. Spec: `specs/coverage-matrix.feature` (6 ACs).
 - [x] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
@@ -130,19 +138,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 - [ ] **Load `00_system_authority/` files into the system prompt** — CORE BEHAVIOR and GM STYLE are hardcoded strings in `_build_slim_system_prompt()`; tuning them requires editing Python. Replace with file loading: `ADJUDICATION_PRINCIPLES.md` → CORE BEHAVIOR block at boot; `PF1E_RULES_SCOPE.md` (payload section only, above `<!-- REFERENCE -->`) → GM STYLE block at boot. `COMBAT_AND_POSITIONING.md` → inject per-turn via `_inject_context` alongside `_COMBAT_FULL_SPEC` when combat is active. Caution: files must stay at or below current token budgets — don't let file loading silently bloat the static prompt. `PERSISTENCE_HANDLING_RULES.md` and `SESSION_NOTES_PROTOCOL.md` are reference-only (no action needed).
 - [ ] **System prompt — strip non-combat context blocks outside active combat** — when `session.combat_state is None`, suppress from the per-turn injection: `_COMBAT_FULL_SPEC`, `_COMBAT_SPEC_ONGOING`, `[CURRENT HP]` block, `_ENEMY_TURN_DIRECTIVE`, and the attack-resolution section of `_COMBAT_SPEC_ONGOING`. Broader review: audit all per-turn injections for appropriate activity-gating; consider a leaner "exploration mode" base prompt variant separate from a "combat mode" variant that activates only when `combat_state is not None`. Potentially large token savings on every non-combat turn.
 
-- [ ] **Design a dedicated combat system prompt** — the current `_build_slim_system_prompt` is a
-  general-purpose narrative prompt with combat sections bolted on. When `combat_state is not None`,
-  replace or heavily override it with a purpose-built combat prompt that speaks *only* in mechanical
-  terms: initiative order, attack resolution, HP tracking, condition application, end-of-round
-  %%COMBAT%% update. Strip out: NPC personality guidance, scene-setting tone, narrative length
-  targets, skill-check prose guidelines, %%GENERATE%% and %%DELTAS%% specs — none of that belongs
-  in a combat turn. The combat prompt should be shorter in total tokens than the narrative prompt,
-  more deterministic in its instructions, and hardened against the LLM inventing dice outcomes.
-  Deliverables: (1) `_build_combat_system_prompt(session)` that builds the combat-mode base;
-  (2) `_inject_context` switches between `_build_slim_system_prompt` and
-  `_build_combat_system_prompt` based on `session.combat_state`; (3) token benchmark comparing
-  per-turn cost in combat mode vs current; (4) at least one live session logged in full combat
-  mode to validate LLM compliance before merging.
+- ~~[ ] **Design a dedicated combat system prompt**~~ — **(moved to Combat System → Tier 1.6)**
 - [x] Move the format example below a `<!-- REFERENCE -->` marker in the system prompt — extracted to `_FORMAT_EXAMPLE` constant; injected dynamically on the first player turn only (`len(session.messages) == 1`). Absent from all subsequent turns. *(done — different approach than <!-- REFERENCE --> but same effect)*
 - [x] **Audit and trim system prompt — target sub-1500 tokens** — static base prompt trimmed to ~900 tokens; dynamic fragments injected only when needed. GM STYLE compressed (7→4 lines), SCENE EVENT rules compressed, COMBAT TRACKER reduced to a compact one-liner in the static prompt. Format example (`_FORMAT_EXAMPLE`) extracted as a constant and injected on the first player turn only. Full combat spec (`_COMBAT_FULL_SPEC`) extracted and injected per-turn only when `combat_state.round > 0`. Section specs (`_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC`) moved from static to per-turn injection gated on detection (ROLL only when skill detected; DELTAS only when NPCs present). PC profile injection: two-tier profiles built at boot from `ui/public/data/player_*.json`; narrative tier injected when PC named, mechanical tier added when skill also detected. 37 new tests across `test_boot_prompt.py` and `test_inject_context.py`. *(specs: `system-prompt.feature` AC-007 through AC-010)*
 - [x] Move example response block (Gerhard Pickle / Bottled Solutions) — extracted to `_FORMAT_EXAMPLE` constant; injected only on first player turn (`len(session.messages) == 1`)
@@ -182,7 +178,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Combat System
 
-Combat runs through the existing narrative loop — the LLM drives pacing, the system tracks state. Five tiers of fidelity, each independently shippable. Tier 1 is complete; Tiers 1.1 and 1.5 establish HP authority and the interactive attack flow before Tier 2 adds mechanical depth.
+Combat runs through the existing narrative loop — the LLM drives pacing, the system tracks state. Multiple tiers of fidelity, each independently shippable. Tier 1 is complete; Tiers 1.1 and 1.5 establish HP authority and the interactive attack flow. Tier 1.6 replaces the bolted-on combat injections with a purpose-built combat system prompt before Tier 2 adds mechanical depth.
 
 > **Layout note:** when the CombatPanel is visible it occupies the right column. DicePanel moves to the left column (stacked beneath CharacterSidebar), freeing the right for initiative/HP display. Out of combat the layout reverts to current (CharSidebar left · Chat centre · DicePanel right).
 
@@ -313,10 +309,98 @@ Fields: `attacker` (name), `target` (name), `bonus` (e.g. `+4`, `-1`), `damage` 
 
 ---
 
-### Tier 1.6 — Combat Flow Control (Enemy Turn)
+### Tier 1.6 — Dedicated Combat System Prompt
+
+`_build_slim_system_prompt` is a narrative GM prompt with combat sections bolted on. In combat the
+priorities flip: mechanical accuracy trumps tone guidance, NPC knowledge is irrelevant, and the
+LLM must not invent any numbers. This tier replaces the current ad-hoc combat injections with a
+purpose-built prompt that is shorter in total tokens, more deterministic in its instructions, and
+hardened against hallucinated dice outcomes. It is also prerequisite infrastructure for the
+`_ENEMY_TURN_DIRECTIVE` used in Tier 1.7 — both are focused modes of the same combat prompt.
+
+> **Authority model after Tier 1.6:**
+> The combat prompt owns the section tag set. `_inject_context` branches on `session.combat_state
+> is not None` and assembles an entirely different system content block — no NPC profiles, no skill
+> profiles, no location profiles, no `%%GENERATE%%`/`%%DELTAS%%`/`%%ROLL%%` specs. Instead it
+> injects `[INITIATIVE ORDER]`, `[CURRENT HP]`, `[PC COMBAT STATS]`, and `[ACTIVE CONDITIONS]`.
+
+#### What to strip (vs normal narrative prompt)
+
+| Stripped | Reason |
+|---|---|
+| `%%GENERATE%%` spec | No new NPC stubs mid-combat; combatants already in `combat_state` |
+| `%%DELTAS%%` spec | Knowledge logging can wait until after the fight |
+| `%%ROLL%%` spec | Dice go through `%%ATTACK%%` + backend rolls; narrative roll flow not used |
+| `%%EVENT%%` | Events re-fire after combat; suppress mid-fight to avoid prompt noise |
+| NPC profile injection | Personality and knowledge blocks irrelevant while goblins are swinging |
+| Skill context injection | Skills resolved mechanically in combat, not via narrative skill profiles |
+| Location profile injection | Tavern ambiance does not matter during a fight |
+| GM STYLE block | Mechanical accuracy beats narrative tone guidance in combat |
+| `_FORMAT_EXAMPLE` | Does not apply — combat sections differ entirely |
+| EVENT MAP | Active event content injected directly; full map suppressed |
+
+#### What to add (vs normal narrative prompt)
+
+| Added | Detail |
+|---|---|
+| `[INITIATIVE ORDER]` | Sorted combatant list, current actor marked; always injected |
+| `[CURRENT HP]` | Authoritative HP for all combatants (promoted to top-level block) |
+| `[PC COMBAT STATS]` | Full mechanical stats for every PC: AC, max HP, saves, weapon attacks; backend-authoritative — LLM reads, never writes |
+| `[ACTIVE CONDITIONS]` | Non-empty `conditions` per combatant with one-line mechanical effect (e.g. "Prone: −4 AC, −4 ranged") |
+| Full `%%COMBAT%%` format | Always present — no hint/fallback; full ongoing-round spec inline |
+| `%%ATTACK%%` format | Always present; rules on when to omit |
+| `%%HP%%` format | Always present; non-attack HP deltas |
+| Anti-hallucination rules | "Never write a d20 result. Never narrate HP values. Never resolve dice yourself. Write `%%ATTACK%%` and let the backend roll." |
+| Tight `%%NARRATIVE%%` spec | "1–2 paragraphs max. Physical action and immediate observable result only. No exposition, no foreshadowing." |
+
+#### Section tag set for combat turns
+
+```
+[SECTIONS ACTIVE THIS TURN — COMBAT MODE]
+%%NARRATIVE%%  — 1–2 paragraphs; physical action + immediate observable result only.
+%%COMBAT%%     — always required; full format spec injected above.
+%%ATTACK%%     — every attack that occurs this round; omit when no attacks happen.
+%%HP%%         — non-attack HP changes only (traps, poison, healing); omit otherwise.
+```
+
+- [x] **CB1.6-1 — `_build_combat_system_prompt(session)`** — new builder function alongside
+  `_build_slim_system_prompt`. Reads party list and situation from the same files (boot.md /
+  recap.md). Replaces GM STYLE with a compact combat-conduct block (resolve declared actions,
+  no questioning, no guessing, no invented numbers). Appends anti-hallucination rules and the
+  full `%%COMBAT%%` / `%%ATTACK%%` / `%%HP%%` format specs. Does NOT append the EVENT MAP.
+  Token target: ≤ 60% of the equivalent narrative prompt at the same session state.
+
+- [x] **CB1.6-2 — `_COMBAT_SECTION_SPECS` constant** — the stripped-down `[SECTIONS ACTIVE THIS
+  TURN — COMBAT MODE]` block. Used in place of `_NARRATIVE_SPEC` / `_GENERATE_SPEC` /
+  `_DELTAS_SPEC` / `_ROLL_SPEC` when combat is active.
+
+- [x] **CB1.6-3 — `_inject_context` combat branch** — when `session.combat_state is not None`,
+  skip all of: `_FORMAT_EXAMPLE` injection, NPC detect + profile inject, skill detect + profile
+  inject, location detect + re-inject, `_GENERATE_SPEC`, `_DELTAS_SPEC`, `_ROLL_SPEC`, and
+  `_build_turn_directive`. Instead build `system_content` from `_build_combat_system_prompt`
+  and append: `[INITIATIVE ORDER]` (sorted descending, current actor marked with `→`),
+  `[CURRENT HP]` (existing block, promoted), `[PC COMBAT STATS]` (from `pc_profiles`
+  `combat_stats` tier), `[ACTIVE CONDITIONS]` (only when any combatant has non-empty
+  `conditions`), and `_COMBAT_SECTION_SPECS`. Active event content still injected directly
+  (not the full EVENT MAP). Combat rules lookup (`CombatRulesIndex`) still runs.
+
+- [x] **CB1.6-4 — Token benchmark** — `_build_combat_system_prompt` verified ≤ 60% of
+  `_build_slim_system_prompt` at same session state (`test_shorter_than_slim_prompt`).
+  Combat branch verified not to inject narrative-only blocks (`_NARRATIVE_SPEC`,
+  `_GENERATE_SPEC`) via `TestCombatPromptDoesNotAddNarrativeBlocks`.
+
+- [x] **CB1.6-T — Tests** — `tests/test_combat_prompt.py` (75 tests, all passing):
+  `TestCombatSectionSpecs` (8), `TestBuildCombatSystemPrompt` (9), `TestInjectContextCombatBranch`
+  (36), `TestPreCombatBranch` (20), `TestCombatPromptDoesNotAddNarrativeBlocks` (2). Existing
+  tests in `test_inject_context.py` and `test_combat.py` updated to reflect new combat branch
+  behavior (6 tests updated). Total suite: 802 pytest passing.
+
+---
+
+### Tier 1.7 — Combat Flow Control (Enemy Turn)
 
 The LLM currently resolves both player and enemy actions in a single response, giving it too
-much authority over pacing. Tier 1.6 splits each combat round into two explicit phases: the
+much authority over pacing. Tier 1.7 splits each combat round into two explicit phases: the
 player acts and resolves PC dice, then clicks **Enemy Turn** to trigger enemy actions.
 
 All dice for enemy attacks are rolled server-side — `_resolve_npc_attack` already does this
@@ -324,32 +408,33 @@ for auto-resolved NPC attacks in Tier 1.5. The constraint is that the LLM must w
 blocks for enemy actions rather than inventing outcomes in prose; the backend then rolls and
 applies HP deltas. No LLM number invention.
 
-- [ ] **CB1.6-1 — `_ENEMY_TURN_DIRECTIVE` constant** — tightly scoped system injection used by the
+- [ ] **CB1.7-1 — `_ENEMY_TURN_DIRECTIVE` constant** — tightly scoped system injection used by the
   enemy-turn endpoint: *"Enemy phase only. Write `%%NARRATIVE%%` narrating enemy actions. Write
   `%%ATTACK%%` blocks for every NPC who attacks this round. Do NOT resolve PC actions. Do NOT write
   `%%ROLL%%`."* Kept short and unambiguous; prepended to `system_content` in a dedicated helper
-  (not mixed into the normal turn injection path).
+  (not mixed into the normal turn injection path). Builds on top of `_build_combat_system_prompt`
+  so the LLM still has `[CURRENT HP]` and `[INITIATIVE ORDER]` during the enemy phase.
 
-- [ ] **CB1.6-2 — `POST /sessions/{id}/enemy_turn` endpoint** — calls `stream_enemy_turn(session)`,
+- [ ] **CB1.7-2 — `POST /sessions/{id}/enemy_turn` endpoint** — calls `stream_enemy_turn(session)`,
   a focused version of `_stream_chat` that injects `_ENEMY_TURN_DIRECTIVE` and processes the LLM
   response identically to a normal turn (`%%ATTACK%%` blocks → `_resolve_npc_attack` → HP delta →
   `attack_result` SSE; `%%COMBAT%%` → `combat_update` SSE; `%%NARRATIVE%%` → `token` SSE). Returns
   409 if `session.attack_queue` is non-empty (PC dice still pending). Returns 404 on unknown session.
   Returns 409 if `session.combat_state` is None (no active combat).
 
-- [ ] **CB1.6-3 — CombatPanel "Enemy Turn" button** — rendered below "End Combat" in `CombatPanel`.
+- [ ] **CB1.7-3 — CombatPanel "Enemy Turn" button** — rendered below "End Combat" in `CombatPanel`.
   Enabled when `attack_queue` is empty and not streaming. Disabled with tooltip `"Resolve PC attacks
   first"` while `attackPhase !== null`. App.tsx wiring: `onEnemyTurn` prop on CombatPanel → calls
   `POST /enemy_turn` → SSE stream handled identically to `doResumeCombat` (token/patch_last/
   combat_update/attack_result events; sets `streaming` true/false around the call).
 
-- [ ] **CB1.6-4 — Turn phase label in CombatPanel header** — small badge next to "Round N" showing
+- [ ] **CB1.7-4 — Turn phase label in CombatPanel header** — small badge next to "Round N" showing
   current phase. Derived from existing client state — no new backend field: `attackPhase !== null`
   → **PC Attacks** (amber); `streaming` during enemy turn → **Enemy Turn** (red); otherwise nothing
   shown. Requires a new `enemyTurnStreaming` boolean in App.tsx (separate from `streaming` so the
   normal send button stays unlocked during enemy turn resolution).
 
-- [ ] **CB1.6-5 — End Combat narrative** — clicking "End Combat" currently clears `combat_state`
+- [ ] **CB1.7-5 — End Combat narrative** — clicking "End Combat" currently clears `combat_state`
   silently via `DELETE /combat`. Instead, first stream a focused LLM closure call, then clear.
   New `POST /sessions/{id}/close_combat` endpoint: builds a `_COMBAT_CLOSE_DIRECTIVE` that
   injects the current combat snapshot — surviving enemies with HP/status, party HP — and instructs
@@ -361,7 +446,7 @@ applies HP deltas. No LLM number invention.
   App.tsx: `onEndCombat` calls `POST /close_combat` instead of `DELETE /combat` directly;
   handles the SSE stream (tokens appear in chat), then calls `setCombatState(null)`.
 
-- [ ] **CB1.6-T — Tests** — pytest: `enemy_turn` 200 streams NPC `attack_result` events; 404
+- [ ] **CB1.7-T — Tests** — pytest: `enemy_turn` 200 streams NPC `attack_result` events; 404
   on missing session; 409 while `attack_queue` non-empty; 409 when `combat_state` is None;
   `_ENEMY_TURN_DIRECTIVE` present in system content during enemy-turn call; `%%COMBAT%%` update
   processed; PC `attack_request` events NOT emitted (enemy-only block); `close_combat` streams
@@ -372,36 +457,36 @@ applies HP deltas. No LLM number invention.
 
 ---
 
-### Tier 1.7 — Conditions and Death
+### Tier 1.8 — Conditions and Death
 
 Prerequisite for Tier 2 mechanical depth. Condition chips (CB1.5-11) are display-only; these items give them teeth.
 
-- [ ] **CB1.7-1 — Conditions with mechanical effects** — apply PF1e penalties when a combatant has active conditions. `_apply_condition_effects(combatant)` returns AC modifier and attack modifier: Prone (−4 AC, −4 ranged attack, stand = move action), Shaken (−2 attack/saves/checks), Staggered (one standard or move action per round), Entangled (−2 attack and Reflex, no run/charge), Nauseated (move actions only). Modifiers applied in `resolve_attack_roll` and `_resolve_npc_attack` when computing hit/miss.
-- [ ] **CB1.7-2 — Death and dying states** — current status `unconscious` covers 0 HP. PF1e requires graduated states: 0 HP = Disabled (can act, then falls unconscious); negative HP and above −CON = Dying (loses 1 HP/round until stabilised or dead); −CON HP or below = Dead. Backend: on HP update in `_apply_hp_deltas`, derive status automatically from HP and a `constitution` field added to `Combatant`. CombatPanel shows Disabled/Dying/Dead badges distinctly. Dying combatants automatically lose 1 HP per round in `_inject_context` unless stabilised.
-- [ ] **CB1.7-3 — Healing in combat** — `%%HP%%` delta blocks already apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`. LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
+- [ ] **CB1.8-1 — Conditions with mechanical effects** — apply PF1e penalties when a combatant has active conditions. `_apply_condition_effects(combatant)` returns AC modifier and attack modifier: Prone (−4 AC, −4 ranged attack, stand = move action), Shaken (−2 attack/saves/checks), Staggered (one standard or move action per round), Entangled (−2 attack and Reflex, no run/charge), Nauseated (move actions only). Modifiers applied in `resolve_attack_roll` and `_resolve_npc_attack` when computing hit/miss.
+- [ ] **CB1.8-2 — Death and dying states** — current status `unconscious` covers 0 HP. PF1e requires graduated states: 0 HP = Disabled (can act, then falls unconscious); negative HP and above −CON = Dying (loses 1 HP/round until stabilised or dead); −CON HP or below = Dead. Backend: on HP update in `_apply_hp_deltas`, derive status automatically from HP and a `constitution` field added to `Combatant`. CombatPanel shows Disabled/Dying/Dead badges distinctly. Dying combatants automatically lose 1 HP per round in `_inject_context` unless stabilised.
+- [ ] **CB1.8-3 — Healing in combat** — `%%HP%%` delta blocks already apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`. LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
 
 ---
 
-### Tier 1.8 — Initiative Authority
+### Tier 1.9 — Initiative Authority
 
 Mirrors Tier 1.1 (HP authority): the LLM currently writes final initiative totals in the
 `%%COMBAT%%` block, which means it can hallucinate values, ignore modifiers, or repeat the
-same number for every combatant. Tier 1.8 moves initiative rolls to the backend on round 1
+same number for every combatant. Tier 1.9 moves initiative rolls to the backend on round 1
 and treats the LLM's `init:` field as a **modifier** (e.g. `+3`, `−1`) rather than a total.
 
-> **Authority model after Tier 1.8:**
+> **Authority model after Tier 1.9:**
 > - **Round 1:** LLM writes `init: <modifier>` for each combatant. Backend rolls `1d20 +
 >   modifier` for every combatant and stores the result. For PCs, the modifier is read from
 >   `pc_profiles[*]["combat_stats"]["initiative"]` and the LLM's value is ignored entirely.
 > - **Round 2+:** Backend retains its own initiative values; `init:` columns in subsequent
 >   `%%COMBAT%%` lines are silently discarded (same pattern as HP authority from Tier 1.1).
 
-- [ ] **CB1.8-1 — `_COMBAT_SPEC_ROUND1` format update** — change `init:` field description
+- [ ] **CB1.9-1 — `_COMBAT_SPEC_ROUND1` format update** — change `init:` field description
   from "initiative score" to "initiative modifier (e.g. `+3`, `−1`); backend will roll
   `1d20 + modifier`". Update `_COMBAT_SPEC_ONGOING` to state "omit `init:` — backend owns
   initiative order from round 1 onward".
 
-- [ ] **CB1.8-2 — Server-side initiative roll on round 1** — in `_parse_combat_block`, when
+- [ ] **CB1.9-2 — Server-side initiative roll on round 1** — in `_parse_combat_block`, when
   `existing_state is None` (first parse): for each combatant extract the `init:` field as a
   signed integer modifier; roll `random.randint(1, 20) + modifier`; store the result as
   `combatant.initiative`. For PCs (name matches `pc_profiles` key), use the modifier from
@@ -409,18 +494,18 @@ and treats the LLM's `init:` field as a **modifier** (e.g. `+3`, `−1`) rather 
   `_parse_combatant_line` updated to return the raw `init:` string; conversion and rolling
   happen in `_parse_combat_block` where `existing_state` context is available.
 
-- [ ] **CB1.8-3 — Initiative preserved on round 2+** — in `_parse_combat_block` when
+- [ ] **CB1.9-3 — Initiative preserved on round 2+** — in `_parse_combat_block` when
   `existing_state is not None`, copy `initiative` from the matching existing combatant by
   name (same lookup as HP authority). New combatants entering after round 1 still get
   server-rolled initiative from their `init:` modifier field.
 
-- [ ] **CB1.8-4 — `[PARTY ROSTER]` init values updated** — `_build_pc_combat_roster` currently
-  writes the raw initiative modifier string (e.g. `+2`). After CB1.8-2 the roster should
+- [ ] **CB1.9-4 — `[PARTY ROSTER]` init values updated** — `_build_pc_combat_roster` currently
+  writes the raw initiative modifier string (e.g. `+2`). After CB1.9-2 the roster should
   still write the modifier (not a pre-rolled value) so the LLM can copy it into `init:` for
   the backend to roll. No change needed to the roster builder — just confirm the format
   remains a modifier, not a total.
 
-- [ ] **CB1.8-T — Tests** — `test_combat.py`: round-1 block with `init: +3` stores a value
+- [ ] **CB1.9-T — Tests** — `test_combat.py`: round-1 block with `init: +3` stores a value
   in `[4, 23]` (d20 + 3); PC name in `pc_profiles` uses stored modifier and ignores
   LLM value; round-2 block preserves existing initiative; new combatant on round 2 gets
   fresh roll; `init: 0` and `init: −1` edge cases; two combatants with the same modifier
@@ -430,9 +515,91 @@ and treats the LLM's `init:` field as a **modifier** (e.g. `+3`, `−1`) rather 
 
 ---
 
-### Tier 2 — Advanced Attack Mechanics
+### Tier 1.10 — Combat Turn Auto-Speaker
 
-Builds on Tier 1.5. The `%%ATTACK%%` format is already established; Tier 2 adds PF1e mechanical depth.
+When the current turn advances in the combat tracker, automatically update the active chat speaker to match:
+
+- [ ] **CB1.10-1 — PC turn → auto-activate speaker** — when the initiative tracker advances to a PC's turn, set that PC as the active character in the chat (same as clicking their portrait). The chat input placeholder and speaker badge update to reflect who is acting.
+
+- [ ] **CB1.10-2 — Enemy turn → show enemy name** — when the turn belongs to an enemy/NPC, display the enemy's name in the speaker area instead of a PC. This is read-only / decorative (no dice rolling from an enemy perspective) but makes the tracker easier to follow at a glance.
+
+- [ ] **CB1.10-3 — Manual override preserved** — if the player manually clicks a different character mid-turn, that selection takes precedence and is not overwritten until the *next* turn advance.
+
+- [ ] **CB1.10-T — Tests** — Vitest: advancing turn to PC sets `activeSpeaker`; advancing to enemy shows enemy name label; manual override is not clobbered on re-render.
+
+---
+
+### Tier 2 — Server-Authoritative State
+
+**The foundational shift: the backend, not the LLM, is the single source of truth for everything displayed on screen.**
+
+Currently, every piece of data the UI shows during combat — who is in the fight, their HP, AC, conditions, whose turn it is — flows through the LLM's `%%COMBAT%%` messages. That means the UI is only as accurate as the LLM's memory. The LLM can drift initiative, forget damage, invent stats, and resurrect dead enemies. This tier ends that dependency.
+
+After this tier:
+- `sessions/session_NNN/state.json` is the authoritative record of all game state: combatants, HP, AC, conditions, round, active character, active events. It persists across restarts.
+- The LLM reads state via injected `[CURRENT HP]` / `[INITIATIVE ORDER]` blocks. It never writes HP, AC, initiative, or combatant lists directly.
+- The `%%COMBAT%%` block is used only on round 1 to introduce new combatants (name + initiative modifier). After that, it is stripped and ignored.
+- All state mutations happen through backend endpoints with discrete, validated writes to `state.json`.
+- The frontend receives `state_changed` SSE events and reads authoritative state via `GET /api/sessions/{id}/state`. It no longer derives state from LLM token content.
+
+> **Why this overrides Tiers 1.7–1.10 and must come first:** Tiers 1.7–1.10 add features (enemy turn, conditions, initiative rolls, auto-speaker) on top of an LLM-driven state model. If built before this tier, each feature inherits the trust problem and must be rebuilt. This tier provides the stable authority model that all subsequent tiers build on correctly.
+
+#### SA-1 — Full `state.json` schema
+
+Extend `sessions/session_NNN/state.json` (already created in session-state feature) to hold the complete visible game state. Currently it holds `{ mode, round, events, active_character }`. After this item it holds:
+
+```json
+{
+  "mode": "combat",
+  "round": 2,
+  "events": ["goblin_attack_starts"],
+  "active_character": "Yanyeeku",
+  "combatants": [
+    { "name": "Yanyeeku",  "hp_current": 18, "hp_max": 22, "ac": 16, "initiative": 14, "status": "active", "conditions": [] },
+    { "name": "Goblin 1",  "hp_current": 3,  "hp_max": 5,  "ac": 13, "initiative": 11, "status": "active", "conditions": ["shaken"] }
+  ],
+  "current_actor": "Yanyeeku"
+}
+```
+
+`_write_session_state` already writes mode/round/events/active_character. Extend it to serialise `session.combat_state` combatants and `current_actor` whenever combat is active. Cleared (`combatants: []`) when `combat_state` is None.
+
+- [ ] **CB2-SA1 — Extend `_write_session_state`** — include `combatants` array and `current_actor` string (null when no combat). Call site already fires on every `%%COMBAT%%` parse, `%%HP%%` apply, event fire/expiry, and `DELETE /combat`; no new call sites needed.
+- [ ] **CB2-SA1-T — Tests** — `test_session_state.py`: combat combatants present in `state.json` after `%%COMBAT%%` parse; HP update reflected; `combatants: []` after combat clear.
+
+#### SA-2 — Encounter pre-load from bestiary
+
+Currently the LLM invents all combatant stats in the first `%%COMBAT%%` block. Replace this: when a new combat starts, the `%%COMBAT%%` block is parsed for combatant *names* only; actual stats (HP, AC, initiative modifier, attack bonus, damage dice, saves) are looked up in `adventure_path/09_monsters/` or `adventure_path/01_npcs/`. If a canonical stat block exists, backend values override anything the LLM wrote. If no file exists for a combatant, the LLM-written values are accepted as a fallback (same as today).
+
+- [ ] **CB2-SA2-1 — `CombatantRegistry` loader** — `api/context/combatant_registry.py`. Reads markdown stat blocks from `adventure_path/09_monsters/` and the `base.md` combat stats from `01_npcs/`. Parses HP, AC, initiative modifier, attack bonus, damage expr. Returns a `CombatantStats` dataclass per name (case-insensitive). Cached at import time (same pattern as `SkillIndex`).
+- [ ] **CB2-SA2-2 — Override LLM-written stats on round 1** — in `_parse_combat_block`, after parsing the LLM's combatant lines, look each name up in `CombatantRegistry`. Where a canonical record exists, replace HP/AC with registry values; log a `[REGISTRY OVERRIDE]` debug line. LLM-invented stats still used for combatants with no registry entry (graceful fallback).
+- [ ] **CB2-SA2-T — Tests** — registry loads goblin stats from `bestiary/goblin.md`; `_parse_combat_block` uses registry HP, ignores LLM-written HP; fallback to LLM value when no registry entry exists; case-insensitive name match.
+
+#### SA-3 — State read endpoint
+
+- [ ] **CB2-SA3 — `GET /api/sessions/{id}/state`** — returns the full current `state.json` content as JSON. Frontend polls this or uses it to hydrate after a reconnect. Returns 404 on unknown session. Returns the on-disk file if `session.combat_state` is None (social mode). Does NOT trigger a file write — reads from the in-memory `GameSession` serialised on the fly, same structure as `state.json`.
+
+#### SA-4 — Frontend reads state from backend
+
+Replace the pattern where the frontend derives `combatState` from LLM-generated SSE tokens with one where the `combat_update` SSE event is emitted by the backend after its own state write (not by parsing the LLM response). The event carries the same `CombatState` payload as today — the SSE contract does not change — but the data is now authoritative.
+
+- [ ] **CB2-SA4-1 — `combat_update` emitted after state write, not after LLM parse** — `_write_session_state` (or the call sites that call it) emit the `combat_update` SSE event. This means the UI update is driven by the backend's state transition, not by the LLM's text. Existing `combat_update` consumer in `App.tsx` is unchanged.
+- [ ] **CB2-SA4-2 — Remove combatant data from LLM token stream entirely** — `%%COMBAT%%` is already stripped from the player-visible token stream in non-dev mode. After this item it is also stripped in dev mode; the dev display instead shows a `[COMBAT STATE UPDATED]` marker so testers can see when a state transition occurred without seeing raw block text.
+- [ ] **CB2-SA4-T — Tests** — Playwright: CombatPanel HP values after an attack reflect `state.json`, not LLM token content; `state.json` HP matches CombatPanel display.
+
+#### SA-5 — Deprecate `%%COMBAT%%` for ongoing rounds
+
+After round 1 the LLM no longer needs to write `%%COMBAT%%` blocks. Backend owns round advancement, combatant list, and all numeric fields.
+
+- [ ] **CB2-SA5-1 — System prompt update** — `_COMBAT_SPEC_ONGOING` drops all `%%COMBAT%%` instructions. LLM is told: *"Do not write `%%COMBAT%%` blocks. State is managed by the backend. Write `%%NARRATIVE%%` and `%%ATTACK%%` only."* `_COMBAT_SPEC_ROUND1` retains the combatant-introduction format (names + initiative modifiers + conditions only — no HP or AC; those come from the registry).
+- [ ] **CB2-SA5-2 — Parser no longer accepts HP/AC from LLM after round 1** — already partially done via Tier 1.1. This item hardens it: `%%COMBAT%%` blocks on turns where `session.combat_state is not None` are fully ignored for stat fields; only new-combatant lines (names not yet in state) are processed.
+- [ ] **CB2-SA5-T** — Tests confirm `%%COMBAT%%` on round 2+ does not mutate HP; new combatant entering round 2 IS added; session state correct after full round trip.
+
+---
+
+### Tier 3 — Advanced Attack Mechanics
+
+Builds on Tier 1.5 and Tier 2. The `%%ATTACK%%` format is already established; Tier 3 adds PF1e mechanical depth.
 
 - [ ] **CB2-1 — Critical hits** — `%%ATTACK%%` line gains optional `crit_range: 18` (default 20) and `crit_mult: 2` fields. Backend: if natural d20 roll ≥ `crit_range`, roll a confirmation attack (same bonus vs same AC); if confirmed, multiply damage by `crit_mult`. `attack_result` event gains `critical: bool`. DicePanel history shows `⚔ CRITICAL HIT (×2)`.
 - [ ] **CB2-2 — Iterative attacks** — `%%ATTACK%%` line gains optional `sequence: 1/2/3` field. Parser groups lines by attacker; `sequence` is informational (bonus already accounts for the -5/-10 penalty). Backend resolves each line independently in order. No new resolve flow needed — same queue.
@@ -441,7 +608,7 @@ Builds on Tier 1.5. The `%%ATTACK%%` format is already established; Tier 2 adds 
 
 ---
 
-### Tier 3 — Spells and Area Effects
+### Tier 4 — Spells and Area Effects
 
 Extends the combat loop with spell casting, area targeting, and saving throws. No canvas grid —
 mechanical depth over visual positioning.

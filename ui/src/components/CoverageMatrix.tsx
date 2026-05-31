@@ -60,11 +60,17 @@ export default function CoverageMatrix({ onClose }: Props) {
   const [ccLoading, setCcLoading] = useState(false)
   const [ccError,   setCcError]   = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadFeatureCoverage = () => {
+    setLoading(true)
+    setError(null)
     fetchCoverage()
       .then(setData)
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadFeatureCoverage()
   }, [])
 
   useEffect(() => {
@@ -143,12 +149,17 @@ export default function CoverageMatrix({ onClose }: Props) {
         {tab === 'features' && (
           <>
             <p className="cm-subtitle">
-              Run <code>python scripts/build_coverage.py</code> to refresh.
+              Coverage rebuilds when this panel loads.
               {generatedLabel && <span className="cm-generated"> · Built {generatedLabel}</span>}
             </p>
 
             {loading && <p className="api-log-empty">Loading…</p>}
             {error   && <p className="api-log-empty api-log-empty--err">{error}</p>}
+            {data?.refresh_error && (
+              <p className="api-log-empty api-log-empty--err">
+                Refresh failed; showing last generated matrix: {data.refresh_error}
+              </p>
+            )}
 
             {!loading && !error && data && (
               <>
@@ -171,6 +182,13 @@ export default function CoverageMatrix({ onClose }: Props) {
                     onClick={() => setGapsOnly(true)}
                   >
                     Gaps only
+                  </button>
+                  <button
+                    className="cm-filter-btn"
+                    disabled={loading}
+                    onClick={loadFeatureCoverage}
+                  >
+                    Refresh
                   </button>
                   <button
                     className="cm-filter-btn"

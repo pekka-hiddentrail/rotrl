@@ -39,6 +39,14 @@ export type AttackPhase =
 export interface CombatState {
   round: number
   combatants: Combatant[]
+  current_actor?: string | null  // name of whoever is acting this turn (AC-001)
+}
+
+export interface ActiveSpeaker {
+  name: string
+  rune: string
+  color: string
+  isEnemy?: boolean  // true when an NPC/enemy is the current initiative actor
 }
 
 export interface Message {

@@ -86,6 +86,14 @@ export async function endCombat(sessionId: string): Promise<void> {
   if (!res.ok) throw new Error(`End combat failed (${res.status})`)
 }
 
+export async function advanceCombatTurn(
+  sessionId: string,
+): Promise<{ current_actor: string | null; is_pc: boolean }> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/combat/advance_turn`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Advance turn failed (${res.status})`)
+  return res.json()
+}
+
 export async function logRoll(
   sessionId: string,
   expr: string,
@@ -143,6 +151,7 @@ export interface CoverageData {
   generated: string | null
   summary:   { total: number; covered: number; gap: number }
   rows:      CoverageRow[]
+  refresh_error?: string
 }
 
 export async function fetchCoverage(): Promise<CoverageData> {
@@ -208,6 +217,19 @@ export async function* resumeCombat(sessionId: string): AsyncGenerator<SseEvent>
   const res = await fetch(`${BASE}/sessions/${sessionId}/resume_combat`, { method: 'POST' })
   if (!res.ok) throw new Error(`Resume combat failed (${res.status})`)
   yield* parseSseStream(res)
+}
+
+export async function setActiveCharacter(
+  sessionId: string,
+  name: string,
+): Promise<{ active_character: string }> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/active_character`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) throw new Error(`Set active character failed (${res.status})`)
+  return res.json()
 }
 
 export async function fetchApiLogList(): Promise<string[]> {

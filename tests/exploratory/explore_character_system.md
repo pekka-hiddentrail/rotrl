@@ -1,11 +1,14 @@
 # Exploratory Tests — Character Sidebar and Sheet
 
-Spec: specs/character-system.feature
+Spec: specs/character-system.feature, specs/session-state.feature
 
 **What automated tests cover:** `GET /api/characters` returns 200, list, correct IDs, required
 fields, 404 when index missing; sidebar action menu open/close, Set Active / Clear Active, Open
 Sheet callbacks, halo class, loading state; JSON files for all three player characters pass full
-field-presence and sanity checks.
+field-presence and sanity checks. `PUT /api/sessions/{id}/active_character` sets the name,
+returns it in the response body, and falls back to "party" on empty input; 404 on unknown session.
+Playwright: CS-E2E-003 verifies the PUT fires with the PC name on select; CS-E2E-004 verifies
+"party" fires on clear.
 
 **Pre-requisites:** `python dev.py --skip-tests` — stack running at http://localhost:5173.
 
@@ -99,3 +102,31 @@ field-presence and sanity checks.
 1. Click a character avatar.
 2. ✔ The two-action menu (Set Active / Open Sheet) opens to the right of the avatar,
    not below it and not off-screen.
+
+---
+
+## Chain J — active_character persisted to state.json  <!-- session-state AC-014, AC-015 -->
+
+*Requires: backend running, session booted.*
+
+1. Boot a session.
+2. Check `sessions/session_001/state.json` — `"active_character"` should be `"party"`.
+3. Click a character avatar → click **Set Active**.
+4. Check `sessions/session_001/state.json` — `"active_character"` should be the PC name (e.g. `"Ani"`).
+5. ✔ The name matches the character you selected.
+6. Click the same avatar → click **Clear Active**.
+7. Check `sessions/session_001/state.json` — `"active_character"` should be `"party"` again.
+
+---
+
+## Chain K — active_character survives mode changes  <!-- session-state AC-017 -->
+
+*Requires: backend running, session booted, combat started.*
+
+1. Activate a character (Chain J step 3–4).
+2. Send a turn that starts combat (LLM emits a `%%COMBAT%%` block).
+3. ✔ `state.json "mode"` becomes `"combat"`.
+4. ✔ `state.json "active_character"` still shows the previously selected PC name.
+5. Click **End Combat** in the UI.
+6. ✔ `state.json "mode"` returns to `"social"`.
+7. ✔ `state.json "active_character"` is unchanged.

@@ -322,7 +322,7 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     }
   })
 
-  // Covers: event-injection.feature AC-001
+  // Covers: event-injection.feature AC-001, session-state.feature AC-008
   test('L9 - live turn triggers goblin_attack_starts event', async () => {
     await sendTurnAndWait(
       page,
@@ -337,9 +337,18 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     const gmBubble = page.locator('.bubble-gm').last()
     await expect(gmBubble).toContainText('%%EVENT%%', { timeout: 60_000 })
     await expect(gmBubble).toContainText('goblin_attack_starts')
+
+    // session-state AC-008: state.json reflects the active event
+    const statePath = path.join(repoRoot, 'sessions', 'session_001', 'state.json')
+    await expect.poll(() => {
+      try {
+        const s = JSON.parse(readFileSync(statePath, 'utf8'))
+        return s.events ?? []
+      } catch { return [] }
+    }, { timeout: 5_000 }).toContain('goblin_attack_starts')
   })
 
-  // Covers: combat-tracker.feature AC-001, AC-004, AC-005, AC-006
+  // Covers: combat-tracker.feature AC-001, AC-004, AC-005, AC-006, session-state.feature AC-004
   test('L10 - spotting goblins produces %%COMBAT%% round 1', async () => {
     await sendTurnAndWait(
       page,
@@ -367,6 +376,12 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     expect(diceBox.x + diceBox.width, 'dice panel should be left of combat tracker').toBeLessThan(combatBox.x)
     expect(characterBox.x, 'character sidebar should start on the left side').toBeLessThan(viewport!.width / 2)
     expect(diceBox.x, 'dice panel should start on the left side').toBeLessThan(viewport!.width / 2)
+
+    // session-state AC-004: state.json switches to combat mode at round 1
+    const statePath = path.join(repoRoot, 'sessions', 'session_001', 'state.json')
+    await expect.poll(() => {
+      try { return JSON.parse(readFileSync(statePath, 'utf8')) } catch { return {} }
+    }, { timeout: 5_000 }).toMatchObject({ mode: 'combat', round: 1 })
   })
 
   // Covers: dice-panel.feature AC-001, AC-002, AC-004
@@ -375,19 +390,37 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
       page,
       [
         'I scan the chaos to locate the goblin warchanter before anyone attacks.',
-        'This requires a Perception check.',
-        'Write the roll prompt exactly in this bracketed format: %%ROLL%% [ skill: Perception  dc: 15  success: You spot the warchanter.  failure: You cannot locate the warchanter. ]',
-        'Do not add a second %%ROLL%% marker.',
-        'Do not resolve the roll yourself and do not write a %%ATTACK%% block.',
-      ].join(' '),
+        'This requires a Perception check. Write a %%ROLL%% section.',
+        'The %%ROLL%% marker must be on its own line; write each field on its own line beneath it, exactly like this:',
+        '%%ROLL%%',
+        'skill: Perception',
+        'dc: 15',
+        'success: You spot the warchanter.',
+        'failure: You cannot locate the warchanter.',
+        'Do not add a second %%ROLL%% marker. Do not resolve the roll yourself. Do not write a %%ATTACK%% block.',
+      ].join('\n'),
     )
 
     await expect(page.locator('.bubble-gm').last()).toContainText('%%ROLL%%', { timeout: 60_000 })
-    await expect(page.locator('.dice-panel-active')).toBeVisible({ timeout: 15_000 })
+
+    // The dice panel activates only if the backend parsed the %%ROLL%% block and emitted
+    // a roll_request SSE.  If not, the LLM deviated from the required format — fail with
+    // a plain assertion (not test.fail(), which produces a counter-intuitive "unexpected
+    // pass" result in Playwright when no exception is thrown).
+    const panelActive = page.locator('.dice-panel-active')
+    const panelVisible = await panelActive.isVisible().catch(() => false) ||
+      await panelActive.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false)
+
+    expect(
+      panelVisible,
+      'dice-panel-active did not appear — roll_request SSE not emitted; LLM deviated from %%ROLL%% format',
+    ).toBe(true)
+    if (!panelVisible) return
+
     await expect(page.locator('.roll-request-skill')).toContainText('Perception')
     await expect(page.locator('.roll-request-dc')).toContainText('DC 15')
 
-    await page.locator('.roll-request-prompt').filter({ hasText: 'Perception' }).click()
+    await page.locator('.roll-request-prompt').click()
 
     await expect(page.locator('.history-row').first()).toContainText(/PASSED|FAILED/, { timeout: 15_000 })
     await expect(page.getByText(/rolled (?:a )?\d+/i).last()).toBeVisible()
@@ -467,5 +500,110 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
 
     // Attack banner is cleared after full resolution
     await expect(page.locator('.attack-banner')).not.toBeVisible()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// L13-L14 — dice panel integration (App.tsx wiring)
+//
+// Queue/auto-bonus/history-cap behaviour is already covered by DicePanel
+// Vitest tests (DicePanel.test.tsx AC-001, AC-006, AC-007, AC-010).
+// Only the two App.tsx integration paths that cannot be tested at component
+// level live here:
+//
+//   L13 — App.tsx sets pendingRoll=null after resolveRoll resolves,
+//          clearing the banner and surfacing the PASSED/FAILED badge.
+//   L14 — App.tsx keeps streaming=true while the SSE stream is open,
+//          keeping the Send button disabled until the stream closes.
+//
+// /turn and /resolve_roll are mocked via page.route — no LLM call needed.
+// ---------------------------------------------------------------------------
+
+test.describe.serial('L13-L14 — dice panel integration', () => {
+  let page: Page
+
+  function rollRequestSse(skill: string, dc: number): string {
+    const token = JSON.stringify({ type: 'token', content: `%%ROLL%% [ skill: ${skill}  dc: ${dc}  success: ok  failure: fail ]` })
+    const rollReq = JSON.stringify({ type: 'roll_request', skill, dc, success: 'ok', failure: 'fail', speaker: null })
+    const done = JSON.stringify({ type: 'done' })
+    return `data: ${token}\n\ndata: ${rollReq}\n\ndata: ${done}\n\n`
+  }
+
+  test.beforeAll(async ({ browser }) => {
+    page = await browser.newPage()
+    await page.goto('/')
+    await configureHaiku(page)
+    await bootSession(page)
+  })
+
+  test.afterAll(async () => {
+    if (!page.isClosed()) await page.close()
+  })
+
+  // App.tsx wiring: setPendingRoll(null) fires after resolveRoll resolves → banner gone.
+  // DicePanel unit tests cover badge rendering; this covers the parent callback chain.
+  test('L13 — pending roll banner clears after resolve and PASSED/FAILED badge appears', async () => {
+    await page.route('**/sessions/*/turn', route =>
+      route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        body: rollRequestSse('Stealth', 12),
+      }),
+    )
+    await page.route('**/sessions/*/resolve_roll', route =>
+      route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passed: true, skill: 'Stealth', dc: 12, rolled: 14, outcome: 'ok', speaker: null }),
+      }),
+    )
+
+    await page.getByRole('textbox').fill('I try to hide.')
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect(page.getByRole('textbox')).toBeEnabled({ timeout: 10_000 })
+
+    // Banner visible once roll_request SSE arrives
+    await expect(page.locator('.roll-request-banner')).toBeVisible({ timeout: 5_000 })
+    await page.locator('.roll-request-prompt').click()
+
+    // Banner gone — pendingRoll set to null by App.tsx after resolveRoll resolves
+    await expect(page.locator('.roll-request-banner')).not.toBeVisible({ timeout: 5_000 })
+
+    // PASSED/FAILED outcome badge on the newest history row
+    const latestRow = page.locator('.history-row').first()
+    await expect(latestRow.locator('.hist-outcome')).toBeVisible({ timeout: 5_000 })
+    await expect(latestRow).toContainText(/PASSED|FAILED/)
+
+    await page.unroute('**/sessions/*/turn')
+    await page.unroute('**/sessions/*/resolve_roll')
+  })
+
+  // App.tsx wiring: streaming=true while SSE is open → InputBar disabled prop → Send disabled.
+  test('L14 — send button is disabled while GM response is streaming', async () => {
+    let releaseStream!: () => void
+    const streamHeld = new Promise<void>(resolve => { releaseStream = resolve })
+
+    await page.route('**/sessions/*/turn', async route => {
+      await streamHeld
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        body: `data: ${JSON.stringify({ type: 'token', content: 'ok' })}\n\ndata: ${JSON.stringify({ type: 'done' })}\n\n`,
+      })
+    })
+
+    await page.getByRole('textbox').fill('A test message.')
+    await page.getByRole('button', { name: 'Send' }).click()
+
+    // While stream is held: streaming=true → InputBar disabled prop → textarea disabled.
+    // (The button label changes to '…' when disabled, so we assert on the textarea
+    //  which uses the same disabled prop but keeps a stable accessible role.)
+    await expect(page.getByRole('textbox')).toBeDisabled({ timeout: 5_000 })
+
+    // Release stream → streaming=false → textarea re-enables
+    releaseStream()
+    await expect(page.getByRole('textbox')).toBeEnabled({ timeout: 15_000 })
+
+    await page.unroute('**/sessions/*/turn')
   })
 })

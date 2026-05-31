@@ -242,7 +242,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 646 pytest tests
+├── tests/                         # 879 pytest tests
 ├── ui/src/components/__tests__/    # Vitest component tests
 ├── ui/src/__tests__/               # Vitest App SSE integration tests
 ├── ui/e2e/                         # Playwright browser-flow tests
@@ -275,6 +275,7 @@ rotrl/
 | `POST` | `/api/sessions/{id}/end` | Generate recap + next-session boot; streams status events via SSE |
 | `DELETE` | `/api/sessions/{id}` | Discard session without recap (emergency close) |
 | `DELETE` | `/api/sessions/{id}/combat` | Clear active combat state (End Combat button) |
+| `POST` | `/api/sessions/{id}/combat/advance_turn` | Advance initiative to next active combatant; writes state.json; returns `{ current_actor, is_pc }` |
 | `GET`  | `/api/code-coverage` | Serve `outputs/code_coverage.json` produced by `pytest --cov`; used by the Coverage modal's "Code Lines" tab |
 | `GET`  | `/api/npcs/session` | List all session NPC slugs (dot-prefixed directories) |
 | `DELETE` | `/api/npcs/session` | Purge all session NPC directories; invalidates the NPC index |

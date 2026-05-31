@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, stream_boot, stream_end_session, stream_resume_combat, stream_turn
+from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, set_active_character, stream_boot, stream_end_session, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -210,7 +210,38 @@ def delete_combat(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     session.combat_state = None
+    write_session_state(session)
     return {"combat_state": None}
+
+
+@app.post("/api/sessions/{session_id}/combat/advance_turn")
+def post_advance_combat_turn(session_id: str):
+    """Advance the initiative to the next active combatant and write state.json.
+
+    Returns { current_actor: str | null, is_pc: bool }.
+    409 when no combat is active; 404 when session not found.
+    """
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.combat_state is None:
+        raise HTTPException(status_code=409, detail="No active combat")
+    result = advance_combat_turn(session)
+    return result
+
+
+class ActiveCharacterRequest(BaseModel):
+    name: str  # PC name, or "party" to deselect
+
+
+@app.put("/api/sessions/{session_id}/active_character")
+def put_active_character(session_id: str, req: ActiveCharacterRequest):
+    """Set the active character for the session (syncs UI selection to state.json)."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    set_active_character(session, req.name)
+    return {"active_character": session.active_character}
 
 
 @app.post("/api/sessions/{session_id}/end")
@@ -334,16 +365,30 @@ def get_combat_benchmarks():
 
 @app.get("/api/coverage")
 def get_coverage():
-    """Return the feature AC coverage matrix built by scripts/build_coverage.py.
+    """Return a freshly rebuilt feature AC coverage matrix.
 
-    Returns an empty matrix if outputs/coverage.json does not exist yet.
-    Run `python scripts/build_coverage.py` to generate it.
+    The JSON file is still written to outputs/coverage.json for CLI/users, but
+    the GUI does not depend on a stale file. If rebuilding fails, fall back to
+    the last generated file and include refresh_error for visibility.
     """
     import json as _json
+    empty = {"generated": None, "summary": {"total": 0, "covered": 0, "gap": 0}, "rows": []}
     path = _REPO_ROOT / "outputs" / "coverage.json"
-    if not path.exists():
-        return JSONResponse({"generated": None, "summary": {"total": 0, "covered": 0, "gap": 0}, "rows": []})
-    return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
+    try:
+        from scripts.build_coverage import OUTPUT_PATH as _COVERAGE_OUTPUT_PATH
+        from scripts.build_coverage import build_coverage as _build_coverage
+
+        data = _build_coverage()
+        _COVERAGE_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _COVERAGE_OUTPUT_PATH.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+        return JSONResponse(data)
+    except Exception as e:
+        if path.exists():
+            data = _json.loads(path.read_text(encoding="utf-8"))
+        else:
+            data = empty
+        data["refresh_error"] = str(e)
+        return JSONResponse(data)
 
 
 @app.get("/api/code-coverage")

@@ -398,12 +398,13 @@ def _goblin_combatant(name="Goblin Warrior", hp=5, ac=16, init=10):
 
 class TestCombatReminder:
     def test_combat_reminder_injected_when_round_positive(self):
+        # Tier 1.6: combat branch uses [INITIATIVE ORDER] instead of [COMBAT ONGOING]
         session = _make_session(
             messages=[{"role": "user", "content": "I swing at the goblin"}],
             combat_state=CombatState(round=1, combatants=[_goblin_combatant()]),
         )
         content, _ = _call(session)
-        assert "[COMBAT ONGOING" in content
+        assert "[INITIATIVE ORDER" in content
         assert "%%COMBAT%%" in content
 
     def test_combat_reminder_includes_correct_round_number(self):
@@ -432,26 +433,24 @@ class TestCombatReminder:
         assert "[COMBAT ONGOING" not in content
 
     def test_combat_reminder_present_without_other_context(self):
-        # No NPC / skill / location match — reminder still fires
+        # Tier 1.6: combat branch fires regardless — uses [INITIATIVE ORDER — round N]
         session = _make_session(
             messages=[{"role": "user", "content": "ok"}],
             combat_state=CombatState(round=2, combatants=[_goblin_combatant()]),
         )
         content, _ = _call(session)
-        assert "[COMBAT ONGOING — round 2]" in content
+        assert "[INITIATIVE ORDER — round 2]" in content
 
     def test_combat_reminder_appended_after_existing_directive(self):
-        # Reminder must appear even when another directive block is present
-        npc = _npc_match()
+        # Tier 1.6: combat branch bypasses directive and NPC injection entirely.
+        # [INITIATIVE ORDER] must appear; [GM DIRECTIVE] is absent in combat mode.
         session = _make_session(
-            messages=[{"role": "user", "content": "I dodge and talk to Zantus"}],
+            messages=[{"role": "user", "content": "I dodge and attack Zantus"}],
             combat_state=CombatState(round=1, combatants=[_goblin_combatant()]),
         )
-        content, _ = _call(session, npc_idx=_npc_idx_with_match(npc))
-        assert "[GM DIRECTIVE FOR THIS TURN" in content
-        assert "[COMBAT ONGOING" in content
-        # Combat section must come AFTER the directive
-        assert content.index("[COMBAT ONGOING") > content.index("[GM DIRECTIVE FOR THIS TURN")
+        content, _ = _call(session)
+        assert "[INITIATIVE ORDER" in content
+        assert "[GM DIRECTIVE FOR THIS TURN" not in content
 
 
 # ── Turn-1 format example injection ──────────────────────────────────────────
@@ -532,24 +531,24 @@ class TestCombatFullSpec:
         assert "round: 0" in _COMBAT_SPEC_ONGOING  # ongoing spec carries the clear rule
 
     def test_combat_header_still_shows_round_number(self):
-        """[COMBAT ONGOING — round N] header must still carry the actual round."""
+        """Tier 1.6: [INITIATIVE ORDER — round N] carries the actual round number."""
         session = _make_session(
             messages=[{"role": "user", "content": "I swing again."}],
             combat_state=CombatState(round=5, combatants=[_goblin_combatant()]),
         )
         content, _ = _call(session)
-        assert "[COMBAT ONGOING — round 5]" in content
+        assert "[INITIATIVE ORDER — round 5]" in content
 
     def test_full_spec_injected_on_first_turn_with_combat(self):
-        """Turn-1 example AND full combat spec both appear when combat starts
-        on the very first player turn (unlikely but must be handled)."""
+        """Tier 1.6: combat branch fires on turn 1 too — format example is suppressed,
+        but the combat spec and initiative order are present."""
         session = _make_session(
             messages=[{"role": "user", "content": "Goblins attack!"}],
             combat_state=CombatState(round=1, combatants=[_goblin_combatant()]),
         )
         content, _ = _call(session)
-        assert "Gerhard Pickle" in content
-        assert _COMBAT_SPEC_ONGOING in content
+        assert "Gerhard Pickle" not in content   # format example suppressed in combat
+        assert _COMBAT_SPEC_ONGOING in content    # combat spec still present
 
 
 # ── Conditional section specs ─────────────────────────────────────────────────

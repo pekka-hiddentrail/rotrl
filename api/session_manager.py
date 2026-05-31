@@ -456,7 +456,18 @@ def _parse_combat_block(
                     c.status = 'active'
             # New combatant (not in existing_state): use LLM-provided HP as-is.
 
-    return CombatState(round=round_num, combatants=combatants)
+    # current_actor: seed from initiative order on round 1; carry over on round 2+.
+    if existing_state is not None:
+        # Preserve whatever the backend last set (may have been advanced by the
+        # advance_turn endpoint between turns).
+        current_actor: Optional[str] = existing_state.current_actor
+    else:
+        # Round 1: highest-initiative active combatant is the first to act.
+        _sorted_for_init = sorted(combatants, key=lambda c: c.initiative, reverse=True)
+        _first_active = next((c for c in _sorted_for_init if c.status == "active"), None)
+        current_actor = _first_active.name if _first_active else None
+
+    return CombatState(round=round_num, combatants=combatants, current_actor=current_actor)
 
 
 def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
@@ -465,6 +476,7 @@ def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
         return None
     return {
         "round": state.round,
+        "current_actor": state.current_actor,
         "combatants": [
             {
                 "name": c.name,
@@ -961,6 +973,7 @@ class CombatState:
     """Current combat round and combatant list."""
     round: int
     combatants: list  # list[Combatant]
+    current_actor: Optional[str] = None  # name of whoever is acting this turn
 
 
 @dataclass
@@ -1017,9 +1030,78 @@ class GameSession:
     # attacks collected until /resume_combat injects them into history and calls LLM.
     attack_queue: list = field(default_factory=list)   # list[PendingAttack]
     attack_results: list = field(default_factory=list) # list[dict]
+    # Active character in the UI — PC name when a character is selected, "party" otherwise.
+    # Set by the frontend via PUT /sessions/{id}/active_character.
+    active_character: str = "party"
 
 
 _sessions: dict[str, GameSession] = {}
+
+
+def _session_state_path(session: "GameSession") -> Path:
+    return _REPO_ROOT / "sessions" / f"session_{session.session_number:03d}" / "state.json"
+
+
+def _write_session_state(session: "GameSession") -> None:
+    """Write a minimal state snapshot to sessions/session_NNN/state.json.
+
+    Current fields: mode, round, events.
+    Grows over time as more state becomes worth persisting.
+    """
+    import json as _json
+    path = _session_state_path(session)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "mode":             "combat" if session.combat_state is not None else "social",
+        "round":            session.combat_state.round if session.combat_state is not None else 0,
+        "events":           [ev.event_id for ev in session.active_events],
+        # In combat, the current initiative actor drives active_character in state.json.
+        # Falls back to session.active_character when combat is inactive or no actor set.
+        "active_character": (
+            session.combat_state.current_actor
+            if session.combat_state is not None and session.combat_state.current_actor is not None
+            else session.active_character
+        ),
+    }
+    path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
+
+
+def advance_combat_turn(session: "GameSession") -> dict:
+    """Advance current_actor to the next active combatant in initiative order.
+
+    Wraps around at the end of the list.  Skips combatants whose status is not
+    "active".  Writes the updated state to state.json and returns:
+        { "current_actor": str | None, "is_pc": bool }
+
+    Raises ValueError when session.combat_state is None (caller should 409).
+    """
+    if session.combat_state is None:
+        raise ValueError("No active combat")
+
+    combat = session.combat_state
+    # Active combatants only, sorted highest-initiative first (the canonical order).
+    active = [c for c in sorted(combat.combatants, key=lambda c: c.initiative, reverse=True)
+              if c.status == "active"]
+
+    if not active:
+        # No one left to act — leave current_actor as-is.
+        _write_session_state(session)
+        is_pc = _is_pc_attacker(combat.current_actor or "", session)
+        return {"current_actor": combat.current_actor, "is_pc": is_pc}
+
+    # Find the current actor's position; advance to the next (with wrap-around).
+    names = [c.name for c in active]
+    try:
+        idx = names.index(combat.current_actor)
+        next_idx = (idx + 1) % len(names)
+    except ValueError:
+        # current_actor not found in active list (None, dead, etc.) → pick first.
+        next_idx = 0
+
+    combat.current_actor = names[next_idx]
+    _write_session_state(session)
+    is_pc = _is_pc_attacker(combat.current_actor, session)
+    return {"current_actor": combat.current_actor, "is_pc": is_pc}
 
 
 def _ts() -> str:
@@ -1148,6 +1230,47 @@ _DELTAS_SPEC = (
     "  knowledge: [tag] <fact>  summary: <sentence> ]\n"
     "Tags (use exactly one): [persistent] [pcs] [quest] [world] [npcs] [trivia] [threat]"
 )
+
+# Combat-mode section spec — replaces the narrative section block when combat is active.
+# Strips %%GENERATE%%, %%DELTAS%%, %%ROLL%%, %%EVENT%%; promotes tight %%NARRATIVE%% target.
+_COMBAT_SECTION_SPECS = """\
+[SECTIONS ACTIVE THIS TURN — COMBAT MODE]
+%%NARRATIVE%%  — 1–2 paragraphs; physical action and immediate observable result only.
+%%COMBAT%%     — always required this turn; full format spec below.
+%%ATTACK%%     — one line per attack this round; omit when no attacks occur.
+%%HP%%         — non-attack HP changes only (traps, poison, healing); omit otherwise.
+FORBIDDEN in combat: do NOT write GENERATE, DELTAS, ROLL, or EVENT sections."""
+
+
+def _build_combat_system_prompt(session: "GameSession") -> str:
+    """Build the combat-mode base prompt used when session.combat_state is not None.
+
+    Much shorter than _build_slim_system_prompt — strips narrative tone guidance,
+    NPC knowledge prose, skill guidelines, GM STYLE, and unused section specs.
+    Called fresh each combat turn by _inject_context; not stored on session.
+    """
+    party_lines = [
+        f"  - {p['combat_stats']['name']}"
+        for p in session.pc_profiles.values()
+        if p.get("combat_stats", {}).get("name")
+    ]
+    party_block = "\n".join(party_lines) if party_lines else "  - (no character files found)"
+
+    return f"""You are the GM for a Pathfinder 1E combat encounter. Session {session.session_number}.
+
+PARTY (PCs — never roll dice for them; never narrate their decisions before the player declares)
+{party_block}
+
+COMBAT CONDUCT (binding every turn)
+- Write %%NARRATIVE%% first: 1–2 paragraphs, physical action and immediate observable result only.
+- Always write %%COMBAT%% with the updated initiative list and statuses.
+- Never ask the player for information. Accept and resolve their declared action immediately.
+- Never invent a d20 result, damage number, or HP total. Write %%ATTACK%% and let the backend roll.
+- Never write hp: for existing combatants — backend owns HP. Use %%HP%% only for non-attack changes.
+- Never narrate what a PC does before the player declares it.
+
+FORBIDDEN in combat — do NOT write GENERATE, DELTAS, ROLL, or EVENT sections.
+Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
 
 def _build_slim_system_prompt(session_number: int) -> str:
@@ -1350,6 +1473,14 @@ def create_session(
         pc_profiles=_build_pc_profiles(_REPO_ROOT / "ui" / "public" / "data"),
     )
 
+    # Initialise session state file from template (resets mode to 'social' each boot).
+    _template = _REPO_ROOT / "sessions" / "state.template.json"
+    _state_path = _session_state_path(session)
+    _state_path.parent.mkdir(parents=True, exist_ok=True)
+    if _template.exists():
+        import shutil as _shutil
+        _shutil.copy2(_template, _state_path)
+
     # Boot cleanup — runs against adventure_path/01_npcs/ on every session start.
     #
     # 1. SESSION NPC folders: auto-created stubs are deleted unless the GM has
@@ -1512,6 +1643,21 @@ def resolve_roll(session: GameSession, rolled: int) -> dict:
 
     session.pending_roll = None
     return {"passed": passed, "skill": pr["skill"], "dc": pr["dc"], "rolled": rolled, "outcome": outcome, "speaker": speaker}
+
+
+def write_session_state(session: GameSession) -> None:
+    """Public alias for _write_session_state — callable from main.py."""
+    _write_session_state(session)
+
+
+def set_active_character(session: GameSession, name: str) -> None:
+    """Set the active character and persist to state.json.
+
+    Pass "party" to deselect all characters (default social state).
+    Any non-empty string is accepted — validation is the caller's responsibility.
+    """
+    session.active_character = name.strip() or "party"
+    _write_session_state(session)
 
 
 def save_session(session: GameSession) -> Path:
@@ -1895,21 +2041,148 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         max_hist = _FULL_MAX_HISTORY
     history = session.messages[-max_hist:] if len(session.messages) > max_hist else session.messages
 
+    last_user = next(
+        (m["content"] for m in reversed(history) if m["role"] == "user"), ""
+    )
+
+    # ── COMBAT MODE — dedicated prompt, skip narrative injection ──────────────
+    # Fires in two cases:
+    #   (a) combat_state is set — live combat, round >= 1
+    #   (b) no combat_state yet, but active events require a %%COMBAT%% block
+    #       (pre-combat: goblin wave fired, combat about to start this turn)
+    # In both cases: narrative base prompt, NPC/skill/location injection, section
+    # specs, format example, delta directive, and PC narrative profiles are all
+    # bypassed.  Only mechanically-relevant context is injected.
+    _in_combat = session.combat_state is not None
+    _combat_events_active = any("%%COMBAT%%" in ev.content for ev in session.active_events)
+
+    if _in_combat or _combat_events_active:
+        system_content = _build_combat_system_prompt(session)
+        if session.provider == "groq" and len(system_content) > _GROQ_MAX_SYSTEM_CHARS:
+            system_content = system_content[:_GROQ_MAX_SYSTEM_CHARS] + "\n\n…[later context omitted to stay within payload limit]"
+
+        _log(session, f"\n> *[Combat mode ({'live' if _in_combat else 'pre-combat'}) — using _build_combat_system_prompt]*\n")
+
+        # Active events — TTL decrement first (shared by both sub-cases)
+        _expired_ids: list[str] = []
+        for _ev in session.active_events:
+            _ev.turns_remaining -= 1
+            if _ev.turns_remaining <= 0:
+                _expired_ids.append(_ev.event_id)
+        if _expired_ids:
+            session.active_events = [e for e in session.active_events if e.event_id not in _expired_ids]
+            _log(session, f"\n> *[Events expired: {', '.join(_expired_ids)}]*\n")
+            _write_session_state(session)
+
+        _combat_injected: list[str] = []
+        for _ev in session.active_events:
+            _combat_injected.append(f"## Active Event — {_ev.event_id}\n\n{_ev.content}")
+
+        # Combat rules lookup — always active in combat mode
+        _crules_match = _get_combat_rules_index().detect(last_user)
+        if _crules_match:
+            _combat_injected.append(_get_combat_rules_index().format_context(_crules_match))
+            _log(session, f"\n> *[Combat rules injected: {_crules_match.rule_name} (trigger: \"{_crules_match.matched_trigger}\")]*\n")
+
+        if _combat_injected:
+            system_content += "\n\n---\n[COMBAT CONTEXT]\n" + "\n\n---\n".join(_combat_injected)
+
+        if _in_combat:
+            # ── Live combat (round >= 1) — inject tracker, HP, stats, conditions ──
+            combat = session.combat_state
+
+            # [INITIATIVE ORDER] — sorted descending; current actor (highest active) marked →
+            _sorted = sorted(combat.combatants, key=lambda c: c.initiative, reverse=True)
+            _active = [c for c in _sorted if c.status == "active"]
+            _current_name = _active[0].name if _active else None
+            _init_lines = []
+            for _c in _sorted:
+                _marker = "→ " if _c.name == _current_name else "  "
+                _init_lines.append(f"{_marker}{_c.name}: init {_c.initiative}  AC {_c.ac}  ({_c.status})")
+            system_content += (
+                f"\n\n[INITIATIVE ORDER — round {combat.round}]\n"
+                + "\n".join(_init_lines)
+            )
+
+            # [CURRENT HP] — authoritative; backend owns these values
+            _hp_lines = "\n".join(
+                f"  {_c.name}: {_c.hp_current}/{_c.hp_max} ({_c.status})"
+                for _c in _sorted
+            )
+            system_content += f"\n\n[CURRENT HP]\n{_hp_lines}"
+
+            # [PC COMBAT STATS] — mechanical profiles for all PCs
+            if session.pc_profiles:
+                _pc_stat_blocks = [
+                    _tiers["mechanical"]
+                    for _tiers in session.pc_profiles.values()
+                    if _tiers.get("mechanical")
+                ]
+                if _pc_stat_blocks:
+                    system_content += "\n\n[PC COMBAT STATS]\n" + "\n\n".join(_pc_stat_blocks)
+
+            # [ACTIVE CONDITIONS] — only when at least one combatant has conditions
+            _cond_entries = [
+                f"  {_c.name}: {', '.join(_c.conditions)}"
+                for _c in combat.combatants
+                if _c.conditions
+            ]
+            if _cond_entries:
+                system_content += "\n\n[ACTIVE CONDITIONS]\n" + "\n".join(_cond_entries)
+
+            # Section specs (combat-mode variant) + full ongoing format
+            system_content += f"\n\n---\n{_COMBAT_SECTION_SPECS}\n\n{_COMBAT_SPEC_ONGOING}"
+            _log(session, f"\n> *[Combat turn: round {combat.round}, current actor: {_current_name}]*\n")
+        else:
+            # ── Pre-combat (events require %%COMBAT%% but round not started) ────────
+            # Inject PC combat stats so the LLM has HP/AC/init for the %%COMBAT%% block
+            # it must write.  No initiative order or HP tracker yet — those don't exist.
+            if session.pc_profiles:
+                _pc_stat_blocks = [
+                    _tiers["mechanical"]
+                    for _tiers in session.pc_profiles.values()
+                    if _tiers.get("mechanical")
+                ]
+                if _pc_stat_blocks:
+                    system_content += "\n\n[PC COMBAT STATS]\n" + "\n\n".join(_pc_stat_blocks)
+
+            # Round-1 format + party roster (same as old pre-combat injection)
+            _pc_roster = _build_pc_combat_roster(session)
+            system_content += (
+                f"\n\n---\n[COMBAT START FORMAT — write this now]\n"
+                f"{_COMBAT_SPEC_ROUND1}"
+                + (f"\n\n{_pc_roster}" if _pc_roster else "")
+            )
+            # Combat-mode section specs (no %%GENERATE%%/%%DELTAS%%/%%ROLL%%)
+            system_content += f"\n\n---\n{_COMBAT_SECTION_SPECS}"
+            _log(session, "\n> *[Pre-combat turn: events require %%COMBAT%% block]*\n")
+
+        _active_event_ids = [e.event_id for e in session.active_events]
+
+        return system_content, {
+            "npc":           None,
+            "npc_trigger":   None,
+            "skill":         None,
+            "skill_trigger": None,
+            "location":      None,
+            "location_npcs": [],
+            "loc":           None,
+            "loc_trigger":   None,
+            "active_events": _active_event_ids,
+            "scene_npcs":    list(session.scene_npcs),
+            "history":       history,
+        }
+
+    # ── NARRATIVE MODE — standard injection pipeline ───────────────────────────
     system_content = session.system_prompt
     if session.provider == "groq" and len(system_content) > _GROQ_MAX_SYSTEM_CHARS:
         system_content = system_content[:_GROQ_MAX_SYSTEM_CHARS] + "\n\n…[later context omitted to stay within payload limit]"
 
-    # ── Turn-1 format example ─────────────────────────────────────────────────
-    # session.messages has exactly 1 entry (the current user message, just
-    # appended by stream_turn) on the first player turn.  After that the
-    # model has seen the format; no need to repeat it every turn.
+    # Turn-1 format example — injected only on the first player turn.
     if len(session.messages) == 1:
         system_content += f"\n\n---\n{_FORMAT_EXAMPLE}"
         _log(session, "\n> *[Format example injected: first player turn]*\n")
 
-    last_user = next(
-        (m["content"] for m in reversed(history) if m["role"] == "user"), ""
-    )
     injected: list[str] = []
 
     # Detect skill first — needed to choose full vs short NPC profile below.
@@ -1998,6 +2271,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     if expired_ids:
         session.active_events = [e for e in session.active_events if e.event_id not in expired_ids]
         _log(session, f"\n> *[Events expired: {', '.join(expired_ids)}]*\n")
+        _write_session_state(session)
 
     for _ev in session.active_events:
         injected.append(f"## Active Event — {_ev.event_id}\n\n{_ev.content}")
@@ -2030,42 +2304,19 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
         )
         _log(session, f"\n> *[Delta reminder injected for scene NPCs: {_npc_list}]*\n")
 
-    # ── Ongoing combat — full spec injection + HP context ─────────────────────
-    # Injected when combat is live.  The static prompt keeps only a compact
-    # one-liner; the full format + rules are injected here so the model has
-    # everything it needs without paying the token cost when not in combat.
-    # Tier 1.1: HP values are backend-owned from round 2 onward.  We inject
-    # current HP so the LLM can narrate accurately without recomputing.
-    #
-    # Round-1 spec: injected when active events are present but combat hasn't
-    # started yet.  Events often require a %%COMBAT%% block, and without the
-    # format spec the model has no field-level guidance (the base prompt only
-    # carries a brief hint).
-    if session.combat_state is not None and session.combat_state.round > 0:
-        _combat_spec = _COMBAT_SPEC_ONGOING
-        _hp_lines = "  ".join(
-            f"{c.name}: {c.hp_current}/{c.hp_max} ({c.status})\n"
-            for c in session.combat_state.combatants
-        )
-        system_content += (
-            f"\n\n---\n[COMBAT ONGOING — round {session.combat_state.round}]\n"
-            f"You MUST include a `%%COMBAT%%` block this turn.\n"
-            f"{_combat_spec}\n\n"
-            f"[CURRENT HP]\n  {_hp_lines}"
-        )
-        _log(session, f"\n> *[Combat reminder injected: round {session.combat_state.round}]*\n")
-    elif session.active_events:
-        # Events are active but combat hasn't started yet.  Provide the round-1
-        # format so the model can write a valid %%COMBAT%% block the moment it
-        # decides to start combat.  The full party roster is injected so the LLM
-        # lists every PC — not just the one mentioned in the player's input.
+    # ── Pre-combat round-1 spec for non-combat events ─────────────────────────
+    # When active events are present that do NOT require a %%COMBAT%% block
+    # (e.g. a pure narrative event), still hint the round-1 format so the LLM
+    # can start combat if the player triggers it.  Events that DO require
+    # %%COMBAT%% are handled by the combat branch above (returned early).
+    if session.active_events:  # _combat_events_active is False here — early-returned above
         _pc_roster = _build_pc_combat_roster(session)
         system_content += (
             f"\n\n---\n[COMBAT START FORMAT — use if starting combat this turn]\n"
             f"{_COMBAT_SPEC_ROUND1}"
             + (f"\n\n{_pc_roster}" if _pc_roster else "")
         )
-        _log(session, "\n> *[Combat round-1 spec injected (active events, no combat yet)]*\n")
+        _log(session, "\n> *[Combat round-1 spec injected (narrative events, no combat yet)]*\n")
 
     context_info: dict = {
         "npc":           npc_match.canonical_name    if npc_match else None,
@@ -2336,6 +2587,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _write_session_state(session)
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
@@ -2362,6 +2614,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                     else:                                   # valid update
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
+                    _write_session_state(session)
                 # None → parse failure; leave session.combat_state unchanged
             except Exception as _e:
                 _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
@@ -2443,6 +2696,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _write_session_state(session)
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
@@ -2469,6 +2723,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                     else:
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
+                    _write_session_state(session)
             except Exception as _e:
                 _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
 

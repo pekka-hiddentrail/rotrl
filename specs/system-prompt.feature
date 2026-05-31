@@ -156,21 +156,27 @@ Then  the format example is NOT present in system_content
 ```gherkin
 Given session.combat_state.round > 0
 When  _inject_context assembles the per-turn system prompt
-Then  the full combat format spec and rules (_COMBAT_FULL_SPEC) are appended to system_content
-And   the [COMBAT ONGOING — round N] header still shows the correct round number
+Then  the full combat format spec (_COMBAT_SPEC_ONGOING) is present in system_content
+And   [INITIATIVE ORDER — round N] shows the correct round number
+And   [CURRENT HP] lists all combatants with their backend-authoritative HP values
 When  session.combat_state is None or round == 0
-Then  the full combat spec is NOT present in system_content
+Then  [INITIATIVE ORDER] is NOT present in system_content
 And   the static base prompt contains only a compact one-liner %%COMBAT%% reference
 ```
 
+> **Note (Tier 1.6):** When `session.combat_state is not None`, `_inject_context` uses the
+> dedicated combat branch. `_COMBAT_SPEC_ONGOING` is still injected but via `_COMBAT_SECTION_SPECS`
+> + combat base prompt, not the old `[COMBAT ONGOING]` header. See `combat-system-prompt.feature`.
+
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-009 — Section specs injected conditionally each turn
+### AC-009 — Section specs injected conditionally each turn (narrative mode only)
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-**Scenario:** Per-turn system prompt assembly
+**Scenario:** Per-turn system prompt assembly with no active combat
 
 ```gherkin
-Given _inject_context assembles the per-turn system prompt
+Given session.combat_state is None
+And   _inject_context assembles the per-turn system prompt
 Then  a [SECTIONS ACTIVE THIS TURN] block is always appended
 And   the block always includes _NARRATIVE_SPEC and _GENERATE_SPEC
 When  a skill match is detected in the player input
@@ -182,6 +188,10 @@ Then  _DELTAS_SPEC is included in the block
 When  scene_npcs is empty AND no NPC is detected
 Then  _DELTAS_SPEC is NOT included in the block
 And   the static base prompt contains only the marker list, NOT the full section specs
+
+Given session.combat_state is not None
+Then  the [SECTIONS ACTIVE THIS TURN] block is replaced by _COMBAT_SECTION_SPECS (COMBAT MODE)
+And   _NARRATIVE_SPEC, _GENERATE_SPEC, _ROLL_SPEC, _DELTAS_SPEC are all absent
 ```
 
 ---
@@ -218,7 +228,8 @@ When  multiple PC names appear, only the first matched PC's profile is injected
 - See: [INDEX.md §16 — System Prompt Architecture](INDEX.md)
 - Boot context lookup order: `sessions/session_NNN/boot.md` → `sessions/session_N-1/recap.md` → hardcoded fallback text
 - `_build_slim_system_prompt()` in `api/session_manager.py` assembles the fixed prompt at boot; static content only
-- Dynamic fragments: `_FORMAT_EXAMPLE`, `_COMBAT_FULL_SPEC`, `_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC` — all module-level constants injected conditionally by `_inject_context`
+- `_build_combat_system_prompt(session)` — Tier 1.6 — builds the combat-mode base prompt; called fresh each combat turn, not stored; see `combat-system-prompt.feature`
+- Dynamic fragments: `_FORMAT_EXAMPLE`, `_COMBAT_SPEC_ONGOING`, `_COMBAT_SPEC_ROUND1`, `_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC`, `_COMBAT_SECTION_SPECS` — all module-level constants injected conditionally by `_inject_context`
 - `_build_pc_profiles(players_dir)` builds two-tier PC profiles at session boot; stored on `GameSession.pc_profiles`
 - Per-turn copy assembly (AC-002 through AC-010) is the responsibility of `_inject_context(session) -> tuple[str, dict]`
-- Target: static base prompt ≤ 900 tokens; turn-1 total ≤ 1300 tokens; turn 2+ social (no combat) ≤ 800 tokens
+- Target: static base prompt ≤ 900 tokens; turn-1 total ≤ 1300 tokens; turn 2+ social (no combat) ≤ 800 tokens; combat turns ≤ 60% of equivalent narrative turn
