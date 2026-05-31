@@ -334,16 +334,30 @@ def get_combat_benchmarks():
 
 @app.get("/api/coverage")
 def get_coverage():
-    """Return the feature AC coverage matrix built by scripts/build_coverage.py.
+    """Return a freshly rebuilt feature AC coverage matrix.
 
-    Returns an empty matrix if outputs/coverage.json does not exist yet.
-    Run `python scripts/build_coverage.py` to generate it.
+    The JSON file is still written to outputs/coverage.json for CLI/users, but
+    the GUI does not depend on a stale file. If rebuilding fails, fall back to
+    the last generated file and include refresh_error for visibility.
     """
     import json as _json
+    empty = {"generated": None, "summary": {"total": 0, "covered": 0, "gap": 0}, "rows": []}
     path = _REPO_ROOT / "outputs" / "coverage.json"
-    if not path.exists():
-        return JSONResponse({"generated": None, "summary": {"total": 0, "covered": 0, "gap": 0}, "rows": []})
-    return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
+    try:
+        from scripts.build_coverage import OUTPUT_PATH as _COVERAGE_OUTPUT_PATH
+        from scripts.build_coverage import build_coverage as _build_coverage
+
+        data = _build_coverage()
+        _COVERAGE_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _COVERAGE_OUTPUT_PATH.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+        return JSONResponse(data)
+    except Exception as e:
+        if path.exists():
+            data = _json.loads(path.read_text(encoding="utf-8"))
+        else:
+            data = empty
+        data["refresh_error"] = str(e)
+        return JSONResponse(data)
 
 
 @app.get("/api/code-coverage")

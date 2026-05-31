@@ -33,8 +33,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [token-benchmark.feature](token-benchmark.feature) | Backend \| Frontend \| Infrastructure | `@benchmark` `@api-log` `@token` `@quality-of-life` | 10 | `GET /api/benchmarks`, `GET /api/benchmarks/combat`, `outputs/token_benchmarks.csv`, `outputs/token_benchmarks_combat.csv`, `TokenBenchmarks.tsx`, `test_token_benchmark.py`, `Header.tsx` Benchmarks button |
 | [splash-hints.feature](splash-hints.feature) | Frontend | `@splash` `@hints` `@ui` `@rotation` | 6 | `SplashHint.tsx`, `hints.ts`, `App.tsx`, `index.css` |
 | [coverage-matrix.feature](coverage-matrix.feature) | Backend \| Frontend \| Infrastructure | `@coverage` `@developer-tools` `@quality-of-life` | 7 | `scripts/build_coverage.py`, `outputs/coverage.json`, `GET /api/coverage`, `CoverageMatrix.tsx`, `Header.tsx` Coverage button |
+| [combat-system-prompt.feature](combat-system-prompt.feature) | Backend | `@combat` `@prompt` `@injection` `@per-turn` `@token` | 16 | `_build_combat_system_prompt()`, `_COMBAT_SECTION_SPECS`, `_inject_context` combat branch (live + pre-combat), `[INITIATIVE ORDER]`, `[CURRENT HP]`, `[PC COMBAT STATS]`, `[ACTIVE CONDITIONS]`, `tests/test_combat_prompt.py` |
 
-**Total: 197 acceptance criteria across 25 feature files**
+**Total: 213 acceptance criteria across 26 feature files**
 
 ---
 

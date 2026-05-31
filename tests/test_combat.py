@@ -468,7 +468,8 @@ class TestCombatRoundReminderInjection:  # AC-010
     """_inject_context appends [COMBAT ONGOING — round N] when combat is active."""
 
     def test_reminder_includes_round_number(self, booted_session):
-        """system_content contains the correct round number when combat is active."""
+        """Tier 1.6: combat branch uses [INITIATIVE ORDER — round N] instead of
+        [COMBAT ONGOING — round N]."""
         client, session_id = booted_session
         session = get_session(session_id)
         assert session is not None
@@ -479,7 +480,7 @@ class TestCombatRoundReminderInjection:  # AC-010
         )
 
         system_content, _ = _inject_context(session)
-        assert "COMBAT ONGOING — round 3" in system_content
+        assert "INITIATIVE ORDER — round 3" in system_content
 
     def test_reminder_absent_when_no_combat_state(self, booted_session):
         """No combat reminder when session.combat_state is None."""

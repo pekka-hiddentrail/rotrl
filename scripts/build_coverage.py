@@ -45,7 +45,10 @@ OUTPUT_PATH      = REPO_ROOT / "outputs" / "coverage.json"
 
 # ── Spec file parsing ─────────────────────────────────────────────────────────
 
-_AC_HEADING_RE  = re.compile(r"^### (AC-\d{3}) — (.+)$", re.MULTILINE)
+_AC_HEADING_RE = re.compile(
+    r"^#{3,}\s+(AC-\d{3})\s*(?:[-\u2013\u2014:]\s*)?(.+?)\s*$",
+    re.MULTILINE,
+)
 _FEATURE_ID_RE  = re.compile(r"^\*\*ID:\*\*\s+(\S+)", re.MULTILINE)
 
 
@@ -66,13 +69,17 @@ class AcEntry:
 
 
 def load_spec_acs() -> dict[tuple[str, str], AcEntry]:
-    """Return {(feature_id, ac_id): AcEntry} for all *.feature files."""
+    """Return {(feature_id, ac_id): AcEntry} for all specs/**/*.feature files."""
     entries: dict[tuple[str, str], AcEntry] = {}
-    for path in sorted(SPECS_DIR.glob("*.feature")):
+    spec_paths = sorted(
+        p for p in SPECS_DIR.rglob("*.feature")
+        if not p.name.startswith("_")
+    )
+    for path in spec_paths:
         text = path.read_text(encoding="utf-8")
         m = _FEATURE_ID_RE.search(text)
-        feature_id   = m.group(1) if m else path.stem
-        feature_file = f"specs/{path.name}"
+        feature_id   = m.group(1).strip() if m else path.stem
+        feature_file = path.relative_to(REPO_ROOT).as_posix()
         for ac_m in _AC_HEADING_RE.finditer(text):
             ac_id = ac_m.group(1)
             title = ac_m.group(2).strip()
@@ -235,7 +242,7 @@ def main() -> None:
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
     s = data["summary"]
-    print(f"Coverage matrix written → {OUTPUT_PATH.relative_to(REPO_ROOT)}")
+    print(f"Coverage matrix written -> {OUTPUT_PATH.relative_to(REPO_ROOT)}")
     print(f"  {s['covered']}/{s['total']} ACs covered  ({s['gap']} gaps)")
 
 

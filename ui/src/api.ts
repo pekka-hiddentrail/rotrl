@@ -143,6 +143,7 @@ export interface CoverageData {
   generated: string | null
   summary:   { total: number; covered: number; gap: number }
   rows:      CoverageRow[]
+  refresh_error?: string
 }
 
 export async function fetchCoverage(): Promise<CoverageData> {
