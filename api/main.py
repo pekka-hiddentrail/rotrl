@@ -308,6 +308,57 @@ def get_benchmarks():
     return JSONResponse({"rows": rows})
 
 
+@app.get("/api/coverage")
+def get_coverage():
+    """Return the feature AC coverage matrix built by scripts/build_coverage.py.
+
+    Returns an empty matrix if outputs/coverage.json does not exist yet.
+    Run `python scripts/build_coverage.py` to generate it.
+    """
+    import json as _json
+    path = _REPO_ROOT / "outputs" / "coverage.json"
+    if not path.exists():
+        return JSONResponse({"generated": None, "summary": {"total": 0, "covered": 0, "gap": 0}, "rows": []})
+    return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
+
+
+@app.get("/api/code-coverage")
+def get_code_coverage():
+    """Return pytest-cov line coverage data.
+
+    Generate with: pytest --cov --cov-report=json
+    The .coveragerc [json] section writes to outputs/code_coverage.json.
+    """
+    import json as _json
+    path = _REPO_ROOT / "outputs" / "code_coverage.json"
+    if not path.exists():
+        return JSONResponse({"generated": None, "files": [], "total_stmts": 0, "total_miss": 0, "total_pct": 0})
+    raw = _json.loads(path.read_text(encoding="utf-8"))
+    files = []
+    for fname, fdata in raw.get("files", {}).items():
+        summary = fdata.get("summary", {})
+        stmts = summary.get("num_statements", 0)
+        miss = summary.get("missing_lines", 0)
+        pct = round(summary.get("percent_covered", 0))
+        files.append({
+            "name": fname.replace("\\", "/"),
+            "stmts": stmts,
+            "miss": miss,
+            "covered": stmts - miss,
+            "pct": pct,
+            "missing_lines": fdata.get("missing_lines", []),
+        })
+    files.sort(key=lambda f: f["pct"])
+    totals = raw.get("totals", {})
+    return JSONResponse({
+        "generated": raw.get("meta", {}).get("timestamp"),
+        "files": files,
+        "total_stmts": totals.get("num_statements", 0),
+        "total_miss": totals.get("missing_lines", 0),
+        "total_pct": round(totals.get("percent_covered", 0)),
+    })
+
+
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: str):
     """Discard session without generating recap (emergency close)."""

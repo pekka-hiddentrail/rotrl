@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 
 const repoRoot = path.resolve(process.cwd(), '..')
 const sessionNpcRoot = path.join(repoRoot, 'adventure_path', '01_npcs')
@@ -56,6 +56,13 @@ async function sendTurnAndWait(page: Page, text: string) {
   await input.fill(text)
   await page.getByRole('button', { name: 'Send' }).click()
   await expect(input).toBeEnabled({ timeout: 90_000 })
+}
+
+async function visibleBox(locator: Locator, label: string) {
+  await expect(locator, `${label} should be visible`).toBeVisible()
+  const box = await locator.boundingBox()
+  expect(box, `${label} should have a layout box`).not.toBeNull()
+  return box!
 }
 
 // ---------------------------------------------------------------------------
@@ -321,21 +328,33 @@ test.describe.serial('L9-L11 - live goblin event, combat, and roll flow', () => 
     await expect(gmBubble).toContainText('goblin_attack_starts')
   })
 
-  test('L10 - active goblin event produces the combat tracker', async () => {
+  test('L10 - spotting goblins produces %%COMBAT%% round 1', async () => {
     await sendTurnAndWait(
       page,
       [
-        'I draw my weapon and move between the trapped family and the nearest goblin warriors.',
-        'The goblin_attack_starts event is active, so start Wave 1 combat now.',
+        'Do I spot any goblins?',
+        'The goblin_attack_starts event is active, so start Wave 1 combat now if goblins are visible.',
         'Write a %%COMBAT%% block with round: 1 and the Wave 1 goblin combatants.',
         'Do not write a %%ATTACK%% block yet.',
       ].join(' '),
     )
 
-    await expect(page.locator('.bubble-gm').last()).toContainText('%%COMBAT%%', { timeout: 60_000 })
+    await expect(page.locator('.bubble-gm').last()).toContainText(/%%COMBAT%%\s*round:\s*1/, { timeout: 60_000 })
     await expect(page.locator('.combat-panel')).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('.combat-round-badge')).toContainText(/Round\s+1/)
     await expect(page.locator('.combatant-name').filter({ hasText: /goblin/i }).first()).toBeVisible()
+
+    const viewport = page.viewportSize()
+    expect(viewport, 'viewport should be available for layout assertions').not.toBeNull()
+    const combatBox = await visibleBox(page.locator('.combat-panel'), 'combat tracker')
+    const diceBox = await visibleBox(page.locator('.dice-panel'), 'dice panel')
+    const characterBox = await visibleBox(page.locator('.char-sidebar'), 'character sidebar')
+
+    expect(combatBox.x + combatBox.width / 2, 'combat tracker should be on the right side').toBeGreaterThan(viewport!.width / 2)
+    expect(characterBox.x + characterBox.width, 'character sidebar should be left of combat tracker').toBeLessThan(combatBox.x)
+    expect(diceBox.x + diceBox.width, 'dice panel should be left of combat tracker').toBeLessThan(combatBox.x)
+    expect(characterBox.x, 'character sidebar should start on the left side').toBeLessThan(viewport!.width / 2)
+    expect(diceBox.x, 'dice panel should start on the left side').toBeLessThan(viewport!.width / 2)
   })
 
   test('L11 - %%ROLL%% prompt can be answered from the dice panel', async () => {

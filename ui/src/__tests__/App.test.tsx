@@ -232,7 +232,8 @@ describe('App — header/session controls', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     await bootApp(user)
 
-    await user.click(screen.getByRole('button', { name: 'View Log' }))
+    await user.click(screen.getByRole('button', { name: /Tools/ }))
+    await user.click(screen.getByRole('button', { name: /View Session Log/ }))
 
     expect(openSpy).toHaveBeenCalledWith('/api/sessions/sess-test/log', '_blank')
     openSpy.mockRestore()
@@ -242,7 +243,8 @@ describe('App — header/session controls', () => {
     mockPurge.mockResolvedValueOnce({ purged: 2 })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Purge NPCs' }))
+    await user.click(screen.getByRole('button', { name: /Tools/ }))
+    await user.click(screen.getByRole('button', { name: /Purge Session NPCs/ }))
     expect(screen.getByText('Purge session NPCs?')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Yes' }))
 
@@ -255,11 +257,12 @@ describe('App — header/session controls', () => {
   it('Purge NPCs collapses without calling the API when No is clicked', async () => {
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Purge NPCs' }))
+    await user.click(screen.getByRole('button', { name: /Tools/ }))
+    await user.click(screen.getByRole('button', { name: /Purge Session NPCs/ }))
     await user.click(screen.getByRole('button', { name: 'No' }))
 
     expect(mockPurge).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Purge NPCs' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tools/ })).toBeInTheDocument()
   })
 
   it('Kill confirmation No keeps ending; Yes resets back to pre-boot', async () => {

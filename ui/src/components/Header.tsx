@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { SessionInfo } from '../types'
 
 const MODELS: Record<string, { value: string; label: string }[]> = {
@@ -45,6 +45,7 @@ interface Props {
   onViewLog: () => void
   onOpenApiLogs: () => void
   onOpenBenchmarks: () => void
+  onOpenCoverage: () => void
   onPurgeNpcs: () => void
 }
 
@@ -61,13 +62,48 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 
 export default function Header({
   session, streaming, ending, sessionNumber, model, devMode, provider, rateLimits,
-  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange, onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onOpenBenchmarks, onPurgeNpcs,
+  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange,
+  onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onOpenBenchmarks, onOpenCoverage, onPurgeNpcs,
 }: Props) {
   const [confirmingPurge, setConfirmingPurge] = useState(false)
-  const [confirmingKill, setConfirmingKill] = useState(false)
+  const [confirmingKill,  setConfirmingKill]  = useState(false)
+  const [toolsOpen,       setToolsOpen]       = useState(false)
+  const toolsRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => { if (!ending) setConfirmingKill(false) }, [ending])
+
+  // Close tools dropdown on outside click
+  useEffect(() => {
+    if (!toolsOpen) return
+    const handler = (e: MouseEvent) => {
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
+        setToolsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [toolsOpen])
+
+  // Close tools dropdown on Escape
+  useEffect(() => {
+    if (!toolsOpen) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setToolsOpen(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [toolsOpen])
+
   const isBooted = session !== null
-  const locked = streaming || ending
+  const locked   = streaming || ending
+
+  function openTool(fn: () => void) {
+    setToolsOpen(false)
+    fn()
+  }
+
+  function triggerPurge() {
+    setToolsOpen(false)
+    setConfirmingPurge(true)
+  }
 
   return (
     <header className="header">
@@ -76,13 +112,7 @@ export default function Header({
           <span
             key={i}
             className="bg-rune"
-            style={{
-              left: r.left,
-              top: r.top,
-              animationDelay: r.delay,
-              fontSize: r.size,
-              opacity: r.opacity,
-            }}
+            style={{ left: r.left, top: r.top, animationDelay: r.delay, fontSize: r.size, opacity: r.opacity }}
           >
             {r.char}
           </span>
@@ -100,6 +130,8 @@ export default function Header({
       </div>
 
       <div className="header-controls">
+
+        {/* ── Pre-boot controls ─────────────────────────────────────────── */}
         {!isBooted && (
           <>
             <div className="provider-toggle" title="LLM backend">
@@ -117,55 +149,28 @@ export default function Header({
             <label className="control-label">
               Session
               <input
-                type="number"
-                min={1}
-                value={sessionNumber}
+                type="number" min={1} value={sessionNumber}
                 onChange={e => onSessionNumberChange(Number(e.target.value))}
-                className="input-num"
-                disabled={locked}
+                className="input-num" disabled={locked}
               />
             </label>
             <label className="control-label">
               Model
-              <select
-                value={model}
-                onChange={e => onModelChange(e.target.value)}
-                className="input-model"
-                disabled={locked}
-              >
-                {MODELS[provider].map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
+              <select value={model} onChange={e => onModelChange(e.target.value)} className="input-model" disabled={locked}>
+                {MODELS[provider].map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </label>
             <label className="control-label dev-toggle" title="Dev mode: shows raw %%section%% markers in the stream. With Ollama also caps tokens for speed.">
-              <input
-                type="checkbox"
-                checked={devMode}
-                onChange={e => onDevModeChange(e.target.checked)}
-                disabled={locked}
-              />
+              <input type="checkbox" checked={devMode} onChange={e => onDevModeChange(e.target.checked)} disabled={locked} />
               Dev
             </label>
-            {confirmingPurge ? (
-              <span className="inline-confirm">
-                <span className="inline-confirm-label">Purge session NPCs?</span>
-                <button className="btn btn-danger btn-sm" onClick={() => { setConfirmingPurge(false); onPurgeNpcs() }}>Yes</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setConfirmingPurge(false)}>No</button>
-              </span>
-            ) : (
-              <button onClick={() => setConfirmingPurge(true)} className="btn btn-secondary" title="Delete all auto-created session NPCs">
-                Purge NPCs
-              </button>
-            )}
-            <button onClick={onOpenBenchmarks} className="btn btn-secondary" title="View token benchmark trends">
-              Benchmarks
-            </button>
             <button onClick={onBoot} disabled={locked} className="btn btn-primary">
               {streaming ? 'Booting…' : 'Boot Session'}
             </button>
           </>
         )}
+
+        {/* ── Post-boot controls ────────────────────────────────────────── */}
         {isBooted && (
           <>
             <span className="session-badge">
@@ -187,22 +192,12 @@ export default function Header({
                   ? `⚡ ${Number(rateLimits.tpm_remaining).toLocaleString()}/${Number(rateLimits.tpm_limit).toLocaleString()} TPM`
                   : null}
                 {rateLimits.tpm_remaining && rateLimits.tpm_limit && rateLimits.rpm_remaining && rateLimits.rpm_limit
-                  ? ' · '
-                  : null}
+                  ? ' · ' : null}
                 {rateLimits.rpm_remaining && rateLimits.rpm_limit
                   ? `${rateLimits.rpm_remaining}/${rateLimits.rpm_limit} RPM`
                   : null}
               </span>
             )}
-            <button onClick={onViewLog} disabled={ending} className="btn btn-secondary">
-              View Log
-            </button>
-            <button onClick={onOpenApiLogs} disabled={ending} className="btn btn-secondary">
-              API Logs
-            </button>
-            <button onClick={onOpenBenchmarks} disabled={ending} className="btn btn-secondary" title="View token benchmark trends">
-              Benchmarks
-            </button>
             {ending ? (
               <>
                 <button disabled className="btn btn-danger">Ending…</button>
@@ -223,6 +218,51 @@ export default function Header({
             )}
           </>
         )}
+
+        {/* ── Tools dropdown — always visible ──────────────────────────── */}
+        {confirmingPurge ? (
+          <span className="inline-confirm">
+            <span className="inline-confirm-label">Purge session NPCs?</span>
+            <button className="btn btn-danger btn-sm" onClick={() => { setConfirmingPurge(false); onPurgeNpcs() }}>Yes</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setConfirmingPurge(false)}>No</button>
+          </span>
+        ) : (
+          <div className="tools-dropdown" ref={toolsRef}>
+            <button
+              className={`btn btn-secondary tools-toggle${toolsOpen ? ' active' : ''}`}
+              onClick={() => setToolsOpen(v => !v)}
+              title="Dev & utility tools"
+            >
+              Tools ▾
+            </button>
+            {toolsOpen && (
+              <div className="tools-menu">
+                {isBooted && (
+                  <>
+                    <button className="tools-item" onClick={() => openTool(onViewLog)} disabled={ending}>
+                      📄 View Session Log
+                    </button>
+                    <button className="tools-item" onClick={() => openTool(onOpenApiLogs)} disabled={ending}>
+                      🔌 API Logs
+                    </button>
+                    <div className="tools-separator" />
+                  </>
+                )}
+                <button className="tools-item" onClick={() => openTool(onOpenBenchmarks)}>
+                  📈 Token Benchmarks
+                </button>
+                <button className="tools-item" onClick={() => openTool(onOpenCoverage)}>
+                  ✅ Coverage Matrix
+                </button>
+                <div className="tools-separator" />
+                <button className="tools-item tools-item--danger" onClick={triggerPurge}>
+                  🗑 Purge Session NPCs
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </header>
   )

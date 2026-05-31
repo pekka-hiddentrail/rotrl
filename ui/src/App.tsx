@@ -8,6 +8,7 @@ import CharacterSidebar from './components/CharacterSidebar'
 import CharacterSheet from './components/CharacterSheet'
 import ApiLogPanel from './components/ApiLogPanel'
 import TokenBenchmarks from './components/TokenBenchmarks'
+import CoverageMatrix from './components/CoverageMatrix'
 import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
@@ -62,6 +63,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
   const [showBenchmarks, setShowBenchmarks] = useState(false)
+  const [showCoverage,    setShowCoverage]    = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
   // Refs for reading current state inside async closures (stale closure guard)
@@ -371,6 +373,7 @@ export default function App() {
         onViewLog={handleViewLog}
         onOpenApiLogs={() => setShowApiLogs(true)}
         onOpenBenchmarks={() => setShowBenchmarks(true)}
+        onOpenCoverage={() => setShowCoverage(true)}
         onPurgeNpcs={handlePurgeNpcs}
       />
 
@@ -473,6 +476,10 @@ export default function App() {
 
       {showBenchmarks && (
         <TokenBenchmarks onClose={() => setShowBenchmarks(false)} />
+      )}
+
+      {showCoverage && (
+        <CoverageMatrix onClose={() => setShowCoverage(false)} />
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />

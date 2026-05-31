@@ -119,6 +119,53 @@ export async function fetchBenchmarks(): Promise<BenchmarkRow[]> {
   return data.rows
 }
 
+export interface CoverageRow {
+  feature_id:   string
+  feature_file: string
+  ac_id:        string
+  title:        string
+  pytest:       string[]
+  vitest:       string[]
+  playwright:   string[]
+  exploratory:  string[]
+  status:       'covered' | 'gap'
+}
+
+export interface CoverageData {
+  generated: string | null
+  summary:   { total: number; covered: number; gap: number }
+  rows:      CoverageRow[]
+}
+
+export async function fetchCoverage(): Promise<CoverageData> {
+  const res = await fetch(`${BASE}/coverage`)
+  if (!res.ok) throw new Error(`Coverage fetch failed (${res.status})`)
+  return res.json() as Promise<CoverageData>
+}
+
+export interface CodeCoverageFile {
+  name:          string
+  stmts:         number
+  miss:          number
+  covered:       number
+  pct:           number
+  missing_lines: number[]
+}
+
+export interface CodeCoverageData {
+  generated:   string | null
+  files:       CodeCoverageFile[]
+  total_stmts: number
+  total_miss:  number
+  total_pct:   number
+}
+
+export async function fetchCodeCoverage(): Promise<CodeCoverageData> {
+  const res = await fetch(`${BASE}/code-coverage`)
+  if (!res.ok) throw new Error(`Code coverage fetch failed (${res.status})`)
+  return res.json() as Promise<CodeCoverageData>
+}
+
 export async function resolveAttackRoll(
   sessionId: string,
   rolled: number,

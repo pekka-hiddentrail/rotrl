@@ -8,6 +8,9 @@ const SERIES = [
   { key: 'total_tokens'      as const, label: 'total',      color: '#c06060' },
 ]
 
+const CHART_MAX_TOKENS = 5000
+const CHART_TICK_STEP = 1000
+
 const TURN_LABELS: Record<number, string> = {
   1: 'Turn 1 — Swallowtail Festival',
   2: 'Turn 2 — Convince Hemlock',
@@ -34,16 +37,14 @@ function LineChart({ rows, title }: ChartProps) {
   const iW = W - PAD.left - PAD.right
   const iH = H - PAD.top - PAD.bottom
 
-  const allVals = SERIES.flatMap(s => rows.map(r => Number(r[s.key]) || 0))
-  const maxVal = Math.max(...allVals, 1)
-
   const xOf = (i: number) =>
     rows.length === 1 ? iW / 2 : (i / (rows.length - 1)) * iW
-  const yOf = (v: number) => iH - (v / maxVal) * iH
+  const yOf = (v: number) => iH - (Math.min(v, CHART_MAX_TOKENS) / CHART_MAX_TOKENS) * iH
 
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
-    y: iH - t * iH,
-    label: Math.round(t * maxVal).toLocaleString(),
+  const yTicks = Array.from({ length: CHART_MAX_TOKENS / CHART_TICK_STEP + 1 }, (_, i) => i * CHART_TICK_STEP)
+    .map(value => ({
+    y: iH - (value / CHART_MAX_TOKENS) * iH,
+    label: value.toLocaleString(),
   }))
 
   return (

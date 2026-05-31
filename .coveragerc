@@ -1,0 +1,15 @@
+[run]
+source = api
+omit =
+    api/__init__.py
+    api/context/__init__.py
+
+[report]
+show_missing = true
+precision = 0
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+
+[json]
+output = outputs/code_coverage.json

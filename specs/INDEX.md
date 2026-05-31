@@ -32,8 +32,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [player-bubble-speaker.feature](player-bubble-speaker.feature) | Frontend | `@chat` `@bubbles` `@character` `@speaker` `@identity` | 6 | `MessageBubble.tsx`, `types.ts` `MessageSpeaker`, `App.tsx` speaker snapshot, `index.css` |
 | [token-benchmark.feature](token-benchmark.feature) | Backend \| Frontend \| Infrastructure | `@benchmark` `@api-log` `@token` `@quality-of-life` | 7 | `GET /api/benchmarks`, `outputs/token_benchmarks.csv`, `TokenBenchmarks.tsx`, `test_token_benchmark.py`, `Header.tsx` Benchmarks button |
 | [splash-hints.feature](splash-hints.feature) | Frontend | `@splash` `@hints` `@ui` `@rotation` | 6 | `SplashHint.tsx`, `hints.ts`, `App.tsx`, `index.css` |
+| [coverage-matrix.feature](coverage-matrix.feature) | Backend \| Frontend \| Infrastructure | `@coverage` `@developer-tools` `@quality-of-life` | 7 | `scripts/build_coverage.py`, `outputs/coverage.json`, `GET /api/coverage`, `CoverageMatrix.tsx`, `Header.tsx` Coverage button |
 
-**Total: 150 acceptance criteria across 22 feature files**
+**Total: 185 acceptance criteria across 25 feature files**
 
 ---
 
