@@ -17,6 +17,7 @@ from api.session_manager import (
     Combatant,
     CombatState,
     PendingAttack,
+    _build_attack_history_message,
     _parse_attack_line,
     _parse_attack_block,
     _roll_dice,
@@ -54,7 +55,7 @@ def _fake_session(booted_session):
 
 # ── _roll_dice ────────────────────────────────────────────────────────────────
 
-class TestRollDice:
+class TestRollDice:  # AC-001
     def test_single_die(self):
         rolls, total = _roll_dice("1d6")
         assert len(rolls) == 1
@@ -87,7 +88,7 @@ class TestRollDice:
 
 # ── _parse_attack_line ────────────────────────────────────────────────────────
 
-class TestParseAttackLine:
+class TestParseAttackLine:  # AC-001
     def test_happy_path(self):
         line = "  - attacker: Thaelion · target: Goblin 1 · bonus: +5 · damage: 1d8+3 · type: melee"
         a = _parse_attack_line(line)
@@ -133,7 +134,7 @@ class TestParseAttackLine:
 
 # ── _parse_attack_block ───────────────────────────────────────────────────────
 
-class TestParseAttackBlock:
+class TestParseAttackBlock:  # AC-001
     def test_two_attacks(self):
         block = (
             "- attacker: Goblin 1 · target: Shalelu · bonus: +4 · damage: 1d4+2\n"
@@ -158,7 +159,7 @@ class TestParseAttackBlock:
 
 # ── _is_pc_attacker ───────────────────────────────────────────────────────────
 
-class TestIsPcAttacker:
+class TestIsPcAttacker:  # AC-002
     def test_pc_found(self, booted_session):
         _, _, session = _fake_session(booted_session)
         assert _is_pc_attacker("Thaelion", session) is True
@@ -171,7 +172,7 @@ class TestIsPcAttacker:
 
 # ── _resolve_npc_attack ───────────────────────────────────────────────────────
 
-class TestResolveNpcAttack:
+class TestResolveNpcAttack:  # AC-002, AC-007
     def test_guaranteed_hit(self, booted_session):
         _, _, session = _fake_session(booted_session)
         attack = {"attacker": "Goblin 1", "target": "Shalelu", "bonus": 100, "damage": "1d6+2", "type": "melee"}
@@ -201,7 +202,7 @@ class TestResolveNpcAttack:
 
 # ── resolve_attack_roll ───────────────────────────────────────────────────────
 
-class TestResolveAttackRoll:
+class TestResolveAttackRoll:  # AC-003
     def _queue_pc_attack(self, session):
         session.attack_queue.append(PendingAttack(
             attacker="Thaelion", target="Goblin 1",
@@ -235,7 +236,7 @@ class TestResolveAttackRoll:
 
 # ── resolve_damage_roll ───────────────────────────────────────────────────────
 
-class TestResolveDamageRoll:
+class TestResolveDamageRoll:  # AC-004
     def _setup_hit(self, session):
         session.attack_queue.append(PendingAttack(
             attacker="Thaelion", target="Goblin 1",
@@ -260,7 +261,7 @@ class TestResolveDamageRoll:
 
 # ── resume_combat endpoint ────────────────────────────────────────────────────
 
-class TestResumeCombat:
+class TestResumeCombat:  # AC-005, AC-006
     def test_injects_results_and_calls_llm(self, booted_session):
         client, session_id, session = _fake_session(booted_session)
         session.attack_results = [
@@ -290,7 +291,7 @@ class TestResumeCombat:
 
 # ── SSE integration ───────────────────────────────────────────────────────────
 
-class TestAttackSseIntegration:
+class TestAttackSseIntegration:  # AC-002, AC-007, AC-008
     def test_npc_auto_resolved_pc_queued(self, booted_session):
         """NPC attack → attack_result SSE; PC attack → attack_request SSE."""
         client, session_id, session = _fake_session(booted_session)
@@ -356,3 +357,145 @@ class TestAttackSseIntegration:
         assert "%%ATTACK%%" not in token_content
         assert "attacker:" not in token_content
         assert "Fight!" in token_content
+
+
+# ── _build_attack_history_message ────────────────────────────────────────────
+
+class TestBuildAttackHistoryMessage:  # AC-005
+    def _hit(self, attacker="Thaelion", target="Goblin 1", roll=15, bonus=5,
+             total=20, ac=13, damage_rolls=None, damage_total=8):
+        return {
+            "attacker": attacker, "target": target,
+            "roll": roll, "bonus": bonus, "total": total, "ac": ac,
+            "hit": True, "damage_rolls": damage_rolls or [6, 2],
+            "damage_total": damage_total, "attack_type": "melee", "is_pc": True,
+        }
+
+    def _miss(self, attacker="Goblin 1", target="Shalelu", roll=3, bonus=4, total=7, ac=17):
+        return {
+            "attacker": attacker, "target": target,
+            "roll": roll, "bonus": bonus, "total": total, "ac": ac,
+            "hit": False, "damage_rolls": [], "damage_total": 0,
+            "attack_type": "melee", "is_pc": False,
+        }
+
+    def test_hit_entry_format(self):
+        msg = _build_attack_history_message([self._hit()], round_num=2)
+        assert "ATTACK RESULTS — round 2" in msg
+        assert "Thaelion → Goblin 1" in msg
+        assert "HIT" in msg
+        assert "8 damage" in msg
+        assert "vs AC 13" in msg
+
+    def test_miss_entry_format(self):
+        msg = _build_attack_history_message([self._miss()], round_num=1)
+        assert "Goblin 1 → Shalelu" in msg
+        assert "MISS" in msg
+        assert "damage" not in msg
+
+    def test_negative_bonus_formatted(self):
+        msg = _build_attack_history_message([self._miss(bonus=-2, total=1)], round_num=1)
+        assert "-2" in msg
+
+    def test_empty_results_header_only(self):
+        msg = _build_attack_history_message([], round_num=3)
+        assert "ATTACK RESULTS" in msg
+        assert "→" not in msg
+
+    def test_multiple_entries_all_present(self):
+        msg = _build_attack_history_message([self._hit(), self._miss()], round_num=2)
+        assert "Thaelion → Goblin 1" in msg
+        assert "Goblin 1 → Shalelu" in msg
+        assert "HIT" in msg
+        assert "MISS" in msg
+
+
+# ── multi-attack queue progression ───────────────────────────────────────────
+
+class TestMultiAttackQueue:  # AC-009
+    def _queue_two(self, session):
+        session.attack_queue.extend([
+            PendingAttack(attacker="Thaelion", target="Goblin 1",
+                          bonus=5, damage_expr="1d8+3", attack_type="melee", is_pc=True),
+            PendingAttack(attacker="Thaelion", target="Goblin 1",
+                          bonus=0, damage_expr="1d8", attack_type="melee", is_pc=True),
+        ])
+
+    def test_miss_exposes_next_attack(self, booted_session):
+        """After a miss the first attack is removed; next_attack is the second."""
+        _, _, session = _fake_session(booted_session)
+        self._queue_two(session)
+        result = resolve_attack_roll(session, 1)  # 1+5=6 < AC 13 → miss
+        assert result["hit"] is False
+        assert result["queue_remaining"] == 1
+        assert result["next_attack"] is not None
+        assert result["next_attack"]["bonus"] == 0
+
+    def test_hit_blocks_next_until_damage(self, booted_session):
+        """After a hit the attack awaits damage; next_attack is None."""
+        _, _, session = _fake_session(booted_session)
+        self._queue_two(session)
+        result = resolve_attack_roll(session, 15)  # 15+5=20 ≥ AC 13 → hit
+        assert result["hit"] is True
+        assert result["queue_remaining"] == 2
+        assert result["next_attack"] is None  # first attack still in damage phase
+
+    def test_damage_resolve_exposes_second_attack(self, booted_session):
+        """After damage is rolled, next_attack returns the second queued attack."""
+        _, _, session = _fake_session(booted_session)
+        self._queue_two(session)
+        resolve_attack_roll(session, 15)                  # first attack hits
+        result = resolve_damage_roll(session, [4], 7)     # first attack damaged
+        assert result["queue_remaining"] == 1
+        assert result["next_attack"] is not None
+        assert result["next_attack"]["bonus"] == 0        # second attack
+
+
+# ── resolve_attack_roll guard ─────────────────────────────────────────────────
+
+class TestResolveAttackRollGuard:  # AC-003
+    def test_raises_if_already_in_damage_phase(self, booted_session):
+        """Calling resolve_attack_roll while hit=True (damage pending) raises."""
+        _, _, session = _fake_session(booted_session)
+        session.attack_queue.append(PendingAttack(
+            attacker="Thaelion", target="Goblin 1",
+            bonus=5, damage_expr="1d8+3", attack_type="melee", is_pc=True,
+        ))
+        session.attack_queue[0].hit = True
+        with pytest.raises(ValueError, match="damage roll"):
+            resolve_attack_roll(session, 10)
+
+
+# ── NPC attack on 0-HP target ─────────────────────────────────────────────────
+
+class TestNpcAttackOnDeadTarget:  # AC-007
+    def test_hp_stays_at_zero(self, booted_session):
+        """A guaranteed NPC hit on a 0-HP target does not drive HP negative."""
+        _, _, session = _fake_session(booted_session)
+        shalelu = next(c for c in session.combat_state.combatants if c.name == "Shalelu")
+        shalelu.hp_current = 0
+        attack = {"attacker": "Goblin 1", "target": "Shalelu",
+                  "bonus": 100, "damage": "4d6+10", "type": "melee"}
+        _resolve_npc_attack(attack, session)
+        assert shalelu.hp_current == 0
+
+
+# ── stream_resume_combat with empty attack_results ───────────────────────────
+
+class TestResumeCombatEmptyResults:  # AC-005
+    def test_still_calls_llm(self, booted_session):
+        """resume_combat with no prior attack results injects a bare header and calls LLM."""
+        client, session_id, session = _fake_session(booted_session)
+        # attack_results is already [] by default
+        mock_resp = make_stream_response(
+            ["%%NARRATIVE%%\n\nThe dust settles.\n\n%%DELTAS%%\n[]\n"]
+        )
+        with patch("api.session_manager._requests.post", return_value=mock_resp) as mock_post:
+            resp = client.post(f"/api/sessions/{session_id}/resume_combat")
+        assert resp.status_code == 200
+        mock_post.assert_called_once()
+        events = parse_sse(resp)
+        assert any(e["type"] == "token" for e in events)
+        # The bare header is still injected into history
+        assert any("ATTACK RESULTS" in m["content"]
+                   for m in session.messages if m["role"] == "user")

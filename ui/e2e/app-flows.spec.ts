@@ -110,12 +110,14 @@ test.beforeEach(async ({ page }) => {
   await installBaseRoutes(page)
 })
 
+// Covers: session-boot.feature AC-001
 test('boot shows the session badge', async ({ page }) => {
   await boot(page)
 
   await expect(page.getByText(/llama-3.3-70b-versatile/)).toBeVisible()
 })
 
+// Covers: chat-display.feature AC-001, AC-002
 test('send turn displays a streamed GM message', async ({ page }) => {
   await page.route('**/api/sessions/sess-e2e/turn', route =>
     fulfillSse(
@@ -132,6 +134,7 @@ test('send turn displays a streamed GM message', async ({ page }) => {
   await expect(page.getByText('The square wakes.')).toBeVisible()
 })
 
+// Covers: dice-panel.feature AC-001, AC-002, AC-003
 test('roll_request event activates the dice panel', async ({ page }) => {
   await page.route('**/api/sessions/sess-e2e/turn', route =>
     fulfillSse(route, {
@@ -152,6 +155,7 @@ test('roll_request event activates the dice panel', async ({ page }) => {
   await expect(page.getByText('DC 18')).toBeVisible()
 })
 
+// Covers: session-end-recap.feature AC-001
 test('end session clears chat and returns to pre-boot', async ({ page }) => {
   await page.route('**/api/sessions/sess-e2e/end', route =>
     fulfillSse(
@@ -168,6 +172,7 @@ test('end session clears chat and returns to pre-boot', async ({ page }) => {
   await expect(page.getByText(/Session 1/)).not.toBeVisible()
 })
 
+// Covers: session-controls.feature AC-002
 test('Kill button confirms and resets stuck ending flow', async ({ page }) => {
   let releaseEnd: (() => void) | null = null
   await page.route('**/api/sessions/sess-e2e/end', async route => {
@@ -190,16 +195,19 @@ test('Kill button confirms and resets stuck ending flow', async ({ page }) => {
   releaseEnd?.()
 })
 
+// Covers: npc-system.feature AC-001
 test('Purge NPCs confirms inline and shows a toast', async ({ page }) => {
   await page.goto('/')
 
-  await page.getByRole('button', { name: 'Purge NPCs' }).click()
+  await page.getByRole('button', { name: /Tools/ }).click()
+  await page.getByRole('button', { name: /Purge Session NPCs/ }).click()
   await expect(page.getByText('Purge session NPCs?')).toBeVisible()
   await page.getByRole('button', { name: 'Yes' }).click()
 
   await expect(page.getByText('2 session NPC directories removed.')).toBeVisible()
 })
 
+// Covers: character-system.feature AC-001, AC-002
 test('character sidebar opens the character sheet modal', async ({ page }) => {
   await page.goto('/')
 

@@ -115,6 +115,39 @@ def _feature_hint(text: str) -> str | None:
     return m.group(1) if m else None
 
 
+# Matches inline per-test annotations, e.g.:
+#   // Covers: attack-resolution.feature AC-001, AC-002, AC-003
+_INLINE_COVERS_RE = re.compile(
+    r"[Cc]overs:\s+([\w\-]+)\.feature\s+((?:AC-\d{3}[,\s]*)+)",
+    re.MULTILINE,
+)
+
+
+def _attach_inline_covers(
+    text: str,
+    name: str,
+    all_acs: dict[tuple[str, str], AcEntry],
+    suite: str,
+) -> set[tuple[str, str]]:
+    """Process per-line 'Covers: feature.feature AC-NNN, ...' annotations.
+
+    Returns a set of (feature_id, ac_id) pairs that were explicitly attributed
+    via inline annotations, so the caller can skip them in the fallback loop.
+    """
+    handled: set[tuple[str, str]] = set()
+    for m in _INLINE_COVERS_RE.finditer(text):
+        feature_id = m.group(1)
+        ac_ids = re.findall(r"AC-\d{3}", m.group(0))
+        for ac_id in ac_ids:
+            entry = all_acs.get((feature_id, ac_id))
+            if entry is not None:
+                target: list[str] = getattr(entry, suite)
+                if name not in target:
+                    target.append(name)
+            handled.add((feature_id, ac_id))
+    return handled
+
+
 def _attach_coverage(
     test_files: list[Path],
     suite: str,
@@ -125,13 +158,21 @@ def _attach_coverage(
         text  = path.read_text(encoding="utf-8", errors="replace")
         name  = path.name
         hint  = _feature_hint(text)
+
+        # Process inline per-test annotations first (highest priority).
+        inline_handled = _attach_inline_covers(text, name, all_acs, suite)
+
         found = _extract_acs(text)
 
         for ac_id in found:
             entry: AcEntry | None = None
 
             if hint:
-                entry = all_acs.get((hint, ac_id))
+                key = (hint, ac_id)
+                # Skip if already attributed via an inline Covers: annotation
+                if key in inline_handled:
+                    continue
+                entry = all_acs.get(key)
 
             if entry is None:
                 # Fallback: match if exactly one spec file defines this AC ID.
@@ -139,6 +180,9 @@ def _attach_coverage(
                 #  until the test file gets a Spec: header.)
                 candidates = [e for (fid, aid), e in all_acs.items() if aid == ac_id]
                 if len(candidates) == 1:
+                    # Skip if already attributed via inline annotation
+                    if (candidates[0].feature_id, ac_id) in inline_handled:
+                        continue
                     entry = candidates[0]
 
             if entry is not None:

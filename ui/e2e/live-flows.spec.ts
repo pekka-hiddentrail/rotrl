@@ -100,6 +100,7 @@ test.describe.serial('L1-L4 — live session and response format', () => {
   })
 
   // L1 — session badge confirms Haiku is active and no errors surfaced
+  // Covers: session-boot.feature AC-001, AC-002
   test('L1 — session badge shows Haiku, no error bar', async () => {
     await expect(page.getByText(/haiku/i)).toBeVisible()
     await expect(page.locator('.error-bar')).not.toBeVisible()
@@ -107,6 +108,7 @@ test.describe.serial('L1-L4 — live session and response format', () => {
   })
 
   // L2 — LLM followed the format: %%NARRATIVE%% must appear in the GM bubble
+  // Covers: response-parsing.feature AC-001
   test('L2 — GM bubble contains %%NARRATIVE%%', async () => {
     await expect(
       page.locator('.bubble-gm').filter({ hasText: '%%NARRATIVE%%' }),
@@ -114,6 +116,7 @@ test.describe.serial('L1-L4 — live session and response format', () => {
   })
 
   // L3 — %%DELTAS%% section also present (both required headers = format intact)
+  // Covers: response-parsing.feature AC-001
   test('L3 — GM bubble contains %%DELTAS%%', async () => {
     await expect(
       page.locator('.bubble-gm').filter({ hasText: '%%DELTAS%%' }),
@@ -121,6 +124,7 @@ test.describe.serial('L1-L4 — live session and response format', () => {
   })
 
   // L4 — session log written to disk and accessible via API; contains the markers
+  // Covers: session-logging.feature AC-001, AC-002
   test('L4 — log API returns 200 and contains %%NARRATIVE%%', async () => {
     expect(sessionId, 'session ID was not captured from /turn request').toBeTruthy()
     const response = await page.request.get(`/api/sessions/${sessionId}/log`)
@@ -138,6 +142,7 @@ test.describe.serial('L1-L4 — live session and response format', () => {
 // Asserts the session closes cleanly and the session number increments.
 // ---------------------------------------------------------------------------
 
+// Covers: session-end-recap.feature AC-001, AC-002, AC-003
 test('L5 — end session writes recap and returns to pre-boot', async ({ page }) => {
   await page.goto('/')
   await configureHaiku(page)
@@ -167,6 +172,7 @@ test('L5 — end session writes recap and returns to pre-boot', async ({ page })
 // renders it — HP bar and party label visible on page load.
 // ---------------------------------------------------------------------------
 
+// Covers: character-system.feature AC-001
 test('L6 — character sidebar renders from real /api/characters', async ({ page }) => {
   await page.goto('/')
 
@@ -202,6 +208,7 @@ test.describe.serial('L7-L8 - live generated NPC lifecycle', () => {
     }
   })
 
+  // Covers: npc-system.feature AC-003, AC-004, AC-005
   test('L7 - %%GENERATE%% creates a dot-prefixed NPC directory', async ({ page }) => {
     const before = new Set(dotNpcDirs())
     initialLocationDirs = new Set(locationDirs())
@@ -247,6 +254,7 @@ test.describe.serial('L7-L8 - live generated NPC lifecycle', () => {
     await expect(page.getByRole('button', { name: 'Boot Session' })).toBeVisible({ timeout: 15_000 })
   })
 
+  // Covers: npc-system.feature AC-006
   test('L8 - Purge NPCs removes the generated NPC directory', async ({ page }) => {
     test.skip(!generatedNpcDir, 'L7 did not create a generated NPC directory')
 
@@ -257,8 +265,9 @@ test.describe.serial('L7-L8 - live generated NPC lifecycle', () => {
     )
 
     await page.goto('/')
-    await expect(page.getByRole('button', { name: 'Purge NPCs' })).toBeVisible()
-    await page.getByRole('button', { name: 'Purge NPCs' }).click()
+    await page.getByRole('button', { name: /Tools/ }).click()
+    await expect(page.getByRole('button', { name: /Purge Session NPCs/ })).toBeVisible()
+    await page.getByRole('button', { name: /Purge Session NPCs/ }).click()
     await expect(page.getByText('Purge session NPCs?')).toBeVisible()
     await page.getByRole('button', { name: 'Yes' }).click()
 
@@ -274,13 +283,14 @@ test.describe.serial('L7-L8 - live generated NPC lifecycle', () => {
 })
 
 // ---------------------------------------------------------------------------
-// L9-L11 - live event, combat, and roll lifecycle
+// L9-L12 - live event, combat, roll, and attack lifecycle
 //
-// Drives the goblin raid from event trigger to combat tracker, then verifies a
-// live %%ROLL%% prompt can be answered through the dice panel.
+// Drives the goblin raid from event trigger through combat tracker, skill roll,
+// and full PC attack-resolution flow (NPC auto-resolve → PC to-hit banner →
+// optional damage roll → resume_combat LLM narrative).
 // ---------------------------------------------------------------------------
 
-test.describe.serial('L9-L11 - live goblin event, combat, and roll flow', () => {
+test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow', () => {
   let page: Page
   let initialSessionNpcDirs = new Set<string>()
   let initialLocationDirs = new Set<string>()
@@ -312,6 +322,7 @@ test.describe.serial('L9-L11 - live goblin event, combat, and roll flow', () => 
     }
   })
 
+  // Covers: event-injection.feature AC-001
   test('L9 - live turn triggers goblin_attack_starts event', async () => {
     await sendTurnAndWait(
       page,
@@ -328,6 +339,7 @@ test.describe.serial('L9-L11 - live goblin event, combat, and roll flow', () => 
     await expect(gmBubble).toContainText('goblin_attack_starts')
   })
 
+  // Covers: combat-tracker.feature AC-001, AC-004, AC-005, AC-006
   test('L10 - spotting goblins produces %%COMBAT%% round 1', async () => {
     await sendTurnAndWait(
       page,
@@ -357,6 +369,7 @@ test.describe.serial('L9-L11 - live goblin event, combat, and roll flow', () => 
     expect(diceBox.x, 'dice panel should start on the left side').toBeLessThan(viewport!.width / 2)
   })
 
+  // Covers: dice-panel.feature AC-001, AC-002, AC-004
   test('L11 - %%ROLL%% prompt can be answered from the dice panel', async () => {
     await sendTurnAndWait(
       page,
@@ -378,5 +391,81 @@ test.describe.serial('L9-L11 - live goblin event, combat, and roll flow', () => 
 
     await expect(page.locator('.history-row').first()).toContainText(/PASSED|FAILED/, { timeout: 15_000 })
     await expect(page.getByText(/rolled (?:a )?\d+/i).last()).toBeVisible()
+  })
+
+  // L12 — PC attack-resolution: NPC auto-resolves, PC roll prompt, then resume
+  // Covers: attack-resolution.feature AC-001, AC-002, AC-003, AC-004, AC-005, AC-007
+  test('L12 - attack-resolution: NPC auto-resolves, PC roll prompt then resume_combat', async () => {
+    // combat_state is active from L10 (round 1); _COMBAT_SPEC_ONGOING is injected,
+    // which includes the %%ATTACK%% format spec. L11 resolved a Perception roll so
+    // streaming is idle and we can proceed immediately to round 2.
+    await sendTurnAndWait(
+      page,
+      [
+        'Round 2: a goblin warrior charges and swings at Yanyeeku with its dogslicer.',
+        'Yanyeeku braces and counter-attacks with her morningstar.',
+        'Write %%COMBAT%% round: 2 keeping all existing combatants.',
+        'Immediately after the %%COMBAT%% block write a %%ATTACK%% block with exactly two lines',
+        '(one NPC attack, one PC attack) in this exact format:',
+        '- attacker: [goblin name] · target: Yanyeeku · bonus: +2 · damage: 1d4 · type: melee',
+        '- attacker: Yanyeeku · target: [goblin name] · bonus: +2 · damage: 1d8 · type: melee',
+        'Replace [goblin name] with the actual name of the lead goblin warrior from the current combat.',
+        'Do NOT write a %%ROLL%% block.',
+        'Do not resolve attack outcomes or dice yourself.',
+      ].join(' '),
+    )
+
+    // AC-001: %%ATTACK%% block was present in the GM response (dev mode shows markers)
+    await expect(page.locator('.bubble-gm').last()).toContainText('%%ATTACK%%', { timeout: 60_000 })
+
+    // AC-002: NPC attack auto-resolved → attack_result SSE → HP bar(s) visible in CombatPanel
+    await expect(page.locator('.combat-panel')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('.combatant-hp-row').first()).toBeVisible()
+
+    // AC-002 + AC-003: PC attack queued → attack_request SSE → DicePanel shows to-hit banner
+    await expect(page.locator('.dice-panel-active')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('.attack-banner')).toBeVisible()
+    // Banner must identify Yanyeeku as the attacker
+    await expect(page.locator('.roll-request-skill')).toContainText('Yanyeeku')
+
+    // AC-003: clicking the to-hit prompt auto-rolls d20 → POST /resolve_attack_roll
+    // Set up both listeners before the click to avoid race conditions on the miss path.
+    const atkResponsePromise = page.waitForResponse(r => r.url().includes('/resolve_attack_roll'))
+    const resumeRequestPromise = page.waitForRequest(
+      r => r.url().includes('/resume_combat'),
+      { timeout: 30_000 },
+    )
+    await page.locator('.roll-request-prompt').click()
+    const atkResponse = await atkResponsePromise
+    const atkData = await atkResponse.json()
+
+    if (atkData.hit) {
+      // AC-004: hit path — damage banner appears, player picks a die and rolls
+      await expect(page.locator('.attack-banner--damage')).toBeVisible({ timeout: 8_000 })
+      await expect(page.locator('.roll-request-skill')).toContainText('HIT!')
+
+      // Pick the d8 die (Yanyeeku morningstar: 1d8)
+      await page.locator('.die-btn').filter({ hasText: 'd8' }).click()
+
+      // Click Roll Damage → POST /resolve_damage_roll
+      const dmgResponsePromise = page.waitForResponse(r => r.url().includes('/resolve_damage_roll'))
+      await page.locator('.attack-damage-roll-btn').click()
+      await dmgResponsePromise
+
+      // AC-007: Goblin Warrior HP may be reduced — CombatPanel still visible
+      await expect(page.locator('.combat-panel')).toBeVisible()
+    }
+    // Miss path: banner clears automatically; doResumeCombat fires immediately.
+
+    // AC-005: resume_combat called when queue_remaining === 0 (hit or miss)
+    const resumeRequest = await resumeRequestPromise
+    expect(resumeRequest.method()).toBe('POST')
+
+    // GM narrative streams; wait for it to finish (textbox re-enables)
+    await expect(page.getByRole('textbox')).toBeEnabled({ timeout: 60_000 })
+    await expect(page.locator('.bubble-gm').last()).toBeVisible()
+
+    // Attack banner is cleared after full resolution
+    await expect(page.locator('.attack-banner')).not.toBeVisible()
   })
 })

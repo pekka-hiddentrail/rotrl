@@ -13,7 +13,7 @@ Spec: specs/session-boot.feature
 
 1. Set session number to 1, provider Groq, model `llama-3.3-70b-versatile`, Dev Mode OFF.
 2. Click Boot Session.
-3. ✔ Intro card appears immediately (before boot finishes) and renders markdown — check headers, italics, bullet lists.
+3. ✔ Intro card appears immediately (before boot finishes) and renders markdown — no raw `##`, `*`, or `-` characters visible; headers are styled, italics are italic, bullet lists are indented list items.
 4. ✔ Session badge (`Session 1 · llama-3.3-70b-versatile`) appears after boot, not before.
 5. ✔ No error bar.
 
