@@ -389,6 +389,11 @@ export default function App() {
   }
 
   const isBooted = session !== null
+  const pendingRollSpeakerName = pendingRoll?.speaker?.toLowerCase()
+  const pendingRollSpeaker = pendingRollSpeakerName
+    ? characters.find(c => c.name.toLowerCase() === pendingRollSpeakerName) ?? null
+    : null
+  const diceSpeaker = activeCharacter ? characterMap[activeCharacter] : pendingRollSpeaker
 
   return (
     <div className="app">
@@ -474,15 +479,13 @@ export default function App() {
           key={diceKey}
           sessionId={session?.id ?? null}
           pendingRoll={pendingRoll}
-          activeSpeaker={activeCharacter ? characterMap[activeCharacter] : null}
+          activeSpeaker={diceSpeaker}
           attackPhase={attackPhase}
           attackLog={attackLog}
           onAttackRoll={handleAttackRoll}
           onDamageRoll={handleDamageRoll}
           onRoll={async (expr: string, rolls: number[], total: number) => {
-            const speaker = activeCharacter
-              ? characterMap[activeCharacter]
-              : characters.find(c => c.name === pendingRoll?.speaker) ?? null
+            const speaker = diceSpeaker
             const speakerName = speaker?.name ?? null
             const rawTotal = rolls.reduce((a, b) => a + b, 0)
             const modifier = total - rawTotal

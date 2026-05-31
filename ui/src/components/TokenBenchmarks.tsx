@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { BenchmarkRow } from '../api'
-import { fetchBenchmarks } from '../api'
+import { fetchBenchmarks, fetchCombatBenchmarks } from '../api'
+
+type TaggedRow = BenchmarkRow & { _source: 'basic' | 'combat' }
 
 const SERIES = [
   { key: 'prompt_tokens'     as const, label: 'prompt',     color: '#4a9068' },
@@ -10,12 +12,22 @@ const SERIES = [
 
 const CHART_MAX_TOKENS = 5000
 const CHART_TICK_STEP = 1000
+const PAGE_SIZE = 12
+const MAX_PER_SOURCE = 30
 
 const TURN_LABELS: Record<number, string> = {
   1: 'Turn 1 — Swallowtail Festival',
   2: 'Turn 2 — Convince Hemlock',
   3: 'Turn 3 — Rusty Dragon',
 }
+
+const COMBAT_SCENARIO_LABELS: Record<string, string> = {
+  combat_init:  'Combat T2 — Initiation',
+  first_strike: 'Combat T3 — First Strike',
+  intimidate:   'Combat T4 — Intimidate',
+}
+
+const COMBAT_SCENARIOS = ['combat_init', 'first_strike', 'intimidate'] as const
 
 interface ChartProps {
   rows: BenchmarkRow[]
@@ -117,21 +129,27 @@ function LineChart({ rows, title }: ChartProps) {
   )
 }
 
-const PAGE_SIZE = 9
-
 interface Props {
   onClose: () => void
 }
 
 export default function TokenBenchmarks({ onClose }: Props) {
-  const [rows, setRows] = useState<BenchmarkRow[]>([])
+  const [basicRows,  setBasicRows]  = useState<TaggedRow[]>([])
+  const [combatRows, setCombatRows] = useState<TaggedRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(0)
 
   useEffect(() => {
-    fetchBenchmarks()
-      .then(data => setRows([...data].reverse()))
+    Promise.all([fetchBenchmarks(), fetchCombatBenchmarks()])
+      .then(([basic, combat]) => {
+        setBasicRows(
+          basic.slice(-MAX_PER_SOURCE).reverse().map(r => ({ ...r, _source: 'basic' as const })),
+        )
+        setCombatRows(
+          combat.slice(-MAX_PER_SOURCE).reverse().map(r => ({ ...r, _source: 'combat' as const })),
+        )
+      })
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [])
@@ -146,9 +164,16 @@ export default function TokenBenchmarks({ onClose }: Props) {
     if (e.target === e.currentTarget) onClose()
   }
 
-  // Chronological order for charts (oldest first)
-  const byTurn = (turn: number) =>
-    [...rows].reverse().filter(r => Number(r.turn) === turn)
+  const allRows = [...basicRows, ...combatRows]
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+
+  const basicByTurn = (turn: number) =>
+    [...basicRows].reverse().filter(r => Number(r.turn) === turn)
+
+  const combatByScenario = (scenario: string) =>
+    [...combatRows].reverse().filter(r => r.scenario === scenario)
+
+  const hasAny = basicRows.length > 0 || combatRows.length > 0
 
   return (
     <div className="sheet-overlay bm-overlay" onClick={handleBackdrop}>
@@ -156,17 +181,19 @@ export default function TokenBenchmarks({ onClose }: Props) {
         <button className="sheet-close" onClick={onClose} title="Close (Esc)">✕</button>
         <h2 className="bm-title">Token Benchmarks</h2>
         <p className="bm-subtitle">
-          Run <code>pytest tests/test_token_benchmark.py</code> to add data points.
+          Social: <code>pytest tests/test_token_benchmark.py::test_token_counts_three_turns</code>
+          {' · '}
+          Combat: <code>pytest tests/test_token_benchmark.py::test_token_counts_combat_turns</code>
         </p>
 
         {loading && <p className="api-log-empty">Loading…</p>}
         {error && <p className="api-log-empty api-log-empty--err">{error}</p>}
 
-        {!loading && !error && rows.length === 0 && (
+        {!loading && !error && !hasAny && (
           <p className="api-log-empty">No benchmark data yet.</p>
         )}
 
-        {!loading && !error && rows.length > 0 && (
+        {!loading && !error && hasAny && (
           <>
             <div className="bm-table-wrap">
               <table className="bm-table">
@@ -175,7 +202,7 @@ export default function TokenBenchmarks({ onClose }: Props) {
                     <th>Timestamp</th>
                     <th>Provider / Model</th>
                     <th>Session</th>
-                    <th>Turn</th>
+                    <th>Turn / Scenario</th>
                     <th>Prompt</th>
                     <th>Completion</th>
                     <th>Total</th>
@@ -184,12 +211,12 @@ export default function TokenBenchmarks({ onClose }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE).map((r, i) => (
-                    <tr key={i} className={`bm-row bm-row--t${r.turn}`}>
+                  {allRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE).map((r, i) => (
+                    <tr key={i} className={`bm-row bm-row--t${r.turn} bm-row--${r._source}`}>
                       <td className="bm-ts">{r.timestamp.replace('T', ' ')}</td>
                       <td className="bm-model">{r.provider} / {r.model}</td>
                       <td><code className="bm-session">{r.session}</code></td>
-                      <td className="bm-turn-cell">{r.turn}</td>
+                      <td className="bm-turn-cell">{r.scenario ?? r.turn}</td>
                       <td className="bm-num">{Number(r.prompt_tokens).toLocaleString()}</td>
                       <td className="bm-num">{Number(r.completion_tokens).toLocaleString()}</td>
                       <td className="bm-num bm-total">{Number(r.total_tokens).toLocaleString()}</td>
@@ -215,8 +242,8 @@ export default function TokenBenchmarks({ onClose }: Props) {
               </table>
             </div>
 
-            {rows.length > PAGE_SIZE && (() => {
-              const totalPages = Math.ceil(rows.length / PAGE_SIZE)
+            {allRows.length > PAGE_SIZE && (() => {
+              const totalPages = Math.ceil(allRows.length / PAGE_SIZE)
               return (
                 <div className="bm-paginator">
                   <button
@@ -226,7 +253,7 @@ export default function TokenBenchmarks({ onClose }: Props) {
                   >‹ Prev</button>
                   <span className="bm-page-info">
                     {page + 1} / {totalPages}
-                    <span className="bm-page-total"> ({rows.length} rows)</span>
+                    <span className="bm-page-total"> ({allRows.length} rows)</span>
                   </span>
                   <button
                     className="bm-page-btn"
@@ -237,9 +264,17 @@ export default function TokenBenchmarks({ onClose }: Props) {
               )
             })()}
 
+            <div className="bm-chart-section-label">Social (3-turn run)</div>
             <div className="bm-charts">
               {([1, 2, 3] as const).map(t => (
-                <LineChart key={t} rows={byTurn(t)} title={TURN_LABELS[t]} />
+                <LineChart key={t} rows={basicByTurn(t)} title={TURN_LABELS[t]} />
+              ))}
+            </div>
+
+            <div className="bm-chart-section-label">Combat</div>
+            <div className="bm-charts">
+              {COMBAT_SCENARIOS.map(s => (
+                <LineChart key={s} rows={combatByScenario(s)} title={COMBAT_SCENARIO_LABELS[s]} />
               ))}
             </div>
           </>

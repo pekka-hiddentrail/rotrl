@@ -105,6 +105,7 @@ export interface BenchmarkRow {
   model: string
   session: string
   turn: string | number
+  scenario?: string
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
@@ -115,6 +116,13 @@ export interface BenchmarkRow {
 export async function fetchBenchmarks(): Promise<BenchmarkRow[]> {
   const res = await fetch(`${BASE}/benchmarks`)
   if (!res.ok) throw new Error(`Benchmarks fetch failed (${res.status})`)
+  const data: { rows: BenchmarkRow[] } = await res.json()
+  return data.rows
+}
+
+export async function fetchCombatBenchmarks(): Promise<BenchmarkRow[]> {
+  const res = await fetch(`${BASE}/benchmarks/combat`)
+  if (!res.ok) throw new Error(`Combat benchmarks fetch failed (${res.status})`)
   const data: { rows: BenchmarkRow[] } = await res.json()
   return data.rows
 }

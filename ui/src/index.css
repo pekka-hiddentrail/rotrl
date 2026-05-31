@@ -2512,6 +2512,22 @@ body {
   background: #1e1008;
 }
 
+/* Subtle source tinting — green for social benchmark, amber for combat */
+.bm-row--basic td   { background-color: #0b130b; }
+.bm-row--combat td  { background-color: #151208; }
+.bm-row--basic:hover td  { background-color: #122012 !important; }
+.bm-row--combat:hover td { background-color: #221d08 !important; }
+
+.bm-chart-section-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin: 20px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e1208;
+}
+
 .bm-ts {
   font-size: 0.72rem;
   color: var(--text-muted);

@@ -579,6 +579,7 @@ describe('App - character speaker integration', () => {
     await user.type(screen.getByRole('textbox'), 'I listen at the south wall.')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.getByText('Perception')).toBeInTheDocument())
+    expect(screen.getByText('+7 from Perception')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Perception/i }))
 

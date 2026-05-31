@@ -28,7 +28,7 @@ def test_f6_groq_max_history_default():
     assert sm._GROQ_MAX_HISTORY == 10
 
 def test_f6_anthropic_max_history_default():
-    assert sm._ANTHROPIC_MAX_HISTORY == 20
+    assert sm._ANTHROPIC_MAX_HISTORY == 60
 
 def test_f6_dev_max_tokens_default():
     assert sm._DEV_MAX_TOKENS == 180

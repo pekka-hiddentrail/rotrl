@@ -47,7 +47,7 @@ export default function CombatPanel({ combatState, disabled, currentCombatantNam
       </div>
 
       <div className="combat-initiative-list">
-        {sorted.map((c, i) => {
+        {sorted.map(c => {
           const isActive = c.status === 'active'
           const isCurrent = isActive && c.name === effectiveCurrent
           return (

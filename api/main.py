@@ -308,6 +308,30 @@ def get_benchmarks():
     return JSONResponse({"rows": rows})
 
 
+@app.get("/api/benchmarks/combat")
+def get_combat_benchmarks():
+    """Return all combat benchmark rows from outputs/token_benchmarks_combat.csv as JSON."""
+    import csv as _csv
+    csv_path = _REPO_ROOT / "outputs" / "token_benchmarks_combat.csv"
+    if not csv_path.exists():
+        return JSONResponse({"rows": []})
+    rows: list[dict] = []
+    with csv_path.open(newline="", encoding="utf-8") as fh:
+        for row in _csv.DictReader(fh):
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens", "system_chars"):
+                try:
+                    row[k] = int(row[k])
+                except (ValueError, KeyError):
+                    row[k] = 0
+            for k in ("combat_started", "attack_requested", "roll_requested"):
+                try:
+                    row[k] = int(row[k])
+                except (ValueError, KeyError):
+                    row[k] = 0
+            rows.append(row)
+    return JSONResponse({"rows": rows})
+
+
 @app.get("/api/coverage")
 def get_coverage():
     """Return the feature AC coverage matrix built by scripts/build_coverage.py.

@@ -256,9 +256,37 @@ And   the avatar uses the character's rune letter as a fallback if the portrait 
 And   the layout is: [avatar] [name] / skill / DC / hint (top to bottom)
 
 Given no active character is set
+And   the roll_request event has no speaker field (or the speaker name does not match any loaded character)
 When  the roll-request banner renders
 Then  no portrait or name is shown — only the skill, DC, and hint
 ```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-014 — pendingRoll.speaker is used as the dice speaker when no character is manually selected
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** GM roll_request names a specific party member
+
+```gherkin
+Given no character is manually selected in the sidebar (activeCharacter is null)
+And   a roll_request SSE event is received with speaker="Thaelion"
+And   "Thaelion" matches a loaded CharacterData entry (case-insensitive)
+When  the roll-request banner renders
+Then  Thaelion's portrait, name, and skill bonuses are used as if he were the active speaker
+And   the relevant skill bonus is auto-applied when the player rolls
+And   the roll bubble in the chat attributes the roll to Thaelion
+
+Given no character is manually selected
+And   a roll_request is received without a speaker field
+When  the roll-request banner renders
+Then  no character identity is shown (raw roll, no portrait, no bonus)
+```
+
+> **Implementation note:** `App.tsx` computes `diceSpeaker = activeCharacter ? characterMap[activeCharacter] : pendingRollSpeaker`
+> where `pendingRollSpeaker` is resolved by case-insensitive name lookup against the loaded characters array.
+> The `activeSpeaker` prop received by `DicePanel` is the resolved `diceSpeaker` value.
 
 ---
 
@@ -276,7 +304,7 @@ Then  no portrait or name is shown — only the skill, DC, and hint
 - See: [INDEX.md §12 — Frontend: Dice Panel](INDEX.md)
 - Die types: d4 · d6 · d8 · d10 · d12 · d20 · d100 (SVG polygon shapes)
 - `onRoll(expr, rolls[], total)` callback passed from App.tsx to DicePanel. Returns `Promise<{ passed: boolean } | null>`.
-- Roll speech bubble is built in App.tsx's `onRoll` handler: `rawTotal = rolls.reduce(…)`, `modifier = total − rawTotal`. Speaker name taken from `activeCharacter` → `characterMap`.
+- Roll speech bubble is built in App.tsx's `onRoll` handler: `rawTotal = rolls.reduce(…)`, `modifier = total − rawTotal`. Speaker resolved via `diceSpeaker = activeCharacter ? characterMap[activeCharacter] : pendingRollSpeaker` (see AC-014).
 - The bubble is local-only. It is **not** sent to the backend as a player turn.
 - `InputBar` no longer has `injectedValue` / `injectionId` props — injection was removed in favour of the speech bubble.
 - `POST /api/sessions/{id}/roll` only fires when a session is active; silently skipped otherwise

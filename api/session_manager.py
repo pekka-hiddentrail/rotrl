@@ -187,7 +187,7 @@ def _groq_post(api_key: str, payload: dict, stream: bool = False) -> _requests.R
 _DEV_MAX_HISTORY        = int(os.getenv("ROTRL_DEV_MAX_HISTORY",       "6"))   # 3 exchanges
 _FULL_MAX_HISTORY       = int(os.getenv("ROTRL_FULL_MAX_HISTORY",      "30"))  # 15 exchanges — Ollama
 _GROQ_MAX_HISTORY       = int(os.getenv("ROTRL_GROQ_MAX_HISTORY",      "10"))  # 5 exchanges  — Groq
-_ANTHROPIC_MAX_HISTORY  = int(os.getenv("ROTRL_ANTHROPIC_MAX_HISTORY", "20"))  # 10 exchanges — Anthropic
+_ANTHROPIC_MAX_HISTORY  = int(os.getenv("ROTRL_ANTHROPIC_MAX_HISTORY", "60"))  # 30 exchanges — Anthropic
 _DEV_MAX_TOKENS         = int(os.getenv("ROTRL_DEV_MAX_TOKENS",        "180")) # cap generation length in dev mode
 # Groq: hard ceiling on the system prompt character count.
 # Injected context chunks beyond this point are silently dropped.
@@ -996,7 +996,7 @@ class GameSession:
     log_path: Optional[Path] = None
     turn_number: int = 0  # incremented at the start of each player turn
     # Set when GM requests a dice roll; cleared after resolve_roll() is called.
-    pending_roll: Optional[dict] = None  # {skill, dc, success, failure}
+    pending_roll: Optional[dict] = None  # {skill, dc, success, failure, speaker?}
     # Canonical NPC names active in the current scene, accumulated across turns.
     # Used to keep injecting the %%DELTAS%% instruction even when the player
     # doesn't name an NPC explicitly on a later turn.
