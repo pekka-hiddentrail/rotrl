@@ -171,7 +171,7 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
 
   const handleDamageRollClick = async () => {
     if (pending.length === 0) return
-    const rolls = [...pending]
+    const rolls = pending.map(rollDie)
     const total = rolls.reduce((a, b) => a + b, 0)
     setPending([])
     await onDamageRoll?.(rolls, total)

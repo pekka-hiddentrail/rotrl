@@ -499,3 +499,50 @@ class TestResumeCombatEmptyResults:  # AC-005
         # The bare header is still injected into history
         assert any("ATTACK RESULTS" in m["content"]
                    for m in session.messages if m["role"] == "user")
+
+
+# ── Endpoint HTTP guard paths ─────────────────────────────────────────────────
+
+class TestResolveEndpointGuards:
+    """HTTP-layer guards on /resolve_attack_roll and /resolve_damage_roll.
+
+    These exercise the endpoint error-handling in main.py that wraps
+    ValueError from the session-manager functions into 409 responses.
+    The underlying function-level guards are tested elsewhere; these tests
+    verify the correct HTTP status codes are surfaced.
+    """
+
+    def test_resolve_attack_roll_409_when_already_in_damage_phase(self, booted_session):
+        """Calling /resolve_attack_roll while the front-of-queue attack has hit=True → 409."""
+        client, session_id, session = _fake_session(booted_session)
+        # Put a hit-pending attack at the front of the queue
+        session.attack_queue.append(PendingAttack(
+            attacker="Thaelion", target="Goblin 1",
+            bonus=5, damage_expr="1d8+3", attack_type="melee", is_pc=True,
+        ))
+        session.attack_queue[0].hit = True
+
+        resp = client.post(
+            f"/api/sessions/{session_id}/resolve_attack_roll",
+            json={"rolled": 10},
+        )
+        assert resp.status_code == 409
+
+    def test_resolve_damage_roll_404_on_missing_session(self, client):
+        """DELETE /resolve_damage_roll on an unknown session returns 404."""
+        resp = client.post(
+            "/api/sessions/nonexistent/resolve_damage_roll",
+            json={"rolls": [4], "total": 4},
+        )
+        assert resp.status_code == 404
+
+    def test_resolve_damage_roll_409_when_no_damage_pending(self, booted_session):
+        """Calling /resolve_damage_roll when attack_queue is empty → 409."""
+        client, session_id, session = _fake_session(booted_session)
+        # attack_queue is empty by default after _fake_session
+
+        resp = client.post(
+            f"/api/sessions/{session_id}/resolve_damage_roll",
+            json={"rolls": [4], "total": 4},
+        )
+        assert resp.status_code == 409

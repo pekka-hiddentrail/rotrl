@@ -21,6 +21,10 @@ vi.mock('../api', () => ({
   logRoll: vi.fn().mockResolvedValue(undefined),
   resolveRoll: vi.fn().mockResolvedValue({ passed: true, outcome: 'You succeed!' }),
   purgeSessionNpcs: vi.fn().mockResolvedValue({ purged: 0 }),
+  endCombat: vi.fn().mockResolvedValue({}),
+  resolveAttackRoll: vi.fn(),
+  resolveDamageRoll: vi.fn(),
+  resumeCombat: vi.fn(),
 }))
 
 vi.mock('../data/characters', () => ({
@@ -34,6 +38,9 @@ import {
   sendTurn,
   endSessionWithRecap,
   purgeSessionNpcs,
+  resolveAttackRoll,
+  resolveDamageRoll,
+  resumeCombat,
 } from '../api'
 import { useCharacters } from '../data/characters'
 
@@ -41,6 +48,9 @@ const mockBoot = vi.mocked(bootSession)
 const mockSend = vi.mocked(sendTurn)
 const mockEnd = vi.mocked(endSessionWithRecap)
 const mockPurge = vi.mocked(purgeSessionNpcs)
+const mockResolveAttackRoll = vi.mocked(resolveAttackRoll)
+const mockResolveDamageRoll = vi.mocked(resolveDamageRoll)
+const mockResumeCombat = vi.mocked(resumeCombat)
 const mockUseChars = vi.mocked(useCharacters)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -531,6 +541,207 @@ describe('App - character speaker integration', () => {
     expect(screen.queryByText(/Speaking as/)).not.toBeInTheDocument()
   })
 })
+
+// ── Combat tracker layout (AC-006) ───────────────────────────────────────────
+
+describe('App — AC-006 combat-active layout', () => {
+  let user: ReturnType<typeof userEvent.setup>
+
+  beforeEach(async () => {
+    setup()
+    user = userEvent.setup()
+    await bootApp(user)
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('V13 — CombatPanel is absent before any combat_update event', () => {
+    // No turn sent — combatState starts null
+    expect(document.querySelector('.combat-panel')).not.toBeInTheDocument()
+  })
+
+  it('V14 — combat_update with non-null state renders CombatPanel with round badge', async () => {
+    mockSend.mockImplementation(() =>
+      makeGen({
+        type: 'combat_update' as const,
+        combat_state: {
+          round: 1,
+          combatants: [
+            { name: 'Goblin 1', hp_current: 5, hp_max: 5, ac: 13, initiative: 10, status: 'active' as const, conditions: [] },
+          ],
+        },
+      }),
+    )
+    await user.type(screen.getByRole('textbox'), 'attack')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() =>
+      expect(screen.getByText('Round 1')).toBeInTheDocument(),
+    )
+    expect(document.querySelector('.combat-panel')).toBeInTheDocument()
+    expect(screen.getByText('Goblin 1')).toBeInTheDocument()
+  })
+
+  it('V15 — .main-content gains combat-active class when CombatPanel is present', async () => {
+    mockSend.mockImplementation(() =>
+      makeGen({
+        type: 'combat_update' as const,
+        combat_state: {
+          round: 2,
+          combatants: [
+            { name: 'Shalelu', hp_current: 18, hp_max: 24, ac: 17, initiative: 14, status: 'active' as const, conditions: [] },
+          ],
+        },
+      }),
+    )
+    await user.type(screen.getByRole('textbox'), 'fight')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() =>
+      expect(document.querySelector('.main-content')).toHaveClass('combat-active'),
+    )
+  })
+})
+
+// ── Session end cleanup ───────────────────────────────────────────────────────
+
+// ── Attack resolution App wiring (AC-003, AC-004, AC-005, AC-009) ─────────────
+
+describe('App — attack resolution wiring', () => {
+  let user: ReturnType<typeof userEvent.setup>
+
+  beforeEach(async () => {
+    setup()
+    user = userEvent.setup()
+    vi.spyOn(Math, 'random').mockReturnValue(0.6) // d20 roll = floor(0.6*20)+1 = 13
+    await bootApp(user)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  /** Send a turn that surfaces a PC attack_request banner in the DicePanel. */
+  async function triggerAttackRequest() {
+    mockSend.mockImplementation(() =>
+      makeGen({
+        type: 'attack_request' as const,
+        attacker: 'Thaelion', target: 'Goblin 1',
+        bonus: 5, ac: 13, damage_expr: '1d8+3', attack_type: 'melee',
+      }),
+    )
+    await user.type(screen.getByRole('textbox'), 'attack')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() =>
+      expect(screen.getByText(/Thaelion → Goblin 1/)).toBeInTheDocument(),
+    )
+  }
+
+  it('AC-003 — clicking to-hit banner calls resolveAttackRoll with the rolled d20', async () => {
+    // d20 roll: Math.random=0.6 → floor(0.6*20)+1 = 13
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: false, ac: 13, roll: 13, bonus: 5, total: 18,
+      damage_expr: null, queue_remaining: 0, next_attack: null,
+    })
+    mockResumeCombat.mockImplementation(() => makeGen<never>())
+
+    await triggerAttackRequest()
+    await user.click(screen.getByTitle('Click to roll d20'))
+
+    await waitFor(() => expect(mockResolveAttackRoll).toHaveBeenCalledWith('sess-test', 13))
+  })
+
+  it('AC-003 — hit result transitions DicePanel banner to damage phase', async () => {
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: true, ac: 13, roll: 13, bonus: 5, total: 18,
+      damage_expr: '1d8+3', queue_remaining: 1, next_attack: null,
+    })
+
+    await triggerAttackRequest()
+    await user.click(screen.getByTitle('Click to roll d20'))
+
+    await waitFor(() =>
+      expect(screen.getByText(/Roll damage: 1d8\+3/)).toBeInTheDocument(),
+    )
+    expect(screen.getByText(/HIT!/)).toBeInTheDocument()
+  })
+
+  it('AC-004 — clicking Roll Damage calls resolveDamageRoll with rolled values (not die sides)', async () => {
+    // Setup: get into damage phase
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: true, ac: 13, roll: 13, bonus: 5, total: 18,
+      damage_expr: '1d8+3', queue_remaining: 1, next_attack: null,
+    })
+    mockResolveDamageRoll.mockResolvedValue({
+      damage_rolls: [5], damage_total: 5, queue_remaining: 0, next_attack: null,
+    })
+    mockResumeCombat.mockImplementation(() => makeGen<never>())
+
+    await triggerAttackRequest()
+    await user.click(screen.getByTitle('Click to roll d20'))
+    await waitFor(() => expect(screen.getByText(/Roll damage/)).toBeInTheDocument())
+
+    // Math.random=0.6 → rollDie(8) = floor(0.6*8)+1 = 5
+    await user.click(screen.getByTitle('d8'))
+    await user.click(screen.getByRole('button', { name: 'Roll Damage' }))
+
+    await waitFor(() =>
+      expect(mockResolveDamageRoll).toHaveBeenCalledWith('sess-test', [5], 5),
+    )
+  })
+
+  it('AC-005 — doResumeCombat is called automatically after all PC attacks resolve', async () => {
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: false, ac: 13, roll: 13, bonus: 5, total: 18,
+      damage_expr: null, queue_remaining: 0, next_attack: null,
+    })
+    mockResumeCombat.mockImplementation(() => makeGen({ type: 'token' as const, content: 'Narration.' }))
+
+    await triggerAttackRequest()
+    await user.click(screen.getByTitle('Click to roll d20'))
+
+    await waitFor(() => expect(mockResumeCombat).toHaveBeenCalledWith('sess-test'))
+  })
+
+  it('AC-002 — NPC-only turn auto-calls doResumeCombat when queue remains empty', async () => {
+    mockSend.mockImplementation(() =>
+      makeGen({
+        type: 'attack_result' as const,
+        attacker: 'Goblin 1', target: 'Shalelu',
+        roll: 10, bonus: 4, total: 14, ac: 17,
+        hit: false, damage_rolls: [], damage_total: 0,
+        attack_type: 'melee', is_pc: false,
+      }),
+    )
+    mockResumeCombat.mockImplementation(() => makeGen({ type: 'token' as const, content: 'Goblin misses.' }))
+
+    await user.type(screen.getByRole('textbox'), 'npc attacks')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    // After the turn stream ends with attack_result but no attack_request,
+    // App auto-calls doResumeCombat
+    await waitFor(() => expect(mockResumeCombat).toHaveBeenCalledWith('sess-test'))
+    await waitFor(() => expect(screen.getByText('Goblin misses.')).toBeInTheDocument())
+  })
+
+  it('AC-009 — after miss, next attack banner appears with second attacker\'s stats', async () => {
+    mockResolveAttackRoll.mockResolvedValue({
+      hit: false, ac: 13, roll: 1, bonus: 5, total: 6,
+      damage_expr: null, queue_remaining: 1,
+      next_attack: { attacker: 'Yanyeeku', target: 'Goblin 1', bonus: 2, ac: 13, damage_expr: '1d6+1', attack_type: 'melee' },
+    })
+
+    await triggerAttackRequest()
+    await user.click(screen.getByTitle('Click to roll d20'))
+
+    // Banner switches to second attacker
+    await waitFor(() =>
+      expect(screen.getByText(/Yanyeeku → Goblin 1/)).toBeInTheDocument(),
+    )
+    expect(screen.getByText(/bonus: \+2/)).toBeInTheDocument()
+  })
+})
+
+// ── Session end cleanup ───────────────────────────────────────────────────────
 
 describe('App — session end cleanup', () => {
   let user: ReturnType<typeof userEvent.setup>

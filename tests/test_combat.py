@@ -17,6 +17,8 @@ from api.session_manager import (
     _parse_combat_block,
     _serialize_combat_state,
     _VALID_CONDITIONS,
+    _inject_context,
+    get_session,
 )
 from .conftest import make_stream_response, parse_sse
 
@@ -458,3 +460,110 @@ class TestCombatantConditions:
             c = Combatant(name="X", hp_current=5, hp_max=5, ac=10, initiative=0,
                           conditions=[cond])
             assert cond in c.conditions
+
+
+# ── P1 — AC-010 combat reminder injection ────────────────────────────────────
+
+class TestCombatRoundReminderInjection:  # AC-010
+    """_inject_context appends [COMBAT ONGOING — round N] when combat is active."""
+
+    def test_reminder_includes_round_number(self, booted_session):
+        """system_content contains the correct round number when combat is active."""
+        client, session_id = booted_session
+        session = get_session(session_id)
+        assert session is not None
+
+        session.combat_state = CombatState(
+            round=3,
+            combatants=[Combatant(name="Goblin", hp_current=5, hp_max=5, ac=13, initiative=8)],
+        )
+
+        system_content, _ = _inject_context(session)
+        assert "COMBAT ONGOING — round 3" in system_content
+
+    def test_reminder_absent_when_no_combat_state(self, booted_session):
+        """No combat reminder when session.combat_state is None."""
+        client, session_id = booted_session
+        session = get_session(session_id)
+        assert session is not None
+        assert session.combat_state is None
+
+        system_content, _ = _inject_context(session)
+        assert "COMBAT ONGOING" not in system_content
+
+    def test_reminder_absent_when_round_zero(self, booted_session):
+        """round: 0 is the clear sentinel — no reminder injected even though state is set."""
+        client, session_id = booted_session
+        session = get_session(session_id)
+        assert session is not None
+
+        session.combat_state = CombatState(round=0, combatants=[])
+
+        system_content, _ = _inject_context(session)
+        assert "COMBAT ONGOING" not in system_content
+
+
+# ── P2 — AC-012 conditions chain end-to-end (parse → Combatant → serialize) ──
+
+class TestConditionsChainEndToEnd:  # AC-012
+    """Full chain: raw combatant line → Combatant.conditions → serialized dict."""
+
+    def test_known_conditions_survive_full_chain(self):
+        line = "- name: Vanx · hp: 8/12 · ac: 15 · init: 10 · status: active · conditions: [prone, shaken]"
+        c = _parse_combatant_line(line)
+        assert c is not None
+        assert c.conditions == ["prone", "shaken"]
+
+        state = CombatState(round=1, combatants=[c])
+        d = _serialize_combat_state(state)
+        assert d is not None
+        assert d["combatants"][0]["conditions"] == ["prone", "shaken"]
+
+    def test_unknown_condition_dropped_in_full_chain(self):
+        line = "- name: Vanx · hp: 8/12 · ac: 15 · init: 10 · status: active · conditions: [prone, banana]"
+        c = _parse_combatant_line(line)
+        assert c is not None
+        assert "banana" not in c.conditions
+        assert "prone" in c.conditions
+
+        state = CombatState(round=1, combatants=[c])
+        d = _serialize_combat_state(state)
+        assert d["combatants"][0]["conditions"] == ["prone"]
+
+
+# ── P3 — AC-008 session isolation on DELETE /combat ──────────────────────────
+
+class TestDeleteCombatSessionIsolation:  # AC-008
+    """DELETE /combat on one session must not affect other sessions."""
+
+    def test_other_session_unaffected(self, client):
+        """Clearing combat on session A leaves session B's combat state intact."""
+        # Boot two separate sessions
+        boot_a = client.post("/api/sessions", json={
+            "session_number": 1, "model": "qwen3:4b",
+            "host": "http://localhost:11434", "temperature": 0.3, "dev_mode": True,
+        })
+        sid_a = next(e["session_id"] for e in parse_sse(boot_a) if e["type"] == "done")
+
+        boot_b = client.post("/api/sessions", json={
+            "session_number": 2, "model": "qwen3:4b",
+            "host": "http://localhost:11434", "temperature": 0.3, "dev_mode": True,
+        })
+        sid_b = next(e["session_id"] for e in parse_sse(boot_b) if e["type"] == "done")
+
+        # Give session B an active combat state
+        session_b = get_session(sid_b)
+        assert session_b is not None
+        session_b.combat_state = CombatState(
+            round=2,
+            combatants=[Combatant(name="Orc", hp_current=10, hp_max=10, ac=14, initiative=6)],
+        )
+
+        # Clear combat on session A
+        resp = client.delete(f"/api/sessions/{sid_a}/combat")
+        assert resp.status_code == 200
+
+        # Session B's state must be intact
+        assert session_b.combat_state is not None
+        assert session_b.combat_state.round == 2
+        assert session_b.combat_state.combatants[0].name == "Orc"

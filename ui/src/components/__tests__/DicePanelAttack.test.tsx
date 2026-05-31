@@ -124,6 +124,15 @@ describe('DicePanel — AC-004 damage banner', () => {
     fireEvent.click(screen.getByTitle('d8'))
     expect(screen.getByRole('button', { name: 'Roll Damage' })).not.toBeDisabled()
   })
+
+  it('V8 — Roll Damage calls onDamageRoll with actual rolled values, not die sizes', async () => {
+    // Math.random = 0.6 → rollDie(8) = floor(0.6 * 8) + 1 = 5
+    const onDamageRoll = vi.fn().mockResolvedValue(undefined)
+    renderPanel({ attackPhase: DAMAGE_PHASE, onDamageRoll })
+    fireEvent.click(screen.getByTitle('d8'))
+    fireEvent.click(screen.getByRole('button', { name: 'Roll Damage' }))
+    await waitFor(() => expect(onDamageRoll).toHaveBeenCalledWith([5], 5))
+  })
 })
 
 // ─── AC-003 — null phase ──────────────────────────────────────────────────────
