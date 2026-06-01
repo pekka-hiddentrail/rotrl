@@ -1,4 +1,5 @@
 **Event:** fire_phase_begins
+**Type:** combat
 **Trigger:** When Wave 1 is suppressed and goblin arsonists appear on rooftops or alleys
 **Expires:** 5 turns
 

@@ -1,4 +1,5 @@
 **Event:** cavalry_arrives
+**Type:** combat
 **Trigger:** When goblin commandos on goblin dogs charge into the square (Wave 3)
 **Expires:** 5 turns
 

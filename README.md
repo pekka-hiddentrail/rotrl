@@ -243,7 +243,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 908 pytest tests
+├── tests/                         # 926 pytest tests
 ├── ui/src/components/__tests__/    # Vitest component tests
 ├── ui/src/__tests__/               # Vitest App SSE integration tests
 ├── ui/e2e/                         # Playwright browser-flow tests
@@ -279,6 +279,7 @@ rotrl/
 | `DELETE` | `/api/sessions/{id}` | Discard session without recap (emergency close) |
 | `DELETE` | `/api/sessions/{id}/combat` | Clear active combat state immediately (direct API fallback; UI uses `close_combat`) |
 | `POST` | `/api/sessions/{id}/combat/advance_turn` | Advance initiative to next active combatant; writes state.json; returns `{ current_actor, is_pc }` |
+| `POST` | `/api/sessions/{id}/combat/roll_initiatives` | Roll d20 + modifier for every combatant; re-sort initiative; returns `{ combat_state }` |
 | `GET`  | `/api/code-coverage` | Serve `outputs/code_coverage.json` produced by `pytest --cov`; used by the Coverage modal's "Code Lines" tab |
 | `GET`  | `/api/npcs/session` | List all session NPC slugs (dot-prefixed directories) |
 | `DELETE` | `/api/npcs/session` | Purge all session NPC directories; invalidates the NPC index |
@@ -347,7 +348,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_npc_generator.py` | `generate_base_md`, NPC stub creation |
 | `test_character_data.py` | Character JSON field validation (`/api/characters` endpoint, index file, HP/level/abilities/saves/wealth/weapons/spells per character) |
 | `test_intro.py` | Intro file resolution and fallback |
-| `test_event_injection.py` | `EventIndex` loading, `%%EVENT%%` parsing, TTL expiry, duplicate guard, event map, SSE `active_events`, double-write regression |
+| `test_event_injection.py` | `EventIndex` loading, `%%EVENT%%` parsing, TTL expiry, duplicate guard, event map, SSE `active_events`, double-write regression, `EventEntry.event_type` metadata (AC-009) |
 | `test_location_lookup.py` | `LocationIndex` loading, alias detection, `<!-- REFERENCE -->` boundary, profile injection, scene re-injection, session-generated location stubs |
 | `test_dev_startup.py` | `dev.py` startup hardening — `_pid_on_port`, `_port_free`, `_kill_tree`, `_free_port` |
 | `test_combat.py` | `Combatant`/`CombatState` dataclasses, HP clamp + status validation, `_parse_combatant_line`, `_parse_combat_block` (incl. round-0 sentinel and parse-failure semantics), `_serialize_combat_state`, `combat_update` SSE, narrative filter stripping, malformed-block-preserves-state regression, combat-only-no-leak regression, `DELETE /combat` endpoint |

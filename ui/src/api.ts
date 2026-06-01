@@ -86,6 +86,14 @@ export async function endCombat(sessionId: string): Promise<void> {
   if (!res.ok) throw new Error(`End combat failed (${res.status})`)
 }
 
+export async function rollInitiatives(
+  sessionId: string,
+): Promise<{ combat_state: import('./types').CombatState }> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/combat/roll_initiatives`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Roll initiatives failed (${res.status})`)
+  return res.json()
+}
+
 export async function* runEnemyTurn(sessionId: string): AsyncGenerator<SseEvent> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/enemy_turn`, { method: 'POST' })
   if (!res.ok) throw new Error(`Enemy turn failed (${res.status})`)

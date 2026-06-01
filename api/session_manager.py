@@ -1150,6 +1150,46 @@ def advance_combat_turn(session: "GameSession") -> dict:
     return {"current_actor": combat.current_actor, "is_pc": is_pc}
 
 
+def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
+    """Roll d20 + modifier for every combatant and update initiative order.
+
+    PC modifiers are read from pc_profiles[name]["combat_stats"]["initiative"]
+    (e.g. "+2", "-1").  Enemy modifiers default to +0 until SA-2 event-file
+    seeding supplies them.  Returns the serialised CombatState, or None when
+    no combat is active.
+    """
+    if session.combat_state is None:
+        return None
+
+    for c in session.combat_state.combatants:
+        if _is_pc_attacker(c.name, session):
+            raw_mod = (
+                session.pc_profiles
+                .get(c.name.lower(), {})
+                .get("combat_stats", {})
+                .get("initiative", "+0")
+            )
+            try:
+                modifier = int(str(raw_mod).replace("+", "").strip())
+            except (ValueError, AttributeError):
+                modifier = 0
+        else:
+            modifier = 0  # flat d20 for enemies until SA-2 seeds their bonuses
+
+        c.initiative = random.randint(1, 20) + modifier
+
+    # Update current_actor to the new highest-initiative active combatant
+    active_sorted = sorted(
+        (c for c in session.combat_state.combatants if c.status == "active"),
+        key=lambda c: c.initiative,
+        reverse=True,
+    )
+    session.combat_state.current_actor = active_sorted[0].name if active_sorted else None
+    _write_session_state(session)
+    _log(session, f"\n> *[Roll initiatives: new order {', '.join(c.name for c in active_sorted)}]*\n")
+    return _serialize_combat_state(session.combat_state)
+
+
 def _ts() -> str:
     return datetime.now().strftime("%H:%M:%S")
 

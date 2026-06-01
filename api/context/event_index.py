@@ -37,6 +37,7 @@ class EventEntry:
     event_id: str
     trigger: str        # human/LLM-readable condition description
     content: str        # injectable markdown, everything below <!-- INJECT -->
+    event_type: str = ""  # backend metadata: "combat", "aftermath", etc. Not shown to LLM.
 
 
 @dataclass
@@ -108,6 +109,7 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
 
     event_id = ""
     trigger = ""
+    event_type = ""
     content_lines: list[str] = []
     in_content = False
 
@@ -130,8 +132,13 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
             trigger = m.group(1).strip()
             continue
 
+        m = re.match(r"\*\*Type:\*\*\s*(.+)", line, re.IGNORECASE)
+        if m:
+            event_type = m.group(1).strip()
+            continue
+
     if not event_id or not in_content:
         return None
 
     content = "\n".join(content_lines).strip()
-    return EventEntry(event_id=event_id, trigger=trigger, content=content)
+    return EventEntry(event_id=event_id, trigger=trigger, content=content, event_type=event_type)

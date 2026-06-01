@@ -1,4 +1,5 @@
 **Event:** attack_repelled
+**Type:** aftermath
 **Trigger:** When all three waves are suppressed and no active goblin threats remain in the square
 **Expires:** 5 turns
 

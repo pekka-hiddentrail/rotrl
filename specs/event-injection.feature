@@ -151,12 +151,47 @@ And   expired events are not included
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-009 — `**Type:**` metadata field on EventEntry
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Type field is parsed and stored
+
+```gherkin
+Given an event file with header line **Type:** combat
+When  EventIndex loads the file
+Then  EventEntry.event_type == "combat"
+```
+
+**Scenario:** Type field defaults to empty string when absent
+
+```gherkin
+Given an event file with no **Type:** line
+When  EventIndex loads the file
+Then  EventEntry.event_type == ""
+```
+
+**Scenario:** Type field is not exposed to the LLM via event_map_text
+
+```gherkin
+Given an event file with **Type:** combat
+When  EventIndex.event_map_text() is called
+Then  the returned string does not contain the type value as part of the event listing
+```
+
+> **Note:** `event_type` is backend metadata only. It is used by Tier 1.8 (CB1.8-2) to
+> trigger server-side initiative rolls when a combat event fires, and by SA-2 for encounter
+> pre-load. It is never injected into the system prompt or shown to the player.
+
+---
+
 ## Out of Scope
 
 - Event content file quality (adventure content, not code)
 - Compressing active event content to a summary mid-window (deferred, noted in TODO)
 - Per-event TTL override (all events use N=5 for now)
 - Frontend display of active events (deferred)
+- Enforcing a fixed vocabulary for `event_type` values (free-form string for now)
 
 ---
 

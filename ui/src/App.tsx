@@ -14,7 +14,7 @@ import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
+import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, rollInitiatives, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
   const [imgOk, setImgOk] = useState(true)
@@ -230,6 +230,19 @@ export default function App() {
       if (active.length === 0) return
       const idx = active.findIndex(c => c.name === currentCombatantName)
       setCurrentCombatantName(active[(idx + 1) % active.length].name)
+    }
+  }
+
+  const handleRollInitiatives = async () => {
+    if (!session || !combatState) return
+    try {
+      const result = await rollInitiatives(session.id)
+      if (result.combat_state) {
+        setCombatState(result.combat_state)
+        setCurrentCombatantName(result.combat_state.current_actor ?? null)
+      }
+    } catch (e) {
+      setError(String(e))
     }
   }
 
@@ -552,6 +565,7 @@ export default function App() {
             attackPhase={attackPhase}
             enemyTurnStreaming={enemyTurnStreaming}
             combatClosing={combatClosing}
+            onRollInitiatives={handleRollInitiatives}
             onAdvanceTurn={handleAdvanceTurn}
             onEnemyTurn={handleEnemyTurn}
             onEndCombat={handleEndCombat}

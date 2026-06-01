@@ -73,14 +73,7 @@ Bugs observed during live play. All items below are blocking normal combat flow 
     `- name: …` row."*
   *(spec: enemy-turn.feature; combat-tracker.feature)*
 
-- [ ] **B-C06 — Initiatives are LLM-invented totals, not rolled from modifiers** — The LLM
-  writes arbitrary initiative scores (e.g. both goblins at 12, the warchanter at 15) rather
-  than values rolled server-side from each creature's initiative bonus. This causes the
-  initiative order to drift and be unreliable. Root cause: Tier 1.9 (Initiative Authority) is
-  not implemented. **Fix:** Implement Tier 1.9 — `_parse_combat_block` treats `init:` as a
-  signed modifier on round 1 (`existing_state is None`), rolls `random.randint(1, 20) + modifier`
-  per combatant, and stores the result. PC modifiers come from `pc_profiles`; LLM-written init
-  values for PCs are ignored. See CB1.9-1 through CB1.9-T in the Combat System section.
+- ~~[ ] **B-C06 — Initiatives are LLM-invented totals, not rolled from modifiers**~~ *(fully covered by CB1.8-1 through CB1.8-T in COMBAT-TODO.md — tracked there)*
 
 - [x] **B-C08 — `App.enemy-turn.test.tsx` `bootIntoCombat` helper times out** — `closeCombat`
   and `resumeCombat` mocks returned `undefined`; App.tsx iterates both as async generators, so
@@ -250,6 +243,9 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
 > Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, and 1.10 (partial) complete. Tier 1.8 next.
+> Also shipped outside tiers: **Roll Initiatives button** — `POST /combat/roll_initiatives`,
+> `🎲 Roll Initiatives` in CombatPanel header, d20+modifier per combatant.
+> See `specs/roll-initiatives.feature` (9 ACs, 18 pytest + 8 Vitest tests).
 
 ---
 

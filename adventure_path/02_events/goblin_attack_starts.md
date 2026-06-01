@@ -1,4 +1,5 @@
 **Event:** goblin_attack_starts
+**Type:** combat
 **Trigger:** When the goblin raid begins — alarm sounds, goblins become visible, or a player perception/awareness check reveals the attack
 **Expires:** 5 turns
 

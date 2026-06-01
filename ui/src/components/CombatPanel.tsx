@@ -8,6 +8,7 @@ interface Props {
   attackPhase?: AttackPhase
   enemyTurnStreaming?: boolean
   combatClosing?: boolean
+  onRollInitiatives?: () => void
   onAdvanceTurn?: () => void
   onEnemyTurn?: () => void
   onEndCombat: () => void
@@ -46,6 +47,7 @@ export default function CombatPanel({
   attackPhase,
   enemyTurnStreaming,
   combatClosing,
+  onRollInitiatives,
   onAdvanceTurn,
   onEnemyTurn,
   onEndCombat,
@@ -55,18 +57,29 @@ export default function CombatPanel({
   const controlsDisabled = Boolean(disabled || enemyTurnStreaming || combatClosing)
   const enemyTurnDisabled = Boolean(controlsDisabled || attackPhase)
   const phase = enemyTurnStreaming ? 'Enemy Turn' : attackPhase ? 'PC Attacks' : null
+  const showRound = combatState.round >= 1
 
   return (
     <aside className="combat-panel">
       <div className="combat-panel-header">
-        <span className="combat-panel-title">Combat</span>
+        <span className="combat-panel-title">⚔ Combat</span>
         <div className="combat-panel-badges">
           {phase && (
             <span className={`combat-phase-badge ${enemyTurnStreaming ? 'enemy' : 'pc'}`}>
               {phase}
             </span>
           )}
-          <span className="combat-round-badge">Round {combatState.round}</span>
+          {showRound && <span className="combat-round-badge">Round {combatState.round}</span>}
+          {onRollInitiatives && (
+            <button
+              className="btn btn-secondary btn-xs combat-roll-init-btn"
+              onClick={onRollInitiatives}
+              disabled={controlsDisabled}
+              title="Roll d20 + modifier for each combatant and re-sort initiative"
+            >
+              🎲 Roll Initiatives
+            </button>
+          )}
         </div>
       </div>
 
@@ -87,8 +100,8 @@ export default function CombatPanel({
               <div className="combatant-name-row">
                 <span className="combatant-name">{c.name}</span>
                 <span className="combatant-meta">
-                  <span className="combatant-init" title="Initiative">Init {c.initiative}</span>
-                  <span className="combatant-ac" title="Armour Class">AC {c.ac}</span>
+                  <span className="combatant-init" title="Initiative">⚡ Init {c.initiative}</span>
+                  <span className="combatant-ac" title="Armour Class">🛡 AC {c.ac}</span>
                 </span>
               </div>
               <div className="combatant-hp-row">
