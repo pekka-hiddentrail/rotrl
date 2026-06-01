@@ -39,7 +39,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [combat-active-character.feature](combat-active-character.feature) | Backend \| Frontend | `@combat` `@session` `@prompt` `@streaming` `@layout` | 14 | `CombatState.current_actor`, `advance_combat_turn()`, `POST /combat/advance_turn`, `_write_session_state` combat actor, `ActiveSpeaker.isEnemy`, `InputBar` hostile state + skull icon + taunting placeholder, `tests/test_combat_active_character.py`, `InputBarHostile.test.tsx` |
 | [roll-initiatives.feature](roll-initiatives.feature) | Backend \| Frontend | `@combat` `@initiative` `@session` `@layout` | 9 | `roll_combat_initiatives()`, `POST /combat/roll_initiatives`, `CombatPanel` "🎲 Roll Initiatives" header button, `App.tsx` `handleRollInitiatives`, `rollInitiatives()` in `api.ts`, `tests/test_roll_initiatives.py`, `CombatPanelRollInit.test.tsx` |
 
-**Total: 271 acceptance criteria across 30 feature files**
+**Total: 272 acceptance criteria across 30 feature files**
 
 ---
 

@@ -57,7 +57,7 @@ export default function CombatPanel({
   const controlsDisabled = Boolean(disabled || enemyTurnStreaming || combatClosing)
   const enemyTurnDisabled = Boolean(controlsDisabled || attackPhase)
   const phase = enemyTurnStreaming ? 'Enemy Turn' : attackPhase ? 'PC Attacks' : null
-  const showRound = combatState.round >= 1
+  const showRound = combatState.round >= 1  // round < 1 = initiative not yet rolled (pending state)
 
   return (
     <aside className="combat-panel">
@@ -74,7 +74,7 @@ export default function CombatPanel({
             <button
               className="btn btn-secondary btn-xs combat-roll-init-btn"
               onClick={onRollInitiatives}
-              disabled={controlsDisabled}
+              disabled={Boolean(controlsDisabled || attackPhase)}
               title="Roll d20 + modifier for each combatant and re-sort initiative"
             >
               🎲 Roll Initiatives

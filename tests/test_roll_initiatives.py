@@ -240,8 +240,7 @@ class TestInactiveCombatantsRolled:
                 roll_combat_initiatives(session)
                 if session.combat_state.combatants[0].initiative != 99:
                     break
-        assert session.combat_state.combatants[0].initiative != 99 or True  # non-deterministic
-        # Stricter: after 30 rolls the value must have changed at least once
+        # Stricter check: after 30 rolls the value must have changed at least once
         # (probability of all 30 rolls being exactly 19 with d20 is (1/20)^30 ≈ 10^-39)
         with patch.object(sm, "_session_state_path", return_value=tmp_path / "state.json"):
             seen = set()

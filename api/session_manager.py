@@ -1162,6 +1162,7 @@ def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
         return None
 
     for c in session.combat_state.combatants:
+        # _is_pc_attacker checks pc_profiles membership — correct for initiative context too
         if _is_pc_attacker(c.name, session):
             raw_mod = (
                 session.pc_profiles
@@ -1185,8 +1186,10 @@ def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
         reverse=True,
     )
     session.combat_state.current_actor = active_sorted[0].name if active_sorted else None
+    # Ties broken by original insertion order (modifier-based tie rules deferred to SA-2)
+    session.combat_state.combatants.sort(key=lambda c: c.initiative, reverse=True)
     _write_session_state(session)
-    _log(session, f"\n> *[Roll initiatives: new order {', '.join(c.name for c in active_sorted)}]*\n")
+    _log(session, f"\n> *[Roll initiatives: new order {', '.join(f'{c.name} {c.initiative}' for c in active_sorted)}]*\n")
     return _serialize_combat_state(session.combat_state)
 
 

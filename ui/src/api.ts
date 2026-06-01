@@ -1,3 +1,5 @@
+import type { CombatState } from './types'
+
 const BASE = '/api'
 
 export type SseEvent =
@@ -9,7 +11,7 @@ export type SseEvent =
   | { type: 'patch_last'; content: string }
   | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string; speaker?: string | null }
   | { type: 'rate_limits'; rpm_limit?: string; rpm_remaining?: string; rpm_reset?: string; tpm_limit?: string; tpm_remaining?: string; tpm_reset?: string }
-  | { type: 'combat_update'; combat_state: import('./types').CombatState | null }
+  | { type: 'combat_update'; combat_state: CombatState | null }
   | { type: 'attack_request'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
   | { type: 'attack_result'; attacker: string; target: string; roll: number; bonus: number; total: number; ac: number; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean }
 
@@ -88,7 +90,7 @@ export async function endCombat(sessionId: string): Promise<void> {
 
 export async function rollInitiatives(
   sessionId: string,
-): Promise<{ combat_state: import('./types').CombatState }> {
+): Promise<{ combat_state: CombatState }> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/combat/roll_initiatives`, { method: 'POST' })
   if (!res.ok) throw new Error(`Roll initiatives failed (${res.status})`)
   return res.json()

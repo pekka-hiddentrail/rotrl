@@ -265,6 +265,11 @@ body {
   font-size: 0.78rem;
 }
 
+.btn-xs {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.72rem;
+}
+
 .toast {
   position: fixed;
   bottom: 2rem;

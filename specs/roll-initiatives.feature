@@ -170,6 +170,10 @@ Then  "🎲 Roll Initiatives" is disabled
 
 Given combatClosing is true
 Then  "🎲 Roll Initiatives" is disabled
+
+Given attackPhase is set (a PC attack is in progress)
+Then  "🎲 Roll Initiatives" is disabled
+      (rerolling initiatives mid-attack would corrupt the active resolution flow)
 ```
 
 ---

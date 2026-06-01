@@ -326,7 +326,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 700+ pytest tests passing across 27 test files:
+**Backend:** 930+ pytest tests passing across 28 test files:
 
 | File | Covers |
 |------|--------|
@@ -357,6 +357,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_session_state.py` | `sessions/state.template.json` shape and defaults; `_write_session_state` produces valid JSON with all 5 keys (mode, round, events, active_character, combatants); combat start/clear updates mode/round/combatants; combatant fields (name, hp_current, hp_max, ac, initiative, status, conditions) serialised correctly; HP-after-damage reflected; combatants cleared on combat end; `set_active_character` persists across state changes; boot overwrites stale state. 42 tests. *(spec: session-state.feature AC-001 through AC-017)* |
 | `test_combat_lookup.py` | `CombatRulesIndex` loading, trigger detection, longest-match, word boundary, `_parse_combat_rule_file`, `<!-- REFERENCE -->` boundary, `format_context` |
 | `test_combat_attacks.py` | All 9 attack-resolution ACs: `_roll_dice`, `_parse_attack_line/block`, `_is_pc_attacker`, `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `stream_resume_combat`, multi-attack queue, `attack_result`/`attack_request` SSE, stream filter, endpoint HTTP guards (404/409) |
+| `test_roll_initiatives.py` | All 9 roll-initiatives ACs: `roll_combat_initiatives` rolls every combatant, PC modifier applied from `pc_profiles`, enemy flat d20, `current_actor` set to highest active, inactive combatants re-rolled but excluded, `state.json` written after roll, `POST /combat/roll_initiatives` endpoint 200/409/404 guards, PC modifier applied via endpoint |
 | `test_enemy_turn.py` | Enemy-turn Tier 1.7: `%%ACTION%%` parser, focused enemy-turn query, short enemy system prompt, backend-resolved attack/delay streams, endpoint guards, close-combat stream and silent-clear fallback |
 | `test_token_benchmark.py` | Real-API token benchmark — boots Anthropic Haiku, runs three fixed turns, appends prompt/completion/total token counts to `outputs/token_benchmarks.csv`; automatically skipped when `ANTHROPIC_API_KEY` is absent (`@pytest.mark.benchmark`) |
 | `test_prompt_audit.py` | Verifies `scripts/build_coverage.py` produces `outputs/coverage.json` with the expected `summary.total`, `summary.covered`, `summary.gap` keys and correct row schema |
@@ -367,6 +368,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 |------|--------|
 | `App.test.tsx` | App-level SSE integration — boot flow, provider/model switching, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), speaker payload prefixing, purge/View Log/Kill controls, streaming lockout, error bar, session end cleanup, combat-active layout (AC-006), attack resolution wiring (`handleAttackRoll` → damage phase, `handleDamageRoll` → resume, `doResumeCombat` auto-trigger, AC-009 multi-attack banner switch, `attack_type` regression) |
 | `App.enemy-turn.test.tsx` | Tier 1.7 App wiring: Enemy Turn stream state, tokens, `attack_result`, `combat_update`, 409 error handling, and close-combat stream clearing |
+| `App.roll-initiatives.test.tsx` | AC-009 App wiring: `handleRollInitiatives` click → `rollInitiatives` API → `setCombatState` + `setCurrentCombatantName`; error message shown and state unchanged on API failure |
 | `CombatPanel.test.tsx` | AC-007 initiative order + `combatant-current`/`combatant-inactive` CSS; AC-008 End Combat callback + disabled prop; AC-009 `HpBar` colour thresholds (green/amber/red/grey via inline style); AC-012 condition chips, title tooltips, empty conditions |
 | `CombatPanelEnemyTurn.test.tsx` | Tier 1.7 CombatPanel controls: Enemy Turn button, disabled PC-attack state, PC Attacks/Enemy Turn phase badges, and Closing state |
 | `DicePanelAttack.test.tsx` | AC-002/003/004/008 attack banners — to-hit (attacker/target/AC/bonus/active-class/`onAttackRoll`), damage (HIT line/expr/Roll Damage enabled), null phase, attack log (hit/miss badges, PC/NPC labels, log-before-skill-history order), V8 `onDamageRoll` receives rolled values not die sides |
@@ -571,7 +573,7 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 700+ pytest · 230+ Vitest · 13 Playwright mocked · 11 live Playwright tests | ✅ Complete |
+| Test suites — 930+ pytest · 230+ Vitest · 13 Playwright mocked · 11 live Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |

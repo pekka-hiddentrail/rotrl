@@ -15,90 +15,18 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ---
 
-## Combat Bugs (Manual Testing)
+## Bugs
 
-Bugs observed during live play. All items below are blocking normal combat flow and should be fixed before further combat tier work proceeds.
-
-- [ ] **B-C01 — Enemy turn dev mode: raw LLM output not visible** — In dev mode the enemy turn
-  response shows only the flavor sentence; `%%NARRATIVE%%`, `%%ACTION%%`, and any other sections
-  the LLM wrote are stripped before reaching the UI. `stream_enemy_turn` uses a blocking call
-  and manually yields only the narrative portion as a `token` event, bypassing the dev-mode
-  passthrough that `_stream_with_narrative_filter` normally provides. **Fix:** add a dev mode
-  path in `stream_enemy_turn` that yields the full raw response text before parsing, so
-  developers can see exactly what the LLM returned. *(spec: enemy-turn.feature AC-007)*
-
-- [ ] **B-C02 — Speaker prefix uses session activeCharacter, not combat initiative speaker** —
-  When it is a PC's turn (e.g. Yanyeeku is current initiative actor) and the player types
-  "I attack with firebolt", the message is sent and displayed as generic `player` input instead
-  of being prefixed `@Yanyeeku: "..."`. `handleSend` in `App.tsx` reads from `activeCharacter`
-  (player-selected character) for the prefix, not from `inputActiveSpeaker` (which is the
-  combat-initiative-driven speaker). **Fix:** When combat is active and `inputActiveSpeaker` is
-  set and not an enemy, `handleSend` should use `inputActiveSpeaker.name` as the speaker for
-  the prefix — same logic as when a player manually selects a character. *(spec:
-  combat-active-character.feature AC-008; CB1.10-3)*
-
-- [x] **B-C03a — All combatant HP shows as 0/0 after combat starts** — `_build_combat_system_prompt`
-  contained *"Never write hp: for existing combatants"* baked into the base prompt for ALL rounds.
-  The LLM obeyed it on round 1 too, producing every combatant at 0/0. **Fixed:** The HP conduct
-  rule is now round-conditional: *"Round 1 ONLY: MUST include hp: cur/max — backend seeds HP from
-  these values. Round 2+: NEVER write hp: — backend owns it."* Tests added in
-  `TestCombatPromptHPConductRule` (4 tests) asserting the old unconditional wording is absent and
-  the round-conditional wording is present. *(spec: combat-system-prompt.feature)*
-
-- [ ] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the
-  LLM writes HP, PCs should start at their `hp_max` from `_build_pc_combat_roster`. The roster
-  reads `pc_profiles[*]["combat_stats"]["hp_max"]`. If this is 0, the JSON files are either
-  missing the `hp.max` field or the field path in `_build_pc_profiles` doesn't match. **Fix:**
-  Verify `player_*.json` files have `hp.max` populated and that `_build_pc_profiles` reads the
-  right path. Add a pytest assertion that a session built from the real JSON files has non-zero
-  `hp_max` for each PC in `pc_profiles`. *(spec: combat-hp.feature)*
-
-- [ ] **B-C04 — Enemy turn LLM outputs unrecognized `%%` sections** — The LLM returns sections
-  like `%%COMBAT%%` and `%%ATTACK%%` inside the enemy turn response even though `_ENEMY_TURN_SYSTEM`
-  asks for only `%%NARRATIVE%%` + `%%ACTION%%`. The LLM has learned the combat section pattern
-  from regular turns and defaults to it. **Fix:** Strengthen `_ENEMY_TURN_SYSTEM` with an
-  explicit prohibition list: *"Write ONLY %%NARRATIVE%% then %%ACTION%%. Do NOT write %%COMBAT%%,
-  %%ATTACK%%, %%HP%%, %%ROLL%%, %%GENERATE%%, %%DELTAS%%, or %%EVENT%%."* Also add a dev-mode
-  warning that logs the full LLM response when unexpected sections are detected
-  (complements B-C01). *(spec: enemy-turn.feature AC-006)*
-
-- [ ] **B-C05 — Combatants grouped instead of individual (e.g. "Goblin Warriors (4)")** — The
-  CombatPanel shows a single row `Goblin Warriors (4)` instead of four separate rows `Goblin 1`,
-  `Goblin 2`, `Goblin 3`, `Goblin 4`. The LLM uses group notation because `goblin_attack_starts.md`
-  describes them as "Goblin warriors (4–6)" in prose. Two changes needed:
-  - **Event file fix:** Add an explicit individual-entry `## Combatants` table to
-    `goblin_attack_starts.md` that lists each goblin by name (`Goblin 1` … `Goblin 4`).
-  - **Prompt fix:** Add to `_COMBAT_SPEC_ROUND1`: *"List EVERY combatant as a SEPARATE line
-    — never use group notation like 'Goblin Warriors (3)'. Each individual gets its own
-    `- name: …` row."*
-  *(spec: enemy-turn.feature; combat-tracker.feature)*
-
-- ~~[ ] **B-C06 — Initiatives are LLM-invented totals, not rolled from modifiers**~~ *(fully covered by CB1.8-1 through CB1.8-T in COMBAT-TODO.md — tracked there)*
-
-- [x] **B-C08 — `App.enemy-turn.test.tsx` `bootIntoCombat` helper times out** — `closeCombat`
-  and `resumeCombat` mocks returned `undefined`; App.tsx iterates both as async generators, so
-  `for await (... of undefined)` threw TypeError and corrupted component state. **Fixed:** Both
-  mocks now return `(async function* () {})()` (empty terminating generators). Three tests that
-  used immediate assertions after an async click were also wrapped in `waitFor`. Tests now
-  pass: 4/5 pass reliably; 1 (stalled-generator test) uses 15 s timeout to cover slow CI.
-
-- [x] **B-C07 — `POST /enemy_turn` returns 409 during active combat** — Root cause confirmed:
-  when the LLM wrote `%%ATTACK%%` blocks inside the `stream_resume_combat` narration, PC attacks
-  were added to `session.attack_queue` but the `attack_request` SSE events were ignored by
-  `doResumeCombat`, leaving `attackPhase` null while the backend queue was non-empty. **Fixed:**
-  - **Backend:** `stream_resume_combat` now clears `session.attack_queue` defensively before
-    the LLM call; any remaining entries are orphaned from a prior LLM output.
-  - **Frontend:** `doResumeCombat` in App.tsx now handles `attack_request` and `attack_result`
-    events, so new attacks emitted during resume narration correctly set `attackPhase` and
-    disable the "Enemy Turn" button.
-  Tests added: `TestResumeCombatClearsStaleQueue` (3 pytest) and `TestEnemyTurnStaleQueue`
-  (2 pytest) in `test_enemy_turn.py`; regression test in `App.test.tsx` (2 Vitest).
-  *(spec: enemy-turn.feature AC-010)*
+> All known bugs live in **[BUGS.md](BUGS.md)**. Open items: B-C01, B-C02, B-C03b, B-C04, B-C05, B-Q01.
 
 ---
 
 ## Quality and Testing
 
+- [ ] **Update `specs/INDEX.md` and `README.md` test table for `feat/initiative-roller`** — AC count in `specs/INDEX.md` and the test-count table in `README.md` need updating after the roll-initiatives spec (9 ACs) and test files (18 pytest + 8 Vitest) landed.
+- [ ] **Add AC-009 App wiring test** — `handleRollInitiatives` in `App.tsx` has no Vitest test; mock `rollInitiatives` from `api.ts` and assert `setCombatState` and `setCurrentCombatantName` are called with the response values. *(spec: roll-initiatives.feature AC-009)*
+- [ ] **Remove dead `or True` assertion in `test_roll_initiatives.py`** — `assert session.combat_state.combatants[0].initiative != 99 or True` always passes; the actual coverage is in the loop below it. *(tests/test_roll_initiatives.py `TestInactiveCombatantsRolled`)*
+- [ ] **Clarify `attackPhase` disable for Roll Initiatives button** — spec AC-008 does not list `attackPhase` as a disable condition; rerolling mid-attack would be disruptive. Decide and update spec or add to `controlsDisabled`. *(spec: roll-initiatives.feature AC-008)*
 - [ ] **Generate HTML coverage heatmap** — combine code line coverage and feature AC coverage into one visual; dark = no tests, red = code covered but no AC, green = both
 - [ ] **Define risk register** — identify high-risk areas (LLM compliance, session state loss, data corruption); map each risk to covering tests or flag as gap
 - [ ] **Spike: agent-driven exploratory test harness** — one LLM plays as player (sends PF1e actions via the live SSE API), a second evaluates each GM response against a rubric (no leaked markers, narrative length, no invented lore)
@@ -269,6 +197,11 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Code Quality / Refactoring
 
+- [ ] **Add comment at `_is_pc_attacker` call in `roll_combat_initiatives`** — function is named for attack resolution but reused for PC detection during initiative; a one-line comment prevents future confusion. *(api/session_manager.py)*
+- [ ] **Fix inline `import('./types')` in `api.ts` `rollInitiatives` return type** — see **[BUGS.md](BUGS.md) B-Q01**.
+- [ ] **Document `round < 1` sentinel in `CombatPanel.tsx`** — `showRound = combatState.round >= 1` hides the round badge when round is -1 (initiative not yet rolled); add an inline comment explaining the convention.
+- [ ] **Document initiative tie-breaking behaviour** — `sorted()` breaks ties by original insertion order; add a comment on the sort in `roll_combat_initiatives` noting this is intentional (modifier-based tie rules deferred to SA-2). *(api/session_manager.py)*
+- [ ] **Include rolled totals in initiative log entry** — current format is `new order: Name1, Name2`; change to `new order: Name1 18, Name2 11` so session logs show what was rolled. *(api/session_manager.py `roll_combat_initiatives`)*
 - [ ] **R1c — Extract `_process_response(response_text, session) -> tuple[str, Optional[dict]]`** — pulls out steps 9–10: section-based parsing (`%%NARRATIVE%%` / `%%ROLL%%` / `%%GENERATE%%` / `%%DELTAS%%`) and the flat fallback path (`%%DELTA%%` / `%%GENERATE%%`). All NPC file writes happen here. Sets `session.pending_roll`. Returns `(display_text, roll_data)` — no SSE yielding inside. Prerequisite: R1a shipped and stable.
 - [ ] **R1d — Tests for `_process_response`** *(ship with R1c)* — three cases: (1) section format happy path — correct display_text and roll_data returned; (2) flat fallback — roll block stripped from display_text; (3) no markers — raw text returned unchanged. Plus extend `test_turns.py` golden-path test: mock Groq, assert SSE event order is `context → token(s) → patch_last → roll_request`.
 - [ ] **R1e — Complete orchestrator: `_stream_chat` → ~40 lines** *(ship after R1c is stable in play)* — `_inject_context` is already wired; replace the remaining inline response-parsing block with a call to `_process_response`. Validate with R1d integration test.
@@ -383,13 +316,13 @@ Event-triggered context injection. When the LLM decides a scene condition is met
 > **Open design question:** N=5 turns is a starting point. Needs tuning against real sessions. Also deferred: full content → compressed summary mid-window.
 
 - [ ] **Monitor event firing in real sessions** — verify the LLM fires events at the right narrative moments and does not double-fire or skip. N=5 turns TTL is a starting point; tune against observed sessions. Also watch whether the CORRECT/WRONG examples in the prompt fully eliminate the double-write behavior over time.
-- [x] **Spec — `%%EVENT%%` block format** — `specs/event-injection.feature` written: 8 ACs, inline syntax `%%EVENT%% <id>`, single event per response, TTL-only expiry.
+- [x] **Spec — `%%EVENT%%` block format** — `specs/event-injection.feature` written: 9 ACs (AC-009 adds `event_type` metadata), inline syntax `%%EVENT%% <id>`, single event per response, TTL-only expiry.
 - [x] **Event content files** — `adventure_path/02_events/` created with `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Format: metadata header above `<!-- INJECT -->`, injectable content below.
 - [x] **`EventIndex`** — `api/context/event_index.py`: `EventEntry` dataclass, `EventIndex` with lazy load, `get()`, `event_map_text()`, `_parse_event_file()`. Singleton + `_get_event_index()` in `session_manager.py`.
 - [x] **Session state** — `ActiveEvent` dataclass (`event_id`, `content`, `turns_remaining`) added. `active_events: list` field on `GameSession`. TTL decremented in `_inject_context`; expired entries removed.
 - [x] **Parser** — `_EVENT_LINE_RE` regex; fires in both section-based and flat-block paths. Duplicate check (no TTL reset), unknown-ID guard (silent ignore).
 - [x] **Injection** — active event content injected in `_inject_context` alongside NPC/skill/location blocks. `%%EVENT%%` added to streaming filter `_END_MARKERS` (hidden from player). Event map appended to system prompt via `_build_slim_system_prompt`.
-- [x] **Tests** — `tests/test_event_injection.py`: 24 tests. Covers EventIndex loading, file parsing, event map text, firing, unknown ID, duplicate TTL, expiry, injection presence, expiry suppresses injection, SSE active_events list, player-hidden token stream, and double-write regression (LLM writes bare `%%EVENT%%` then `%%EVENT%% <id>` — see known quirk note below).
+- [x] **Tests** — `tests/test_event_injection.py`: 29 tests. Covers EventIndex loading, file parsing, event map text, `event_type` metadata (AC-009), firing, unknown ID, duplicate TTL, expiry, injection presence, expiry suppresses injection, SSE active_events list, player-hidden token stream, and double-write regression.
 - [x] **Live-testing bugs found and fixed** — two issues discovered during manual testing:
   - *Prompt format:* `%%EVENT%%` was listed in RESPONSE STRUCTURE like other section markers, so the LLM wrote it as a section header with explanation text below, never putting the ID on the same line. Fixed: rewritten as `SCENE EVENT (optional — not a section header)` with explicit `CORRECT` / `WRONG` examples including the exact double-write pattern.
   - *Regex false match:* `_EVENT_LINE_RE = r'^%%EVENT%%\s+(\S+)'` — in multiline mode `\s+` consumes a newline, causing the second `%%EVENT%%` marker to be captured as the ID when the LLM double-writes. Fixed: `(\S+)` → `([A-Za-z]\w*)` (event IDs always start with a letter; the marker itself starts with `%`).

@@ -33,10 +33,9 @@ Items that span multiple combat tiers or require coordination with non-combat la
 
 - [x] **Vitest — attack resolution UI** — 15 tests in `DicePanelAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
 - [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DicePanel.tsx `handleDamageRollClick`)*
+- [ ] **Enemy turn auto-advance policy** — decide whether `POST /enemy_turn` should automatically advance initiative after it emits `combat_update`, or whether the GM should click **Next Turn** explicitly. Add tests for whichever policy wins so enemy turns cannot accidentally repeat the same actor forever.
 
 ---
-
-- [ ] **Enemy turn auto-advance policy** — decide whether `POST /enemy_turn` should automatically advance initiative after it emits `combat_update`, or whether the GM should click **Next Turn** explicitly. Add tests for whichever policy wins so enemy turns cannot accidentally repeat the same actor forever.
 
 ## Adventure Combat Content
 
