@@ -77,6 +77,8 @@ class TestActionBlockParser:
             "action": "attack",
             "target": "Vanx",
             "weapon": "dogslicer",
+            "bonus": "",
+            "damage": "",
             "ability": "",
             "movement": "",
             "reason": "closest threat",
@@ -102,6 +104,68 @@ class TestActionBlockParser:
         assert parsed is not None
         assert parsed["action"] == "delay"
 
+    def test_parse_action_block_extracts_bonus_and_damage(self):
+        """LLM-provided bonus/damage fields are extracted verbatim."""
+        parsed = _parse_action_block(
+            "%%ACTION%%\n"
+            "action: attack\n"
+            "target: Vanx\n"
+            "weapon: dogslicer\n"
+            "bonus: +2\n"
+            "damage: 1d4\n"
+            "reason: closest"
+        )
+        assert parsed is not None
+        assert parsed["bonus"] == "+2"
+        assert parsed["damage"] == "1d4"
+
+    def test_extract_narrative_strips_action_markup_when_llm_omits_narrative_block(self):
+        """Markup must not reach the player when %%NARRATIVE%% is absent."""
+        full_response = (
+            "%%ACTION%%\n"
+            "action: attack\n"
+            "target: Vanx\n"
+            "weapon: dogslicer\n"
+            "reason: closest threat\n"
+            "%%END%%"
+        )
+        result = sm._extract_narrative(full_response)
+        assert result == ""
+
+    def test_get_attack_uses_llm_provided_bonus_and_damage(self):
+        """_get_attack_for_enemy honours bonus/damage from the parsed %%ACTION%% block."""
+        action = {
+            "action": "attack",
+            "target": "Vanx",
+            "weapon": "dogslicer",
+            "bonus": "+2",
+            "damage": "1d4+1",
+            "ability": "",
+            "movement": "",
+            "reason": "closest",
+        }
+        result = sm._get_attack_for_enemy(action, "Goblin Warrior 1")
+        assert result["bonus"] == 2
+        assert result["damage"] == "1d4+1"
+        assert result["type"] == "melee"
+
+    def test_get_attack_falls_back_to_defaults_when_bonus_damage_absent(self):
+        """Generic defaults are used when the LLM omits bonus/damage fields."""
+        action = {
+            "action": "attack",
+            "target": "Vanx",
+            "weapon": "shortbow",
+            "bonus": "",
+            "damage": "",
+            "ability": "",
+            "movement": "",
+            "reason": "ranged",
+        }
+        result = sm._get_attack_for_enemy(action, "Goblin Warrior 1")
+        assert result["bonus"] == 4   # fallback default
+        assert result["damage"] == "1d4"  # fallback default
+        assert result["type"] == "ranged"
+
 
 class TestEnemyTurnQuery:
     def test_enemy_turn_query_lists_actor_allies_pcs_budget_and_action_spec(self):
@@ -116,6 +180,8 @@ class TestEnemyTurnQuery:
         assert "Normal turn" in query
         assert "%%ACTION%%" in query
         assert "action: attack|use_ability|move|delay" in query
+        assert "bonus:" in query
+        assert "damage:" in query
 
     def test_enemy_turn_query_adjusts_action_budget_for_restrictive_conditions(self):
         session = _session()

@@ -779,6 +779,8 @@ def _parse_action_block(text: Optional[str]) -> Optional[dict]:
         "action": action,
         "target": fields.get("target", ""),
         "weapon": fields.get("weapon", ""),
+        "bonus": fields.get("bonus", ""),
+        "damage": fields.get("damage", ""),
         "ability": fields.get("ability", ""),
         "movement": fields.get("movement", ""),
         "reason": fields.get("reason", ""),
@@ -3103,7 +3105,11 @@ def _enforce_recap_header(text: str, session_number: int) -> str:
 
 
 def _call_blocking(session: GameSession, system: str, user: str) -> str:
-    """Single non-streaming LLM call dispatched by provider. Used for recap generation."""
+    """Single non-streaming LLM call dispatched by provider.
+
+    Used for enemy turns, combat-close narration, and end-of-session recap generation.
+    Sends only the given system + user message pair (no session history).
+    """
     messages = [
         {"role": "system", "content": system},
         {"role": "user",   "content": user},
@@ -3243,6 +3249,8 @@ Output format:
 action: attack|use_ability|move|delay
 target: <target name, if any>
 weapon: <weapon/name, if attack>
+bonus: <to-hit bonus, e.g. +2 or +4, if attack>
+damage: <damage dice, e.g. 1d4 or 1d6+2, if attack>
 ability: <ability name, if use_ability>
 movement: <movement description, if move>
 reason: <brief tactical reason>
@@ -3251,17 +3259,36 @@ reason: <brief tactical reason>
 
 def _extract_narrative(text: str) -> str:
     sections = _parse_response_sections(text or "")
-    return sections.get("NARRATIVE", text or "").strip()
+    raw = sections.get("NARRATIVE", "").strip()
+    # _parse_response_sections falls back to storing the entire text as NARRATIVE
+    # when no %%NARRATIVE%% marker is present but other markers are.  Detect this
+    # by checking whether the "narrative" value itself contains section markers —
+    # if so it is raw LLM output that the player should never see.
+    if _SECTION_MARKER_RE.search(raw):
+        return ""
+    return raw
 
 
 def _get_attack_for_enemy(action: dict, attacker_name: str) -> dict:
     weapon = (action.get("weapon") or "").lower()
     attack_type = "ranged" if any(word in weapon for word in ("bow", "sling", "javelin", "dart")) else "melee"
+
+    # Use bonus/damage if the LLM provided them in the %%ACTION%% block; fall back to
+    # generic defaults only when the values are absent or unparseable.
+    bonus_raw = re.sub(r"[^0-9\-]", "", str(action.get("bonus") or ""))
+    try:
+        bonus = int(bonus_raw)
+    except ValueError:
+        bonus = 4  # generic fallback — Tier 2 will look up per-NPC stats
+
+    damage_raw = (action.get("damage") or "").strip()
+    damage = damage_raw if re.search(r"\d+d\d+", damage_raw) else "1d4"
+
     return {
         "attacker": attacker_name,
         "target": action.get("target") or "",
-        "bonus": 4,
-        "damage": "1d4",
+        "bonus": bonus,
+        "damage": damage,
         "type": attack_type,
     }
 

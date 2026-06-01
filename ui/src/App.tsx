@@ -319,6 +319,10 @@ export default function App() {
       setError(String(e))
     } finally {
       setEnemyTurnStreaming(false)
+      // Enemy attacks are narrated and resolved entirely within the enemy turn stream.
+      // Clearing the log here prevents stale entries from triggering a false
+      // doResumeCombat call when the player sends their next turn.
+      setAttackLogSync(() => [])
     }
   }
 
