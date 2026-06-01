@@ -249,7 +249,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
-> Current status: Tiers 1, 1.1, 1.5, 1.6, and 1.10 (partial) complete. Tier 1.7 next.
+> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, and 1.10 (partial) complete. Tier 1.8 next.
 
 ---
 
