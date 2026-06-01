@@ -2017,6 +2017,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid #3a1818;
   margin-bottom: 4px;
@@ -2028,6 +2029,35 @@ body {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: #c9a84c;
+}
+
+.combat-panel-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.combat-phase-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  color: #e8dcc2;
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.combat-phase-badge.pc {
+  background: #33210b;
+  border: 1px solid #8a5a19;
+  color: #e0b25a;
+}
+
+.combat-phase-badge.enemy {
+  background: #351010;
+  border: 1px solid #8a2020;
+  color: #f07070;
 }
 
 .combat-round-badge {

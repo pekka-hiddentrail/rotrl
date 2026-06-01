@@ -2,5 +2,6 @@
   "mode": "social",
   "round": 0,
   "events": [],
-  "active_character": "party"
+  "active_character": "party",
+  "combatants": []
 }

@@ -14,7 +14,7 @@ import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, endCombat, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
+import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
   const [imgOk, setImgOk] = useState(true)
@@ -61,6 +61,8 @@ export default function App() {
   const [currentCombatantName, setCurrentCombatantName] = useState<string | null>(null)
   const [attackPhase, setAttackPhase] = useState<AttackPhase>(null)
   const [attackLog, setAttackLog] = useState<AttackResult[]>([])
+  const [enemyTurnStreaming, setEnemyTurnStreaming] = useState(false)
+  const [combatClosing, setCombatClosing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
   const [showBenchmarks, setShowBenchmarks] = useState(false)
@@ -93,6 +95,8 @@ export default function App() {
     setSession(null)
     setStreaming(true)
     setPendingRoll(null)
+    setEnemyTurnStreaming(false)
+    setCombatClosing(false)
     setDiceKey(k => k + 1)
 
     // 1. Fetch and show the intro card immediately
@@ -194,9 +198,16 @@ export default function App() {
         if (event.type === 'combat_update') {
           const cs = event.combat_state
           setCombatState(cs)
-          // AC-008: read current_actor from backend (authoritative) rather than computing client-side
           setCurrentCombatantName(cs?.current_actor ?? null)
         }
+        // If the LLM writes %%ATTACK%% blocks during the resume narration, the backend
+        // queues PC attacks and emits attack_request events.  Without handling them here,
+        // attackPhase stays null while the backend queue is non-empty — causing the next
+        // enemy_turn call to return 409.
+        if (event.type === 'attack_request') {
+          setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
+        }
+        if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
@@ -283,18 +294,64 @@ export default function App() {
     setPendingRoll(null)
     setAttackPhaseSync(null)
     setAttackLogSync(() => [])
+    setEnemyTurnStreaming(false)
+    setCombatClosing(false)
     setDiceKey(k => k + 1)
+  }
+
+  const handleEnemyTurn = async () => {
+    if (!session || !combatState || attackPhaseRef.current) return
+    setError(null)
+    setEnemyTurnStreaming(true)
+    setMessages(prev => [...prev, { role: 'gm', content: '' }])
+    try {
+      for await (const event of runEnemyTurn(session.id)) {
+        if (event.type === 'token') appendToken(event.content)
+        if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
+        if (event.type === 'combat_update') {
+          const cs = event.combat_state
+          setCombatState(cs)
+          setCurrentCombatantName(cs?.current_actor ?? null)
+        }
+        if (event.type === 'error') throw new Error(event.message)
+      }
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setEnemyTurnStreaming(false)
+      // Enemy attacks are narrated and resolved entirely within the enemy turn stream.
+      // Clearing the log here prevents stale entries from triggering a false
+      // doResumeCombat call when the player sends their next turn.
+      setAttackLogSync(() => [])
+    }
   }
 
   const handleEndCombat = async () => {
     if (!session) { setCombatState(null); return }
+    setError(null)
+    setCombatClosing(true)
+    setMessages(prev => [...prev, { role: 'gm', content: '' }])
     try {
-      await endCombat(session.id)
-      setCombatState(null)
-      setCurrentCombatantName(null)
+      for await (const event of closeCombat(session.id)) {
+        if (event.type === 'token') appendToken(event.content)
+        if (event.type === 'combat_update') {
+          const cs = event.combat_state
+          setCombatState(cs)
+          setCurrentCombatantName(cs?.current_actor ?? null)
+          if (!cs) {
+            setAttackPhaseSync(null)
+            setAttackLogSync(() => [])
+          }
+        }
+        if (event.type === 'error') throw new Error(event.message)
+      }
     } catch {
       setCombatState(null)
-      setCurrentCombatantName(null) // clear locally even if request fails
+      setCurrentCombatantName(null)
+      setAttackPhaseSync(null)
+      setAttackLogSync(() => [])
+    } finally {
+      setCombatClosing(false)
     }
   }
 
@@ -350,6 +407,8 @@ export default function App() {
       setPendingRoll(null)
       setAttackPhaseSync(null)
       setAttackLogSync(() => [])
+      setEnemyTurnStreaming(false)
+      setCombatClosing(false)
       setDiceKey(k => k + 1)
     }
   }
@@ -483,7 +542,7 @@ export default function App() {
           {isBooted && (
             <InputBar
               onSend={handleSend}
-              disabled={streaming || ending}
+              disabled={streaming || ending || enemyTurnStreaming || combatClosing}
               activeSpeaker={inputActiveSpeaker}
             />
           )}
@@ -494,7 +553,11 @@ export default function App() {
             combatState={combatState}
             disabled={streaming || ending}
             currentCombatantName={currentCombatantName}
+            attackPhase={attackPhase}
+            enemyTurnStreaming={enemyTurnStreaming}
+            combatClosing={combatClosing}
             onAdvanceTurn={handleAdvanceTurn}
+            onEnemyTurn={handleEnemyTurn}
             onEndCombat={handleEndCombat}
           />
         )}

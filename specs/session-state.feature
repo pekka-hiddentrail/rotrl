@@ -12,22 +12,22 @@
 > As the **GM engine**,
 > I want a lightweight state file written to `sessions/session_NNN/state.json` on every
 > relevant state change,
-> so that the current mode (social / combat), active round, and fired events are always
-> readable from disk without inspecting logs or memory.
+> so that the current mode, active round, fired events, active character, and combatant list
+> are always readable from disk without inspecting logs or memory.
 
 The in-memory `GameSession` object holds all runtime state, but it is lost when the server
-restarts. This feature introduces a minimal snapshot — deliberately small — that captures only
-the three most important pieces of session context: whether the session is in social or combat
-mode, which round combat is on, and which events are currently active. It is not a full session
-restore; it is a "state of play" indicator that can be read by tooling, tests, and future
-features (e.g. auto-resuming a session after a restart).
+restarts. This feature introduces a snapshot that captures the key pieces of session context:
+whether the session is in social or combat mode, which round combat is on, which events are
+currently active, which character is currently active, and the full combatant list with HP/AC.
+It is not a full session restore; it is a "state of play" indicator that can be read by
+tooling, tests, and future features (e.g. auto-resuming a session after a restart).
 
 ---
 
 ## Background
 
-- Given a `sessions/state.template.json` exists at the repo root with
-  `{"mode":"social","round":0,"events":[]}`
+- Given a `sessions/state.template.json` exists at the repo root with keys
+  `"mode"`, `"round"`, `"events"`, `"active_character"`, `"combatants"`
 - And a session has been created via `create_session(session_number, ...)`
 
 ---
@@ -41,10 +41,43 @@ features (e.g. auto-resuming a session after a restart).
 ```gherkin
 Given the repository root
 Then  sessions/state.template.json exists
-And   it is valid JSON with keys "mode", "round", "events"
-And   "mode"   == "social"
-And   "round"  == 0
-And   "events" == []
+And   it is valid JSON with keys "mode", "round", "events", "active_character", "combatants"
+And   "mode"             == "social"
+And   "round"            == 0
+And   "events"           == []
+And   "active_character" == "party"
+And   "combatants"       == []
+```
+
+**Combat state shape** — each entry in `"combatants"` when mode is `"combat"`:
+
+```json
+{
+  "mode": "combat",
+  "round": 1,
+  "events": ["goblin_attack_starts"],
+  "active_character": "Goblin Warchanter",
+  "combatants": [
+    {
+      "name": "Goblin Warchanter",
+      "hp_current": 8,
+      "hp_max": 8,
+      "ac": 14,
+      "initiative": 15,
+      "status": "active",
+      "conditions": []
+    },
+    {
+      "name": "Ani",
+      "hp_current": 11,
+      "hp_max": 11,
+      "ac": 17,
+      "initiative": 10,
+      "status": "active",
+      "conditions": []
+    }
+  ]
+}
 ```
 
 ---
@@ -56,9 +89,11 @@ And   "events" == []
 ```gherkin
 Given create_session(session_number=1, ...) is called
 Then  sessions/session_001/state.json is created
-And   "mode"   == "social"
-And   "round"  == 0
-And   "events" == []
+And   "mode"             == "social"
+And   "round"            == 0
+And   "events"           == []
+And   "active_character" == "party"
+And   "combatants"       == []
 ```
 
 ---
@@ -168,7 +203,7 @@ Then  state.json "events" == []
 ```gherkin
 Given any call to _write_session_state(session)
 Then  the resulting file parses without error with json.loads()
-And   all four keys "mode", "round", "events", "active_character" are present
+And   all five keys "mode", "round", "events", "active_character", "combatants" are present
 ```
 
 ---
@@ -184,6 +219,7 @@ Then  state.json "mode"             == "social"
 And   state.json "round"            == 0
 And   state.json "events"           == []
 And   state.json "active_character" == "party"
+And   state.json "combatants"       == []
 ```
 
 ---
@@ -254,4 +290,4 @@ Then  state.json "active_character" is still "Yanyeeku"
 - Automatic active_character update when combat turn advances (Tier 1.10 — CB1.10-1)
 - Frontend reading of state.json directly (backend owns this file)
 - Full session restore from state.json (future work)
-- HP, initiative order, or combatant list in state.json (Tier 1.5 owns combat state in memory)
+- Conditions, effects, or inventory in state.json (future tiers)

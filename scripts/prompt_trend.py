@@ -4,7 +4,7 @@ Reads all api_log JSON files, appends new entries to outputs/prompt_trend.csv,
 and prints a summary so you can spot growth over time.
 
 Usage:
-    python prompt_trend.py
+    python scripts/prompt_trend.py
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 _LOG_DIR   = _REPO_ROOT / "outputs" / "api_log"
 _TREND_CSV = _REPO_ROOT / "outputs" / "prompt_trend.csv"
 

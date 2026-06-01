@@ -342,6 +342,57 @@ And   the row does NOT have "combatant-current"
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-016 — "Enemy Turn" button rendered in CombatPanel
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given CombatPanel renders with a valid combatState
+Then  an "Enemy Turn" button is present
+And   the button calls onEnemyTurn when clicked
+And   the button is disabled when the disabled prop is true
+And   the button is absent (or disabled) when onEnemyTurn prop is not provided
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-017 — Phase badge shows current turn phase
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given no attack is pending and no enemy turn is streaming
+When  CombatPanel renders
+Then  no phase badge is shown next to "Round N"
+
+Given enemyTurnStreaming prop is true
+When  CombatPanel renders
+Then  a phase badge with text "Enemy Turn" is shown in red/hostile colour
+
+Given attackPhase prop is not null (a PC attack is pending)
+When  CombatPanel renders
+Then  a phase badge with text "PC Attacks" is shown in amber colour
+
+Given enemyTurnStreaming is true AND attackPhase is not null
+Then  the "Enemy Turn" badge takes precedence
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-018 — "End Combat" shows "Closing…" state during close_combat stream
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given the user clicks "End Combat"
+When  the close_combat SSE stream is in progress
+Then  the "End Combat" button is replaced by a disabled "Closing…" button
+And   the button returns to "End Combat" once the stream completes
+And   the CombatPanel disappears only after the stream ends and combat_state is cleared
+```
+
+---
+
 ## Notes
 
 - `%%COMBAT%%` is a **section marker** (like `%%DELTAS%%`), not an inline tag like `%%EVENT%%`.

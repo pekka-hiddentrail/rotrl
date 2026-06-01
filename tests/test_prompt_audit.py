@@ -1,4 +1,5 @@
 """Prompt size audits — run with:  pytest -m prompt_audit
+Or via the combined script:       scripts/audit_prompts.ps1
 
 These tests assemble real system prompts (via _inject_context with mocked indexes)
 and assert that the resulting system content stays within character budgets.

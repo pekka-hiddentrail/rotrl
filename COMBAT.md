@@ -6,9 +6,9 @@ This document describes how combat is tracked, displayed, and ended — from the
 
 ## Overview
 
-The LLM owns combat. It decides when a fight starts, writes all HP values each turn, and signals the end. The server parses the output, stores a `CombatState` object on the session, and pushes a `combat_update` SSE event to the UI after every turn. The frontend renders the `CombatPanel` when state is non-null and hides it when state is cleared.
+Combat is a shared loop now: the LLM still frames the scene and can start combat with a `%%COMBAT%%` block, but the backend owns the mechanical pieces that must not drift. HP is authoritative after initial combat setup, NPC attacks are rolled server-side, PC attacks go through the DicePanel, and focused enemy turns use a tight `%%ACTION%%` response rather than a broad free-form combat turn.
 
-No dice resolution happens server-side. No initiative is rolled automatically. The LLM tracks all of that in the block it writes.
+The server stores a `CombatState` object on the session and pushes a `combat_update` SSE event to the UI after every turn or focused combat action. The frontend renders the `CombatPanel` when state is non-null and hides it when state is cleared.
 
 ---
 
@@ -41,7 +41,7 @@ Rules the LLM follows (also stated in the system prompt):
 - Fields: `name`, `hp` (current/max), `ac`, `init`, `status`.
 - Valid statuses: `active`, `unconscious`, `fled`, `dead`.
 - **Every combatant appears every turn** — do not drop resolved combatants until `round: 0`.
-- HP values are updated each turn to reflect damage taken this turn.
+- HP values initialise combat on round 1. After that the backend preserves and mutates HP; LLM-written HP for existing combatants is ignored.
 
 ---
 
@@ -58,7 +58,7 @@ Per-combatant parsing:
 - Unrecognised status values default to `"active"`.
 - Rows with no `name` field are silently skipped.
 
-After parsing, a `combat_update` SSE event is emitted on **every turn** (not just when state changes):
+After parsing and backend mutation, a `combat_update` SSE event is emitted on **every turn** and focused combat action (not just when state changes):
 
 ```json
 { "type": "combat_update", "combat_state": { "round": 1, "combatants": [...] } }
@@ -77,13 +77,40 @@ When `combatState` is non-null in `App.tsx`:
 - `.main-content` gains the `combat-active` CSS class.
 
 `CombatPanel` renders:
-- A header showing the current round number.
+- A header showing the current round number and, when relevant, a phase badge (`PC Attacks` or `Enemy Turn`).
 - One row per combatant, sorted highest-initiative-first.
-- The top combatant (highest init, `active` status) gets the `combatant-current` class — gold glow.
+- The current actor from `combat_state.current_actor` gets the `combatant-current` class — gold glow.
 - Inactive combatants (`unconscious`, `fled`, `dead`) get the `combatant-inactive` class — dimmed, with a coloured status badge.
 - `HpBar` for each combatant: green (>66%), amber (33–66%), red (<33%), dark grey (0 HP).
 - AC value shown as a shield chip.
-- An **End Combat** button.
+- A **Next Turn** button, which advances the backend current actor.
+- An **Enemy Turn** button, which calls `POST /api/sessions/{id}/enemy_turn`.
+- An **End Combat** button, which calls `POST /api/sessions/{id}/close_combat`.
+
+---
+
+## Enemy Turns
+
+`POST /api/sessions/{id}/enemy_turn` runs the current enemy actor through a focused blocking LLM call. It does not use the full chat history or the normal `_stream_chat` pipeline.
+
+The focused system prompt tells the model to write only:
+
+```
+%%NARRATIVE%%
+<short visible action narration>
+
+%%ACTION%%
+action: attack|use_ability|move|delay
+target: <target name, if any>
+weapon: <weapon/name, if attack>
+ability: <ability name, if use_ability>
+movement: <movement description, if move>
+reason: <brief tactical reason>
+```
+
+The backend parses `%%ACTION%%`, strips it from player-facing text, and resolves the mechanics. For `action: attack`, the backend rolls d20 + attack bonus against the target's authoritative AC, rolls damage on hit, applies HP, emits `attack_result`, then emits `combat_update`.
+
+Current limitation: Tier 1.7 uses a conservative fallback enemy attack profile when canonical attack stats are not yet attached to the combatant. The combat backlog tracks the next step: hydrating enemy attacks from event files and bestiary data.
 
 ---
 
@@ -97,7 +124,9 @@ The `attack_repelled` event file includes a `### REQUIRED — Combat tracker` se
 
 ### GM clicks End Combat
 
-`DELETE /api/sessions/{id}/combat` sets `session.combat_state = None` on the backend immediately. The UI sets `combatState` to `null` without waiting for a `combat_update` event. The next turn proceeds normally; the LLM can re-open combat by writing a new `%%COMBAT%%` block.
+`POST /api/sessions/{id}/close_combat` asks the LLM for one short closure beat using the current combat snapshot, streams that narrative to chat, then clears `session.combat_state`, attack queue, and attack results. It writes `state.json` and emits `combat_update` with `combat_state: null`. If the LLM call fails, the backend silently clears combat anyway.
+
+`DELETE /api/sessions/{id}/combat` still exists as a direct clear endpoint, but the UI uses `close_combat` so the end has a player-facing narration.
 
 ### Session end
 
@@ -158,16 +187,16 @@ for subsequent turns.
 ## Known LLM Behaviour
 
 - **First combat turn compliance**: the model sometimes writes good narrative and fires `%%EVENT%% goblin_attack_starts` but omits `%%COMBAT%%`. This is why event files include an explicit `REQUIRED` block and `_inject_context` injects a reminder on every subsequent turn.
-- **Round counter**: models sometimes repeat the same round number instead of incrementing. The UI shows whatever round the LLM writes — there is no server-side round validation.
+- **Round counter**: models can still repeat the same round number in `%%COMBAT%%`. The current actor is backend-owned, but full initiative/round authority is still backlog work.
 - **Flat-prose fallback**: if the model doesn't use `%%NARRATIVE%%` markers at all, `section_format_ok` is `false` and the flat-block fallback path is used. `%%COMBAT%%` is still detected in the flat path.
 - **Duplicate `%%EVENT%%`**: the model occasionally writes `%%EVENT%% goblin_attack_starts` even when the event is already active. The `_already_active` guard prevents double-counting.
+- **Enemy stat source**: enemy-turn attack resolution currently needs backend-hydrated attack stats from event/bestiary data to replace the Tier 1.7 fallback profile.
 
 ---
 
 ## Tier 2 (Not Yet Implemented)
 
-- Automatic attack resolution via `%%ATTACK%%` blocks
-- Server-side HP delta computation (currently the LLM writes all HP values)
 - Map / grid positioning
-- Condition tracking beyond the four status values
+- Full condition duration/effect tracking
+- Backend-hydrated enemy stat registry for enemy-turn attacks
 - Spell slot consumption tracking

@@ -13,6 +13,14 @@ npm run test:e2e
 npx playwright test --config playwright.live.config.ts
 ```
 
+Tier 1.7 enemy-turn coverage is implemented at all three automated layers:
+
+```
+python -m pytest tests/test_enemy_turn.py -q -p no:cacheprovider
+cd ui && npm run test -- CombatPanelEnemyTurn.test.tsx App.enemy-turn.test.tsx --run
+cd ui && npx playwright test enemy-turn.spec.ts
+```
+
 Start the stack:
 
 ```
