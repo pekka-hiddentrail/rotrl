@@ -645,3 +645,45 @@ class TestCombatPromptDoesNotAddNarrativeBlocks:
         combat_content, _ = _call(session)
         # _GENERATE_SPEC unique phrase
         assert "REQUIRED for every NEW named character" not in combat_content
+
+
+# ── B-C03a regression — HP conduct rule must be round-conditional ─────────────
+
+class TestCombatPromptHPConductRule:
+    """B-C03a: _build_combat_system_prompt must NOT unconditionally forbid hp: on round 1.
+
+    The old wording 'Never write hp: for existing combatants' caused the LLM to omit
+    HP on round 1, leaving every combatant at 0/0. The fix makes the rule conditional:
+    MUST include HP on round 1, NEVER on round 2+.
+    """
+
+    def _prompt(self):
+        session = _make_session(pc_profiles=_make_pc_profiles())
+        return _build_combat_system_prompt(session)
+
+    def test_round1_hp_requirement_present(self):
+        prompt = self._prompt()
+        assert "Round 1" in prompt or "round 1" in prompt.lower(), (
+            "Combat prompt must mention round 1 HP requirement"
+        )
+
+    def test_must_include_hp_on_round1(self):
+        prompt = self._prompt()
+        # The prompt must instruct LLM to INCLUDE hp: on round 1
+        assert "MUST include hp" in prompt or "must include hp" in prompt.lower(), (
+            "Combat prompt must explicitly require hp: on round 1"
+        )
+
+    def test_never_write_hp_scoped_to_round2(self):
+        prompt = self._prompt()
+        # The 'never write hp' prohibition must be qualified to round 2+
+        assert "Round 2" in prompt or "round 2" in prompt.lower() or "2+" in prompt, (
+            "The hp prohibition must be scoped to round 2+ not all rounds"
+        )
+
+    def test_old_unconditional_hp_prohibition_absent(self):
+        prompt = self._prompt()
+        # This was the exact old wording that caused the bug — must not reappear
+        assert "Never write hp: for existing combatants" not in prompt, (
+            "Old unconditional HP prohibition must not be present — it suppresses HP on round 1"
+        )

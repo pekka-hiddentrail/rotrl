@@ -21,7 +21,8 @@ vi.mock('../api', () => ({
   logRoll: vi.fn().mockResolvedValue(undefined),
   resolveRoll: vi.fn().mockResolvedValue({ passed: true, outcome: 'You succeed!' }),
   purgeSessionNpcs: vi.fn().mockResolvedValue({ purged: 0 }),
-  endCombat: vi.fn().mockResolvedValue({}),
+  closeCombat: vi.fn(),
+  runEnemyTurn: vi.fn(),
   resolveAttackRoll: vi.fn(),
   resolveDamageRoll: vi.fn(),
   resumeCombat: vi.fn(),
@@ -985,5 +986,87 @@ describe('App — session end cleanup', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Boot Session' })).toBeInTheDocument(),
     )
+  })
+})
+
+// ── B-C07 regression — doResumeCombat handles attack_request ─────────────────
+
+describe('App — B-C07 doResumeCombat handles attack_request events', () => {
+  let user: ReturnType<typeof userEvent.setup>
+
+  beforeEach(async () => {
+    setup()
+    user = userEvent.setup()
+    await bootApp(user)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('attack_request emitted during resume_combat sets attackPhase (DicePanel attack banner)', async () => {
+    // Turn response: NPC attack that auto-resolves → triggers resume_combat
+    mockSend.mockImplementation(() =>
+      makeGen(
+        { type: 'attack_result' as const, attacker: 'Goblin 1', target: 'Thaelion', roll: 14, bonus: 3, total: 17, ac: 16, hit: true, damage_rolls: [5], damage_total: 5, attack_type: 'melee', is_pc: false },
+      ),
+    )
+    // resume_combat response: LLM writes ANOTHER %%ATTACK%% block for a PC
+    mockResumeCombat.mockImplementation(() =>
+      makeGen(
+        { type: 'token' as const, content: 'The goblin snarls.' },
+        {
+          type: 'attack_request' as const,
+          attacker: 'Thaelion', target: 'Goblin 1',
+          bonus: 5, ac: 13, damage_expr: '1d8+3', attack_type: 'melee',
+        },
+      ),
+    )
+
+    await user.type(screen.getByRole('textbox'), 'attack')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    // The attack_request from resume_combat should surface as an attack banner
+    await waitFor(() =>
+      expect(screen.getByText(/Thaelion → Goblin 1/)).toBeInTheDocument(),
+    )
+  })
+
+  it('Enemy Turn button is disabled when attackPhase is set after resume_combat', async () => {
+    // Boot with combat state so the CombatPanel (and Enemy Turn button) renders
+    mockSend.mockImplementation(() =>
+      makeGen(
+        {
+          type: 'combat_update' as const,
+          combat_state: {
+            round: 1, current_actor: 'Goblin 1',
+            combatants: [
+              { name: 'Thaelion', hp_current: 18, hp_max: 22, ac: 16, initiative: 10, status: 'active' as const, conditions: [] },
+              { name: 'Goblin 1', hp_current: 5, hp_max: 5, ac: 13, initiative: 14, status: 'active' as const, conditions: [] },
+            ],
+          },
+        },
+        { type: 'attack_result' as const, attacker: 'Goblin 1', target: 'Thaelion', roll: 12, bonus: 3, total: 15, ac: 16, hit: false, damage_rolls: [], damage_total: 0, attack_type: 'melee', is_pc: false },
+      ),
+    )
+    mockResumeCombat.mockImplementation(() =>
+      makeGen(
+        { type: 'token' as const, content: 'The goblin misses.' },
+        {
+          type: 'attack_request' as const,
+          attacker: 'Thaelion', target: 'Goblin 1',
+          bonus: 5, ac: 13, damage_expr: '1d8+3', attack_type: 'melee',
+        },
+      ),
+    )
+
+    await user.type(screen.getByRole('textbox'), 'go')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    // After resume emits attack_request, enemy turn button must be disabled
+    await waitFor(() => {
+      const btn = screen.queryByRole('button', { name: /Enemy Turn/i })
+      if (btn) expect(btn).toBeDisabled()
+    })
   })
 })

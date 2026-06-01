@@ -278,8 +278,11 @@ And   NPC/skill/location detection runs normally
 
 ## Out of Scope
 
-- Enemy turn directive (`_ENEMY_TURN_DIRECTIVE`) — Tier 1.7
-- Close combat narrative (`POST /close_combat`) — Tier 1.7
+- Enemy turn query prompt (`_ENEMY_TURN_SYSTEM`, `_build_enemy_turn_query`) — those use a
+  **separate, much shorter** system prompt, NOT `_build_combat_system_prompt`. See
+  [enemy-turn.feature](enemy-turn.feature). The combat prompt is for player-facing turns;
+  the enemy query prompt is for backend-initiated per-combatant LLM calls.
+- Close combat narrative (`POST /close_combat`) — Tier 1.7; see enemy-turn.feature
 - Condition mechanical effects — Tier 1.8
 - Initiative server-side rolling — Tier 1.9
 
@@ -296,3 +299,9 @@ And   NPC/skill/location detection runs normally
 - Active events TTL decrement still runs in combat mode (unchanged)
 - `CombatRulesIndex` lookup still runs when combat is active (unchanged)
 - Token target: combat-mode `system_content` ≤ 60% of narrative-mode `system_content` at equivalent session state
+- **B-C03a fix (2026-05-31):** The HP conduct rule in `_build_combat_system_prompt` is
+  round-conditional. The old wording *"Never write hp: for existing combatants"* suppressed HP
+  on round 1, causing every combatant to initialise at 0/0. The corrected wording:
+  *"Round 1 ONLY: MUST include hp: cur/max — backend seeds HP from these values. Round 2+:
+  NEVER write hp: — backend owns it from round 1."* Regression guard:
+  `TestCombatPromptHPConductRule` in `tests/test_combat_prompt.py`.

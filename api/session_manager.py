@@ -742,6 +742,49 @@ def _parse_attack_block(text: Optional[str]) -> list:
     return attacks
 
 
+_ACTION_FIELD_RE = re.compile(
+    r'(?:^|[·•|;]\s*)(?P<key>[a-z_]+)\s*:\s*(?P<value>[^·•|;\n]+)',
+    re.IGNORECASE,
+)
+
+
+def _parse_action_block(text: Optional[str]) -> Optional[dict]:
+    """Parse a focused enemy-turn %%ACTION%% block.
+
+    Unknown actions become ``delay`` so an over-creative response never causes
+    the backend to invent mechanics.
+    """
+    if not text:
+        return None
+    sections = _parse_response_sections(text)
+    block = sections.get("ACTION", text).strip()
+    if not block:
+        return None
+
+    fields: dict[str, str] = {}
+    for line in block.splitlines():
+        stripped = line.strip().lstrip("-*•").strip()
+        if not stripped:
+            continue
+        for match in _ACTION_FIELD_RE.finditer(stripped):
+            fields[match.group("key").lower()] = match.group("value").strip()
+
+    action = fields.get("action", "").lower()
+    if not action:
+        return None
+    if action not in {"attack", "use_ability", "move", "delay"}:
+        action = "delay"
+
+    return {
+        "action": action,
+        "target": fields.get("target", ""),
+        "weapon": fields.get("weapon", ""),
+        "ability": fields.get("ability", ""),
+        "movement": fields.get("movement", ""),
+        "reason": fields.get("reason", ""),
+    }
+
+
 def _get_combatant_ac(name: str, combat_state: Optional["CombatState"]) -> int:
     """Look up a combatant's AC by name (case-insensitive). Returns 10 if not found."""
     if combat_state is None:
@@ -1043,10 +1086,9 @@ def _session_state_path(session: "GameSession") -> Path:
 
 
 def _write_session_state(session: "GameSession") -> None:
-    """Write a minimal state snapshot to sessions/session_NNN/state.json.
+    """Write a state snapshot to sessions/session_NNN/state.json.
 
-    Current fields: mode, round, events.
-    Grows over time as more state becomes worth persisting.
+    Fields: mode, round, events, active_character, combatants (empty list when not in combat).
     """
     import json as _json
     path = _session_state_path(session)
@@ -1061,6 +1103,10 @@ def _write_session_state(session: "GameSession") -> None:
             session.combat_state.current_actor
             if session.combat_state is not None and session.combat_state.current_actor is not None
             else session.active_character
+        ),
+        "combatants": (
+            _serialize_combat_state(session.combat_state)["combatants"]
+            if session.combat_state is not None else []
         ),
     }
     path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
@@ -1266,7 +1312,8 @@ COMBAT CONDUCT (binding every turn)
 - Always write %%COMBAT%% with the updated initiative list and statuses.
 - Never ask the player for information. Accept and resolve their declared action immediately.
 - Never invent a d20 result, damage number, or HP total. Write %%ATTACK%% and let the backend roll.
-- Never write hp: for existing combatants — backend owns HP. Use %%HP%% only for non-attack changes.
+- Round 1 ONLY: MUST include hp: cur/max for EVERY combatant — the backend seeds HP from these values.
+- Round 2+: NEVER write hp: for existing combatants — backend owns HP from round 1. Use %%HP%% only for non-attack changes (traps, poison, healing).
 - Never narrate what a PC does before the player declares it.
 
 FORBIDDEN in combat — do NOT write GENERATE, DELTAS, ROLL, or EVENT sections.
@@ -1891,7 +1938,7 @@ def _stream_with_narrative_filter(
         return
 
     _NARRATIVE_START = "%%NARRATIVE%%\n"
-    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%", "\n%%HP%%", "\n%%ATTACK%%")
+    _END_MARKERS     = ("\n%%ROLL%%", "\n%%DELTAS%%", "\n%%GENERATE%%", "\n%%EVENT%%", "\n%%COMBAT%%", "\n%%HP%%", "\n%%ATTACK%%", "\n%%ACTION%%")
     _HOLDBACK        = 16   # ≥ len("%%GENERATE%%\n") = 14; also covers "%%COMBAT%%\n" = 12
 
     buf           = ""      # not-yet-emitted accumulation
@@ -3110,12 +3157,202 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
         return (resp.json().get("message") or {}).get("content", "").strip()
 
 
+_ENEMY_TURN_SYSTEM = """You run one enemy turn in Pathfinder 1E.
+Write vivid but brief action narration, then exactly one %%ACTION%% block.
+Do not roll dice, choose AC, alter HP, update initiative, or write %%COMBAT%%.
+The backend resolves mechanics after your action choice."""
+
+
+def _combatant_line_for_enemy_query(c: Combatant, marker: str = "-") -> str:
+    cond = f" conditions: {', '.join(c.conditions)}" if c.conditions else ""
+    return f"{marker} {c.name}: hp {c.hp_current}/{c.hp_max}, status {c.status}{cond}"
+
+
+def _enemy_action_budget(c: Combatant) -> str:
+    conditions = set(c.conditions)
+    if c.status != "active":
+        return "No actions; this combatant is not active."
+    if conditions.intersection({"paralyzed", "helpless", "stunned", "dazed"}):
+        return "No meaningful actions; choose delay unless narration only is appropriate."
+    if "nauseated" in conditions:
+        return "Single move action only; no attacks or spells."
+    if "grappled" in conditions or "pinned" in conditions:
+        return "Restricted action budget; prefer escape, constrained attack, or delay."
+    return "Normal turn: one standard action plus one move action, or one full-round action."
+
+
+def _find_combatant(session: "GameSession", name: str) -> Optional[Combatant]:
+    if session.combat_state is None:
+        return None
+    for combatant in session.combat_state.combatants:
+        if combatant.name.lower() == name.lower():
+            return combatant
+    return None
+
+
+def _current_enemy_actor(session: "GameSession", name: Optional[str] = None) -> Optional[Combatant]:
+    if session.combat_state is None:
+        return None
+    if name:
+        return _find_combatant(session, name)
+    if session.combat_state.current_actor:
+        return _find_combatant(session, session.combat_state.current_actor)
+    active = [
+        c for c in sorted(session.combat_state.combatants, key=lambda x: x.initiative, reverse=True)
+        if c.status == "active"
+    ]
+    return active[0] if active else None
+
+
+def _build_enemy_turn_query(session: "GameSession", name: str) -> str:
+    """Build the focused user prompt for one backend-mediated enemy turn."""
+    if session.combat_state is None:
+        raise ValueError("No active combat")
+    actor = _find_combatant(session, name)
+    if actor is None:
+        raise ValueError(f"Combatant not found: {name}")
+
+    enemies = [c for c in session.combat_state.combatants if not _is_pc_attacker(c.name, session)]
+    pcs = [c for c in session.combat_state.combatants if _is_pc_attacker(c.name, session)]
+    allies = [c for c in enemies if c.name.lower() != actor.name.lower()]
+
+    def _lines(rows: list[Combatant], empty: str) -> str:
+        return "\n".join(_combatant_line_for_enemy_query(c) for c in rows) if rows else empty
+
+    return f"""[ENEMY TURN BRIEFING]
+Round: {session.combat_state.round}
+Actor: {_combatant_line_for_enemy_query(actor, marker='*')}
+Action budget: {_enemy_action_budget(actor)}
+
+Allies:
+{_lines(allies, "- none")}
+
+Player characters:
+{_lines(pcs, "- none")}
+
+Enemy names:
+{", ".join(c.name for c in enemies) if enemies else "none"}
+
+Choose one tactical action for {actor.name}. Do not mention hidden target numbers.
+
+Output format:
+%%NARRATIVE%%
+<1 short paragraph describing what the enemy visibly attempts>
+
+%%ACTION%%
+action: attack|use_ability|move|delay
+target: <target name, if any>
+weapon: <weapon/name, if attack>
+ability: <ability name, if use_ability>
+movement: <movement description, if move>
+reason: <brief tactical reason>
+%%END%%"""
+
+
+def _extract_narrative(text: str) -> str:
+    sections = _parse_response_sections(text or "")
+    return sections.get("NARRATIVE", text or "").strip()
+
+
+def _get_attack_for_enemy(action: dict, attacker_name: str) -> dict:
+    weapon = (action.get("weapon") or "").lower()
+    attack_type = "ranged" if any(word in weapon for word in ("bow", "sling", "javelin", "dart")) else "melee"
+    return {
+        "attacker": attacker_name,
+        "target": action.get("target") or "",
+        "bonus": 4,
+        "damage": "1d4",
+        "type": attack_type,
+    }
+
+
+def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Generator[str, None, None]:
+    """Run one focused enemy turn and let the backend resolve mechanics."""
+    actor = _current_enemy_actor(session, name)
+    if session.combat_state is None or actor is None:
+        yield f"data: {json.dumps({'type': 'error', 'message': 'No active enemy turn'})}\n\n"
+        return
+    if _is_pc_attacker(actor.name, session):
+        yield f"data: {json.dumps({'type': 'error', 'message': 'Current actor is a PC'})}\n\n"
+        return
+
+    query = _build_enemy_turn_query(session, actor.name)
+    try:
+        response = _call_blocking(session, _ENEMY_TURN_SYSTEM, query)
+    except Exception as e:
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Enemy turn failed: {e}'})}\n\n"
+        return
+
+    narrative = _extract_narrative(response)
+    if narrative:
+        session.messages.append({"role": "assistant", "content": narrative})
+        yield f"data: {json.dumps({'type': 'token', 'content': narrative})}\n\n"
+
+    action = _parse_action_block(response)
+    if action and action.get("action") == "attack" and action.get("target"):
+        attack = _get_attack_for_enemy(action, actor.name)
+        result = _resolve_npc_attack(attack, session)
+        yield f"data: {json.dumps({'type': 'attack_result', **result})}\n\n"
+
+    _write_session_state(session)
+    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
+def _build_combat_close_directive(session: "GameSession") -> str:
+    """Build the focused close-combat instruction with the current snapshot."""
+    if session.combat_state is None:
+        raise ValueError("No active combat")
+    rows = "\n".join(
+        f"- {c.name}: hp {c.hp_current}/{c.hp_max}, status {c.status}, conditions {', '.join(c.conditions) if c.conditions else 'none'}"
+        for c in sorted(session.combat_state.combatants, key=lambda x: x.initiative, reverse=True)
+    )
+    return f"""Close the combat scene in one short narrative beat.
+
+Round: {session.combat_state.round}
+Current actor: {session.combat_state.current_actor or 'none'}
+Combatants:
+{rows}
+
+Write only player-facing narrative. Do not write %%COMBAT%%, %%ATTACK%%, %%ACTION%%, %%HP%%, %%ROLL%%, %%DELTAS%%, or %%EVENT%%."""
+
+
+def stream_close_combat(session: GameSession) -> Generator[str, None, None]:
+    """Narrate combat closure, then clear combat state even if narration fails."""
+    if session.combat_state is None:
+        yield f"data: {json.dumps({'type': 'error', 'message': 'No active combat'})}\n\n"
+        return
+
+    try:
+        response = _call_blocking(session, "You close a Pathfinder combat scene briefly.", _build_combat_close_directive(session))
+        narrative = _extract_narrative(response)
+        if narrative:
+            session.messages.append({"role": "assistant", "content": narrative})
+            yield f"data: {json.dumps({'type': 'token', 'content': narrative})}\n\n"
+    except Exception:
+        pass
+
+    session.combat_state = None
+    session.attack_queue = []
+    session.attack_results = []
+    _write_session_state(session)
+    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': None})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
 def stream_resume_combat(session: GameSession) -> Generator[str, None, None]:
     """Inject resolved attack results into history, then call LLM to narrate outcomes.
 
     Called after all PC attack dice have been resolved (attack_queue is empty).
     Clears attack_results after injection.  Streams the same SSE events as stream_turn.
     """
+    # Defensively clear any stale pending-attack entries.  Resume is only triggered
+    # when the frontend believes the queue is drained; anything left is an orphaned
+    # entry from a previous LLM response that wrote %%ATTACK%% blocks during narration.
+    if session.attack_queue:
+        _log(session, f"\n> *[Combat resume: clearing {len(session.attack_queue)} stale attack-queue entries]*\n")
+        session.attack_queue = []
+
     round_num = session.combat_state.round if session.combat_state else 0
     history_msg = _build_attack_history_message(session.attack_results, round_num)
     session.messages.append({"role": "user", "content": history_msg})

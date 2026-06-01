@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, set_active_character, stream_boot, stream_end_session, stream_resume_combat, stream_turn, write_session_state
+from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -201,6 +201,30 @@ def post_resume_combat(session_id: str):
     if session.attack_queue:
         raise HTTPException(status_code=409, detail="Attack queue not empty — resolve all PC attacks first")
     return StreamingResponse(stream_resume_combat(session), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
+@app.post("/api/sessions/{session_id}/enemy_turn")
+def post_enemy_turn(session_id: str):
+    """Run the current enemy actor's turn using a focused LLM call."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.combat_state is None:
+        raise HTTPException(status_code=409, detail="No active combat")
+    if session.attack_queue:
+        raise HTTPException(status_code=409, detail="Attack queue not empty - resolve PC attacks first")
+    return StreamingResponse(stream_enemy_turn(session), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
+@app.post("/api/sessions/{session_id}/close_combat")
+def post_close_combat(session_id: str):
+    """Narrate combat closure, then clear the active combat state."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.combat_state is None:
+        raise HTTPException(status_code=409, detail="No active combat")
+    return StreamingResponse(stream_close_combat(session), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 @app.delete("/api/sessions/{session_id}/combat")

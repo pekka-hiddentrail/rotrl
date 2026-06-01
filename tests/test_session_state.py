@@ -2,7 +2,8 @@
 
 The state file lives at sessions/session_NNN/state.json and is the lightweight
 "state of play" snapshot for mode (social/combat), round number, active events,
-and the currently active character ("party" when none is selected).
+the currently active character ("party" when none is selected), and the full
+combatants list with HP/AC.
 
 Spec: specs/session-state.feature
 Covers: AC-001 through AC-017
@@ -73,15 +74,19 @@ class TestTemplate:
 
     def test_template_has_required_keys(self):
         data = json.loads(_TEMPLATE.read_text(encoding="utf-8"))
-        assert "mode"   in data
-        assert "round"  in data
-        assert "events" in data
+        assert "mode"             in data
+        assert "round"            in data
+        assert "events"           in data
+        assert "active_character" in data
+        assert "combatants"       in data
 
     def test_template_defaults(self):
         data = json.loads(_TEMPLATE.read_text(encoding="utf-8"))
-        assert data["mode"]   == "social"
-        assert data["round"]  == 0
-        assert data["events"] == []
+        assert data["mode"]             == "social"
+        assert data["round"]            == 0
+        assert data["events"]           == []
+        assert data["active_character"] == "party"
+        assert data["combatants"]       == []
 
 
 # ── AC-002 / AC-003 — Boot initialises state.json ────────────────────────────
@@ -99,9 +104,11 @@ class TestBootInit:
         with _patch_state_root(tmp_path):
             _write_session_state(session)
         data = json.loads((tmp_path / "session_001" / "state.json").read_text())
-        assert data["mode"]   == "social"
-        assert data["round"]  == 0
-        assert data["events"] == []
+        assert data["mode"]             == "social"
+        assert data["round"]            == 0
+        assert data["events"]           == []
+        assert data["active_character"] == "party"
+        assert data["combatants"]       == []
 
     def test_boot_creates_directory_if_missing(self, tmp_path):
         session = _make_session(session_number=99)
@@ -156,6 +163,9 @@ class TestCombatStateChanges:
         data = json.loads((tmp_path / "session_001" / "state.json").read_text())
         assert data["mode"]  == "combat"
         assert data["round"] == 3
+        assert len(data["combatants"]) == 2
+        names = {c["name"] for c in data["combatants"]}
+        assert names == {"Goblin 1", "Thaelion"}
 
 
 # ── AC-006 / AC-007 — Combat clear ────────────────────────────────────────────
@@ -255,6 +265,7 @@ class TestOutputValidity:
         assert "round"            in data
         assert "events"           in data
         assert "active_character" in data
+        assert "combatants"       in data
 
     def test_mode_is_always_string(self, tmp_path):
         for state in (None, CombatState(round=1, combatants=[])):
@@ -300,6 +311,80 @@ class TestBootOverwrite:
         assert data["round"]            == 0
         assert data["events"]           == []
         assert data["active_character"] == "party"
+        assert data["combatants"]       == []
+
+
+# ── AC-001 / AC-004 / AC-006 — Combatants serialization ──────────────────────
+
+class TestCombatantsSerialization:
+    def test_social_mode_gives_empty_combatants(self, tmp_path):
+        session = _make_session()
+        with _patch_state_root(tmp_path):
+            _write_session_state(session)
+        data = json.loads((tmp_path / "session_001" / "state.json").read_text())
+        assert data["combatants"] == []
+
+    def test_combat_combatants_all_fields_present(self, tmp_path):
+        session = _make_session()
+        session.combat_state = CombatState(
+            round=1,
+            combatants=[
+                Combatant(name="Goblin Warchanter", hp_current=8, hp_max=8, ac=14, initiative=15),
+            ],
+        )
+        with _patch_state_root(tmp_path):
+            _write_session_state(session)
+        data = json.loads((tmp_path / "session_001" / "state.json").read_text())
+        assert len(data["combatants"]) == 1
+        c = data["combatants"][0]
+        assert c["name"]       == "Goblin Warchanter"
+        assert c["hp_current"] == 8
+        assert c["hp_max"]     == 8
+        assert c["ac"]         == 14
+        assert c["initiative"] == 15
+        assert "status"     in c
+        assert "conditions" in c
+
+    def test_combat_combatants_hp_reflects_damage(self, tmp_path):
+        session = _make_session()
+        goblin = Combatant(name="Goblin A", hp_current=2, hp_max=5, ac=13, initiative=10)
+        session.combat_state = CombatState(round=1, combatants=[goblin])
+        with _patch_state_root(tmp_path):
+            _write_session_state(session)
+        data = json.loads((tmp_path / "session_001" / "state.json").read_text())
+        c = data["combatants"][0]
+        assert c["hp_current"] == 2
+        assert c["hp_max"]     == 5
+
+    def test_combat_multiple_combatants_all_serialized(self, tmp_path):
+        session = _make_session()
+        session.combat_state = CombatState(
+            round=1,
+            combatants=[
+                Combatant(name="Low",  hp_current=5, hp_max=5, ac=12, initiative=4),
+                Combatant(name="High", hp_current=5, hp_max=5, ac=12, initiative=18),
+                Combatant(name="Mid",  hp_current=5, hp_max=5, ac=12, initiative=10),
+            ],
+        )
+        with _patch_state_root(tmp_path):
+            _write_session_state(session)
+        data = json.loads((tmp_path / "session_001" / "state.json").read_text())
+        assert len(data["combatants"]) == 3
+        assert {c["name"] for c in data["combatants"]} == {"Low", "High", "Mid"}
+
+    def test_clear_combat_empties_combatants(self, tmp_path):
+        session = _make_session()
+        session.combat_state = CombatState(
+            round=1,
+            combatants=[Combatant(name="Goblin", hp_current=5, hp_max=5, ac=13, initiative=8)],
+        )
+        with _patch_state_root(tmp_path):
+            _write_session_state(session)
+        session.combat_state = None
+        with _patch_state_root(tmp_path):
+            _write_session_state(session)
+        data = json.loads((tmp_path / "session_001" / "state.json").read_text())
+        assert data["combatants"] == []
 
 
 # ── AC-013 — Boot defaults active_character ───────────────────────────────────

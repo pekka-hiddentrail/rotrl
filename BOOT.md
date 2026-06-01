@@ -49,7 +49,12 @@ POST /api/sessions
 │
 ├─ 5. Create GameSession in memory (session_id = 8-char UUID prefix)
 │
-├─ 6. Open log file: outputs/session_NNN_YYYYMMDD_HHMMSS.log.md
+├─ 6. Initialise state file from template
+│      sessions/state.template.json → sessions/session_NNN/state.json
+│      Resets to: { mode: "social", round: 0, events: [], active_character: "party", combatants: [] }
+│      Overwrites any leftover state.json from a prior run of this session number.
+│
+├─ 7. Open log file: outputs/session_NNN_YYYYMMDD_HHMMSS.log.md
 │      Write system prompt into log (inside <details> block)
 │
 └─ yield SSE event: { "type": "done", "session_id": "..." }
@@ -191,6 +196,7 @@ POST /api/sessions/{id}/end
 
 | File | Written by | When |
 |------|-----------|------|
+| `sessions/session_NNN/state.json` | `create_session()` (template copy) + `_write_session_state()` | On boot (reset to social defaults) and on every state change: combat start/end, round advance, HP update, event fire/expiry, active character change |
 | `outputs/*.log.md` | `_log()` | Continuously — every turn |
 | `outputs/api_log/*.json` | `write_api_log()` | After each LLM call |
 | `adventure_path/01_npcs/.<slug>/base.md` | `_process_generate_block()` | When `%%GENERATE%%` names a new NPC (dot-prefix = session NPC, purgeable) |

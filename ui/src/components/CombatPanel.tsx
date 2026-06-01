@@ -1,11 +1,15 @@
-import type { CombatState } from '../types'
+import type { AttackPhase, CombatState } from '../types'
 import HpBar from './HpBar'
 
 interface Props {
   combatState: CombatState
   disabled?: boolean
   currentCombatantName?: string | null
+  attackPhase?: AttackPhase
+  enemyTurnStreaming?: boolean
+  combatClosing?: boolean
   onAdvanceTurn?: () => void
+  onEnemyTurn?: () => void
   onEndCombat: () => void
 }
 
@@ -35,15 +39,35 @@ const CONDITION_TOOLTIPS: Record<string, string> = {
   exhausted:  'Exhausted: -6 Str and Dex; move at half speed; becomes fatigued after rest',
 }
 
-export default function CombatPanel({ combatState, disabled, currentCombatantName, onAdvanceTurn, onEndCombat }: Props) {
+export default function CombatPanel({
+  combatState,
+  disabled,
+  currentCombatantName,
+  attackPhase,
+  enemyTurnStreaming,
+  combatClosing,
+  onAdvanceTurn,
+  onEnemyTurn,
+  onEndCombat,
+}: Props) {
   const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
   const effectiveCurrent = currentCombatantName ?? sorted.find(c => c.status === 'active')?.name ?? null
+  const controlsDisabled = Boolean(disabled || enemyTurnStreaming || combatClosing)
+  const enemyTurnDisabled = Boolean(controlsDisabled || attackPhase)
+  const phase = enemyTurnStreaming ? 'Enemy Turn' : attackPhase ? 'PC Attacks' : null
 
   return (
     <aside className="combat-panel">
       <div className="combat-panel-header">
-        <span className="combat-panel-title">⚔ Combat</span>
-        <span className="combat-round-badge">Round {combatState.round}</span>
+        <span className="combat-panel-title">Combat</span>
+        <div className="combat-panel-badges">
+          {phase && (
+            <span className={`combat-phase-badge ${enemyTurnStreaming ? 'enemy' : 'pc'}`}>
+              {phase}
+            </span>
+          )}
+          <span className="combat-round-badge">Round {combatState.round}</span>
+        </div>
       </div>
 
       <div className="combat-initiative-list">
@@ -63,8 +87,8 @@ export default function CombatPanel({ combatState, disabled, currentCombatantNam
               <div className="combatant-name-row">
                 <span className="combatant-name">{c.name}</span>
                 <span className="combatant-meta">
-                  <span className="combatant-init" title="Initiative">⚡{c.initiative}</span>
-                  <span className="combatant-ac"  title="Armour Class">🛡{c.ac}</span>
+                  <span className="combatant-init" title="Initiative">Init {c.initiative}</span>
+                  <span className="combatant-ac" title="Armour Class">AC {c.ac}</span>
                 </span>
               </div>
               <div className="combatant-hp-row">
@@ -92,18 +116,28 @@ export default function CombatPanel({ combatState, disabled, currentCombatantNam
       <button
         className="btn btn-secondary btn-sm combat-end-btn"
         onClick={onAdvanceTurn}
-        disabled={disabled}
+        disabled={controlsDisabled}
         title="Advance the active-turn highlight to the next combatant"
       >
         Next Turn →
       </button>
+      {onEnemyTurn && (
+        <button
+          className="btn btn-secondary btn-sm combat-end-btn combat-enemy-turn-btn"
+          onClick={onEnemyTurn}
+          disabled={enemyTurnDisabled}
+          title="Run the current enemy actor through a focused backend-mediated turn"
+        >
+          {enemyTurnStreaming ? 'Enemy Acting...' : 'Enemy Turn'}
+        </button>
+      )}
       <button
         className="btn btn-secondary btn-sm combat-end-btn"
         onClick={onEndCombat}
-        disabled={disabled}
-        title="Clear the combat tracker (no mechanical effect)"
+        disabled={controlsDisabled}
+        title="Narrate combat closure and clear the combat tracker"
       >
-        End Combat
+        {combatClosing ? 'Closing...' : 'End Combat'}
       </button>
     </aside>
   )

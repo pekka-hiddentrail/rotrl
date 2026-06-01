@@ -86,6 +86,18 @@ export async function endCombat(sessionId: string): Promise<void> {
   if (!res.ok) throw new Error(`End combat failed (${res.status})`)
 }
 
+export async function* runEnemyTurn(sessionId: string): AsyncGenerator<SseEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/enemy_turn`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Enemy turn failed (${res.status})`)
+  yield* parseSseStream(res)
+}
+
+export async function* closeCombat(sessionId: string): AsyncGenerator<SseEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/close_combat`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Close combat failed (${res.status})`)
+  yield* parseSseStream(res)
+}
+
 export async function advanceCombatTurn(
   sessionId: string,
 ): Promise<{ current_actor: string | null; is_pc: boolean }> {

@@ -121,7 +121,7 @@ Navigate to **http://localhost:5173** in your browser.
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
 3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
 4. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
-5. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, and status badges. When a PC attacks, an attack banner appears in the DicePanel — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. All three party members appear in the tracker from the first round. Click **End Combat** to manually clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
+5. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DicePanel — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
 6. **View Log** — opens the live session markdown log in a new browser tab (shown during an active session)
 7. **API Logs** — opens an in-app overlay listing recent LLM call log files. Click any entry to see a summary bar (`status` · `section_format_ok` · `first_token_ms` · `duration_ms` · `total_tokens`) plus the full JSON payload. Escape or click outside to close
 8. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
@@ -145,6 +145,7 @@ The GM response is structured internally into sections that are stripped before 
 | `%%COMBAT%%` | Updates the live initiative tracker (`round`, HP, AC, initiative, status per combatant); `round: 0` clears the panel |
 | `%%HP%%` | Non-attack HP changes (traps, poison, healing) — `delta: -N` per named combatant; applied by backend immediately |
 | `%%ATTACK%%` | One line per attack this round — `attacker · target · bonus · damage · type`; NPC attacks auto-resolved, PC attacks queued for player dice |
+| `%%ACTION%%` | Focused enemy-turn response — `action`, `target`, `weapon`/`ability`/`movement`, and `reason`; parsed by the backend and stripped from player-facing text |
 
 In **dev mode** all markers are visible in the stream so you can see the raw output.
 
@@ -242,7 +243,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 879 pytest tests
+├── tests/                         # 908 pytest tests
 ├── ui/src/components/__tests__/    # Vitest component tests
 ├── ui/src/__tests__/               # Vitest App SSE integration tests
 ├── ui/e2e/                         # Playwright browser-flow tests
@@ -272,9 +273,11 @@ rotrl/
 | `POST` | `/api/sessions/{id}/resolve_attack_roll` | Submit player's d20 to-hit roll; returns `{ hit, damage_expr, queue_remaining, next_attack }` |
 | `POST` | `/api/sessions/{id}/resolve_damage_roll` | Submit player's damage dice; applies HP delta, returns `{ damage_total, queue_remaining, next_attack }` |
 | `POST` | `/api/sessions/{id}/resume_combat` | Inject resolved attack results into history and stream LLM narration |
+| `POST` | `/api/sessions/{id}/enemy_turn` | Run the current enemy actor through a focused LLM call; streams narrative, `attack_result`, `combat_update`, and `done` |
+| `POST` | `/api/sessions/{id}/close_combat` | Stream a short combat-closing narration, then clear combat state and emit `combat_update: null` |
 | `POST` | `/api/sessions/{id}/end` | Generate recap + next-session boot; streams status events via SSE |
 | `DELETE` | `/api/sessions/{id}` | Discard session without recap (emergency close) |
-| `DELETE` | `/api/sessions/{id}/combat` | Clear active combat state (End Combat button) |
+| `DELETE` | `/api/sessions/{id}/combat` | Clear active combat state immediately (direct API fallback; UI uses `close_combat`) |
 | `POST` | `/api/sessions/{id}/combat/advance_turn` | Advance initiative to next active combatant; writes state.json; returns `{ current_actor, is_pc }` |
 | `GET`  | `/api/code-coverage` | Serve `outputs/code_coverage.json` produced by `pytest --cov`; used by the Coverage modal's "Code Lines" tab |
 | `GET`  | `/api/npcs/session` | List all session NPC slugs (dot-prefixed directories) |
@@ -350,8 +353,10 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_combat.py` | `Combatant`/`CombatState` dataclasses, HP clamp + status validation, `_parse_combatant_line`, `_parse_combat_block` (incl. round-0 sentinel and parse-failure semantics), `_serialize_combat_state`, `combat_update` SSE, narrative filter stripping, malformed-block-preserves-state regression, combat-only-no-leak regression, `DELETE /combat` endpoint |
 | `test_config_tunables.py` | F6 env-var-configurable tunables (default values, type checks, override reads); R4 `_load_name_exclude_words` (file loading, comment/blank-line stripping, fallback on missing/empty file, case normalisation) |
 | `test_scene_npc_tracking.py` | `NpcIndex.canonical_for` (explicit alias, auto-word alias, unknown word, case-insensitive); single-word `_detect_narrative_npcs` Pass 1 (known alias → scene_npcs, dedup, exclude-word skip, unknown word ignored); `scene_npcs` in `context_info` (present, empty list, copy semantics); boot persistence (`_parse_scene_npcs_from_boot`, `stream_end_session` appends section, `create_session` restores) |
+| `test_session_state.py` | `sessions/state.template.json` shape and defaults; `_write_session_state` produces valid JSON with all 5 keys (mode, round, events, active_character, combatants); combat start/clear updates mode/round/combatants; combatant fields (name, hp_current, hp_max, ac, initiative, status, conditions) serialised correctly; HP-after-damage reflected; combatants cleared on combat end; `set_active_character` persists across state changes; boot overwrites stale state. 42 tests. *(spec: session-state.feature AC-001 through AC-017)* |
 | `test_combat_lookup.py` | `CombatRulesIndex` loading, trigger detection, longest-match, word boundary, `_parse_combat_rule_file`, `<!-- REFERENCE -->` boundary, `format_context` |
 | `test_combat_attacks.py` | All 9 attack-resolution ACs: `_roll_dice`, `_parse_attack_line/block`, `_is_pc_attacker`, `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `stream_resume_combat`, multi-attack queue, `attack_result`/`attack_request` SSE, stream filter, endpoint HTTP guards (404/409) |
+| `test_enemy_turn.py` | Enemy-turn Tier 1.7: `%%ACTION%%` parser, focused enemy-turn query, short enemy system prompt, backend-resolved attack/delay streams, endpoint guards, close-combat stream and silent-clear fallback |
 | `test_token_benchmark.py` | Real-API token benchmark — boots Anthropic Haiku, runs three fixed turns, appends prompt/completion/total token counts to `outputs/token_benchmarks.csv`; automatically skipped when `ANTHROPIC_API_KEY` is absent (`@pytest.mark.benchmark`) |
 | `test_prompt_audit.py` | Verifies `scripts/build_coverage.py` produces `outputs/coverage.json` with the expected `summary.total`, `summary.covered`, `summary.gap` keys and correct row schema |
 
@@ -360,7 +365,9 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | File | Covers |
 |------|--------|
 | `App.test.tsx` | App-level SSE integration — boot flow, provider/model switching, send-turn event order (`context`, `token`, `patch_last`, `roll_request`, `rate_limits`), speaker payload prefixing, purge/View Log/Kill controls, streaming lockout, error bar, session end cleanup, combat-active layout (AC-006), attack resolution wiring (`handleAttackRoll` → damage phase, `handleDamageRoll` → resume, `doResumeCombat` auto-trigger, AC-009 multi-attack banner switch, `attack_type` regression) |
+| `App.enemy-turn.test.tsx` | Tier 1.7 App wiring: Enemy Turn stream state, tokens, `attack_result`, `combat_update`, 409 error handling, and close-combat stream clearing |
 | `CombatPanel.test.tsx` | AC-007 initiative order + `combatant-current`/`combatant-inactive` CSS; AC-008 End Combat callback + disabled prop; AC-009 `HpBar` colour thresholds (green/amber/red/grey via inline style); AC-012 condition chips, title tooltips, empty conditions |
+| `CombatPanelEnemyTurn.test.tsx` | Tier 1.7 CombatPanel controls: Enemy Turn button, disabled PC-attack state, PC Attacks/Enemy Turn phase badges, and Closing state |
 | `DicePanelAttack.test.tsx` | AC-002/003/004/008 attack banners — to-hit (attacker/target/AC/bonus/active-class/`onAttackRoll`), damage (HIT line/expr/Roll Damage enabled), null phase, attack log (hit/miss badges, PC/NPC labels, log-before-skill-history order), V8 `onDamageRoll` receives rolled values not die sides |
 | `ChatWindow.test.tsx` | Thinking indicator, GM streaming cursor, intro markdown rendering, autoscroll |
 | `Header.test.tsx` | Pre/post-boot controls, provider model options, boot disabled state, View Log handler, purge/Kill inline confirms, rate-limit badge, Benchmarks button, Coverage button |
@@ -375,12 +382,13 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `MessageBubble.test.tsx` | Player speaker labels, portrait fallback, clean player content, GM bubble invariants |
 | `SplashHint.test.tsx` | Hint pool integrity, initial display, timed rotation, no immediate repeats, fade class |
 
-**E2E:** 10 mocked Playwright tests plus 11 live Playwright tests passing in Chromium:
+**E2E:** 13 mocked Playwright tests plus 11 live Playwright tests passing in Chromium:
 
 | File | Covers |
 |------|--------|
 | `e2e/app-flows.spec.ts` | Mocked-browser flows: boot badge, send turn, roll request, end session cleanup, Kill stuck ending, Purge NPCs toast, character sheet modal |
 | `e2e/combat-flow.spec.ts` | CT-E2E-001a/b/c: `combat_update` SSE → CombatPanel renders in initiative order + `combat-active` layout; HP bar CSS colour shift across two rounds; End Combat fires `DELETE /combat` and panel disappears |
+| `e2e/enemy-turn.spec.ts` | Mocked-browser Tier 1.7 flows: boot into combat, run Enemy Turn and update HP, block Enemy Turn during PC attack prompts, stream close-combat narrative before clearing tracker |
 | `e2e/live-flows.spec.ts` | Live backend + LLM flows: boot/session format checks, log API, end-session recap, character sidebar, generated NPC directory creation, Purge NPCs directory removal, goblin event trigger, combat tracker, dice-panel roll resolution |
 
 ---
@@ -437,6 +445,19 @@ POST /api/sessions/{id}/resume_combat
        ├─ _build_attack_history_message(attack_results, round) → [ATTACK RESULTS — round N] injected
        ├─ attack_results cleared
        └─ LLM called; streams combat_update + token SSE events
+
+POST /api/sessions/{id}/enemy_turn
+  └─ stream_enemy_turn(session)
+       ├─ _build_enemy_turn_query(session, current_actor) → focused one-enemy briefing
+       ├─ LLM writes %%NARRATIVE%% + %%ACTION%% only
+       ├─ backend parses action and resolves attack/damage/HP with authoritative AC
+       └─ streams token, attack_result, combat_update, done
+
+POST /api/sessions/{id}/close_combat
+  └─ stream_close_combat(session)
+       ├─ injects current combat snapshot into a short closure prompt
+       ├─ streams player-facing closure narrative
+       └─ clears combat_state, attack queue/results, writes state.json, emits combat_update null
 
 POST /api/sessions/{id}/end
   └─ stream_end_session()
@@ -537,6 +558,7 @@ ollama list                            # confirm model is pulled
 | Combat Tracker Tier 1.5 — `%%ATTACK%%` block parsing, NPC auto-resolution, PC attack queue, `resolve_attack_roll` / `resolve_damage_roll` / `resume_combat` endpoints, DicePanel to-hit + damage banners, `attack_request` / `attack_result` SSE, `attack_type` carried through to-hit → damage → log | ✅ Complete |
 | Combat party roster injection — `_build_pc_combat_roster` injects all PCs with full HP/AC/init as ready-to-use `%%COMBAT%%` lines when `active_events` are present; LLM no longer lists only the active speaker | ✅ Complete |
 | Combat rules lookup — `CombatRulesIndex` in `api/context/combat_lookup.py`; 12 rule files (`action_*`, `armor_class`, `attack_rolls`, `attacks_of_opportunity`, `hit_points`, `initiative`, `spellcasting`); injected on trigger-phrase match during active combat only | ✅ Complete |
+| Combat Tracker Tier 1.7 — focused per-enemy `%%ACTION%%` query, `POST /enemy_turn`, backend-resolved enemy attacks, Enemy Turn/PC Attacks phase badges, and narrative `POST /close_combat` clear flow | ✅ Complete |
 | Tools ▾ dropdown in header — Benchmarks, Coverage, View Session Log, API Logs, Purge NPCs consolidated into a single dropdown; outside-click + Escape dismissal | ✅ Complete |
 | Code coverage tab in Coverage modal — `pytest-cov` → `outputs/code_coverage.json` → `GET /api/code-coverage` → "Code Lines" tab with per-file bar charts sorted worst-first | ✅ Complete |
 | Anthropic (Claude) provider — `claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5` | ✅ Complete |
@@ -548,7 +570,7 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 700+ pytest · 230+ Vitest · 10 Playwright mocked · 11 live Playwright tests | ✅ Complete |
+| Test suites — 700+ pytest · 230+ Vitest · 13 Playwright mocked · 11 live Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |

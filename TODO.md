@@ -37,15 +37,13 @@ Bugs observed during live play. All items below are blocking normal combat flow 
   the prefix — same logic as when a player manually selects a character. *(spec:
   combat-active-character.feature AC-008; CB1.10-3)*
 
-- [ ] **B-C03a — All combatant HP shows as 0/0 after combat starts** — The CombatPanel
-  displays 0/0 HP for every combatant including PCs. The state.json also shows `hp_current: 0,
-  hp_max: 0`. Root cause is that the Tier 1.6 combat system prompt change removed the HP
-  requirement from `_COMBAT_SPEC_ROUND1` in anticipation of SA-2 event-file seeding — but SA-2
-  is not yet implemented. The LLM is either not writing HP on round 1, or writing it but being
-  told to omit it. **Fix (interim):** Restore explicit HP requirement in `_COMBAT_SPEC_ROUND1`:
-  `"include hp: cur/max for EVERY combatant — this is required for backend initialization"`.
-  The SA-2 seeding that makes HP optional on round 1 is a Tier 2 item and must not land before
-  SA-2 is actually implemented. *(spec: combat-hp.feature AC-001)*
+- [x] **B-C03a — All combatant HP shows as 0/0 after combat starts** — `_build_combat_system_prompt`
+  contained *"Never write hp: for existing combatants"* baked into the base prompt for ALL rounds.
+  The LLM obeyed it on round 1 too, producing every combatant at 0/0. **Fixed:** The HP conduct
+  rule is now round-conditional: *"Round 1 ONLY: MUST include hp: cur/max — backend seeds HP from
+  these values. Round 2+: NEVER write hp: — backend owns it."* Tests added in
+  `TestCombatPromptHPConductRule` (4 tests) asserting the old unconditional wording is absent and
+  the round-conditional wording is present. *(spec: combat-system-prompt.feature)*
 
 - [ ] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the
   LLM writes HP, PCs should start at their `hp_max` from `_build_pc_combat_roster`. The roster
@@ -84,20 +82,25 @@ Bugs observed during live play. All items below are blocking normal combat flow 
   per combatant, and stores the result. PC modifiers come from `pc_profiles`; LLM-written init
   values for PCs are ignored. See CB1.9-1 through CB1.9-T in the Combat System section.
 
-- [ ] **B-C07 — `POST /enemy_turn` returns 409 during active combat** — Clicking "Enemy Turn"
-  while goblins are highlighted returns 409 Conflict even though combat is active and there are
-  no pending PC dice. Three likely causes to diagnose in order:
-  - **Most likely:** `session.attack_queue` is not empty — a prior PC attack resolved its
-    dice but `stream_resume_combat` was not called, leaving stale entries in the queue.
-    Check that the attack queue is cleared after the last `resolve_damage_roll` call.
-  - **Second:** The enemy turn endpoint checks `session.combat_state` at the point where
-    it was already cleared by a concurrent `DELETE /combat` (unlikely but possible if "End Combat"
-    is clicked during the same request cycle).
-  - **Third:** The endpoint condition check has an inverted or overly strict guard.
-    **Fix:** Add a diagnostic log line that emits which condition triggered the 409. Confirm
-    the attack queue is cleared before the "Enemy Turn" button becomes enabled in the UI
-    (the button should be `disabled` while `attackPhase !== null`). *(spec: enemy-turn.feature
-    AC-010; tests: test_enemy_turn.py TestEnemyTurnEndpoint)*
+- [x] **B-C08 — `App.enemy-turn.test.tsx` `bootIntoCombat` helper times out** — `closeCombat`
+  and `resumeCombat` mocks returned `undefined`; App.tsx iterates both as async generators, so
+  `for await (... of undefined)` threw TypeError and corrupted component state. **Fixed:** Both
+  mocks now return `(async function* () {})()` (empty terminating generators). Three tests that
+  used immediate assertions after an async click were also wrapped in `waitFor`. Tests now
+  pass: 4/5 pass reliably; 1 (stalled-generator test) uses 15 s timeout to cover slow CI.
+
+- [x] **B-C07 — `POST /enemy_turn` returns 409 during active combat** — Root cause confirmed:
+  when the LLM wrote `%%ATTACK%%` blocks inside the `stream_resume_combat` narration, PC attacks
+  were added to `session.attack_queue` but the `attack_request` SSE events were ignored by
+  `doResumeCombat`, leaving `attackPhase` null while the backend queue was non-empty. **Fixed:**
+  - **Backend:** `stream_resume_combat` now clears `session.attack_queue` defensively before
+    the LLM call; any remaining entries are orphaned from a prior LLM output.
+  - **Frontend:** `doResumeCombat` in App.tsx now handles `attack_request` and `attack_result`
+    events, so new attacks emitted during resume narration correctly set `attackPhase` and
+    disable the "Enemy Turn" button.
+  Tests added: `TestResumeCombatClearsStaleQueue` (3 pytest) and `TestEnemyTurnStaleQueue`
+  (2 pytest) in `test_enemy_turn.py`; regression test in `App.test.tsx` (2 Vitest).
+  *(spec: enemy-turn.feature AC-010)*
 
 ---
 
@@ -122,6 +125,7 @@ Bugs observed during live play. All items below are blocking normal combat flow 
 - [x] **Vitest — Chat and turn UI AC coverage** — add tests for `chat-display.feature` AC-001 through AC-006 and `player-turn.feature` AC-001/AC-005: immediate player bubble, thinking indicator, token append/cursor, intro markdown rendering, autoscroll, streaming disabled state, and end-session status bubble updates. *(`ChatWindow.test.tsx`; expanded `App.test.tsx` streaming tests.)*
 - [x] **Vitest — IntentBar AC coverage** — add component tests for `intent-bar.feature` AC-001 through AC-005: 52-character truncation, NPC/skill/location tags, null tags, detecting state, and no-context-event diagnostic. *(`IntentBar.test.tsx`.)*
 - [x] **Vitest — App SSE integration smoke tests** — 19 tests across 3 describe blocks in `ui/src/__tests__/App.test.tsx`. Covers: boot intro/session setup (6), send-turn event order — `context`, `token`, `patch_last`, `roll_request`, `rate_limits`, error bar, second-send clears error (8), and session end cleanup — ending bubble, status event, done→"Session saved."→cleanup, error path (4+1). Key patterns: `makeStalledGen` for intermediate-state observation; `vi.spyOn(setTimeout)` to shorten the 1800 ms hold without fake-timer/`act` conflicts; `useCharacters` + `fetch` stubbed in every test.
+- [x] **pytest — session state `combatants` coverage** — `test_session_state.py` extended to cover the `combatants` field introduced in the session-state schema: `TestTemplate` checks all 5 required keys and defaults (including `active_character` and `combatants`); `TestBootInit` asserts `combatants: []` on fresh write; `TestCombatantsSerialization` (5 new tests) covers all fields present, HP-after-damage, multiple combatants, and clear-to-empty; `TestOutputValidity` and `TestBootOverwrite` updated to assert `combatants` key is always present. 42 tests total. Template (`sessions/state.template.json`) and spec (`specs/session-state.feature`) updated to match. *(spec: session-state.feature AC-001, AC-004, AC-006, AC-011, AC-012)*
 - [x] **Vitest — DicePanel AC coverage** — add component tests for `dice-panel.feature` AC-001 through AC-011: queue accumulation, roll history limit/latest highlight, `/roll` payload, pending roll banner, `/resolve_roll` pass/fail handling, auto skill bonus, raw-roll fallbacks, toggle persistence, and normalized skill lookup.
 - [x] Document Vitest setup, commands, and current UI component tests. *(`README.md`; `ui/vitest.config.ts`; `ui/src/test/setup.ts`; `ui/src/components/__tests__/InputBar.test.tsx` and `CharacterSidebar.test.tsx` — 30 tests)*
 - [x] Add validation for prompt inputs and generated outputs before they are written to session artifacts.

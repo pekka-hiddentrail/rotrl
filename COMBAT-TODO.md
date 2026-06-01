@@ -478,7 +478,7 @@ After this tier:
 
 #### SA-1 — Full `state.json` schema
 
-Extend `sessions/session_NNN/state.json` (already created in session-state feature) to hold the complete visible game state. Currently it holds `{ mode, round, events, active_character }`. After this item it holds:
+`sessions/session_NNN/state.json` already holds the current visible game state:
 
 ```json
 {
@@ -489,15 +489,15 @@ Extend `sessions/session_NNN/state.json` (already created in session-state featu
   "combatants": [
     { "name": "Yanyeeku",  "hp_current": 18, "hp_max": 22, "ac": 16, "initiative": 14, "status": "active", "conditions": [] },
     { "name": "Goblin 1",  "hp_current": 3,  "hp_max": 5,  "ac": 13, "initiative": 11, "status": "active", "conditions": ["shaken"] }
-  ],
-  "current_actor": "Yanyeeku"
+  ]
 }
 ```
 
-`_write_session_state` already writes mode/round/events/active_character. Extend it to serialise `session.combat_state` combatants and `current_actor` whenever combat is active. Cleared (`combatants: []`) when `combat_state` is None.
+`active_character` doubles as `current_actor` during combat (set to `session.combat_state.current_actor`). A dedicated `current_actor` field at the top level is deferred to SA-4 when the frontend needs to distinguish player-selected character from initiative actor.
 
-- [ ] **CB2-SA1 — Extend `_write_session_state`** — include `combatants` array and `current_actor` string (null when no combat). Call site already fires on every `%%COMBAT%%` parse, `%%HP%%` apply, event fire/expiry, and `DELETE /combat`; no new call sites needed.
-- [ ] **CB2-SA1-T — Tests** — `test_session_state.py`: combat combatants present in `state.json` after `%%COMBAT%%` parse; HP update reflected; `combatants: []` after combat clear.
+- [x] **CB2-SA1 — Extend `_write_session_state`** — `combatants` array serialised when combat active; cleared to `[]` when `combat_state` is None. Template (`sessions/state.template.json`) updated to include `combatants: []`. Spec (`specs/session-state.feature`) updated: story, background, AC-001/002/011/012/Out-of-Scope. `_write_session_state` docstring updated.
+- [x] **CB2-SA1-T — Tests** — `test_session_state.py` extended: `TestTemplate` checks `active_character`+`combatants` keys and defaults; `TestBootInit` checks `combatants: []` on boot; `TestCombatStateChanges` asserts combatants are serialised with correct names; `TestOutputValidity` checks `combatants` key always present; `TestBootOverwrite` checks `combatants: []` after reset; new `TestCombatantsSerialization` (5 tests) covers all fields, HP-after-damage, multi-combatant, clear-to-empty. 42 tests total, all passing.
+- [ ] **CB2-SA1-2 — Separate `current_actor` field** — add `current_actor` as a distinct top-level field in `state.json` (separate from `active_character`) so SA-4 frontend can distinguish player-selected character from initiative actor. Depends on SA-4.
 
 #### SA-2 — Encounter pre-load (event files + bestiary)
 
