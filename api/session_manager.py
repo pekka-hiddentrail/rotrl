@@ -3275,14 +3275,14 @@ def _get_attack_for_enemy(action: dict, attacker_name: str) -> dict:
 
     # Use bonus/damage if the LLM provided them in the %%ACTION%% block; fall back to
     # generic defaults only when the values are absent or unparseable.
-    bonus_raw = re.sub(r"[^0-9\-]", "", str(action.get("bonus") or ""))
-    try:
+    bonus_raw = (str(action.get("bonus") or "")).strip().lstrip("+")
+    if re.match(r"^-?\d+$", bonus_raw):
         bonus = int(bonus_raw)
-    except ValueError:
+    else:
         bonus = 4  # generic fallback — Tier 2 will look up per-NPC stats
 
     damage_raw = (action.get("damage") or "").strip()
-    damage = damage_raw if re.search(r"\d+d\d+", damage_raw) else "1d4"
+    damage = damage_raw if re.fullmatch(r"\d+d\d+([+-]\d+)?", damage_raw) else "1d4"
 
     return {
         "attacker": attacker_name,
