@@ -39,7 +39,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [combat-active-character.feature](combat-active-character.feature) | Backend \| Frontend | `@combat` `@session` `@prompt` `@streaming` `@layout` | 14 | `CombatState.current_actor`, `advance_combat_turn()`, `POST /combat/advance_turn`, `_write_session_state` combat actor, `ActiveSpeaker.isEnemy`, `InputBar` hostile state + skull icon + taunting placeholder, `tests/test_combat_active_character.py`, `InputBarHostile.test.tsx` |
 | [roll-initiatives.feature](roll-initiatives.feature) | Backend \| Frontend | `@combat` `@initiative` `@session` `@layout` | 9 | `roll_combat_initiatives()`, `_parse_event_combatants()`, `pending_combatants` seeding, auto-roll hook on round-1 `%%COMBAT%%` with combat event, `POST /combat/roll_initiatives` (debug), `tests/test_roll_initiatives.py`, `CombatPanelRollInit.test.tsx` |
 
-**Total: 273 acceptance criteria across 30 feature files**
+| [pc-combat-turn.feature](pc-combat-turn.feature) | Backend \| Frontend | `@combat` `@pc` `@action` `@turn` `@streaming` `@parsing` | 10 | `_extract_pc_combat_intent`, `stream_pc_turn`, `_stream_pc_turn_narration`, `_PC_TURN_SYSTEM`, `_build_pc_turn_system`, `POST /pc_turn`, `session._pending_pc_narration`, `pc_profiles.weapons`, App.tsx routing, `pcTurn()` in api.ts |
+
+**Total: 296 acceptance criteria across 31 feature files**
 
 ---
 

@@ -13,6 +13,14 @@ npm run test:e2e
 npx playwright test --config playwright.live.config.ts
 ```
 
+Tier 1.10.5 PC combat action coverage:
+
+```
+python -m pytest tests/test_pc_combat_turn.py -q -p no:cacheprovider
+cd ui && npm run test -- App.pc-combat-turn.test.tsx --run
+cd ui && npx playwright test pc-combat-turn.spec.ts
+```
+
 Tier 1.7 / 1.9 enemy-turn and action card coverage:
 
 ```

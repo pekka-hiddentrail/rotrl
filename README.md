@@ -326,7 +326,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 981+ pytest tests passing across 28 test files:
+**Backend:** 1026+ pytest tests passing across 29 test files:
 
 | File | Covers |
 |------|--------|
@@ -359,6 +359,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_combat_attacks.py` | All 9 attack-resolution ACs: `_roll_dice`, `_parse_attack_line/block`, `_is_pc_attacker`, `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `stream_resume_combat`, multi-attack queue, `attack_result`/`attack_request` SSE, stream filter, endpoint HTTP guards (404/409) |
 | `test_roll_initiatives.py` | All 9 roll-initiatives ACs: `roll_combat_initiatives`, PC/enemy modifier, `current_actor` set to highest active, `state.json` written, endpoint guards, `_parse_event_combatants` (table parsing, missing section, malformed), `pending_combatants` seeding/clearing, auto-roll detection on round-1 combat event |
 | `test_enemy_turn.py` | Enemy-turn Tiers 1.7–1.9: `%%ACTION%%` parser, enemy-turn system/user prompt split, `last_actor` continuity, if_hit/if_miss conditional narration, action_card SSE ordering (before narrative), weapon profile injection, attack/delay streams, endpoint guards |
+| `test_pc_combat_turn.py` | PC combat action system (Tier 1.10.5): `_extract_pc_combat_intent` weapon/target extraction and fallbacks, `stream_pc_turn` attack queue from profile, `_stream_pc_turn_narration` narration with known outcome, `/pc_turn` endpoint, edge cases (no enemies, no weapons, non-attack actions) |
 | `test_token_benchmark.py` | Real-API token benchmark — boots Anthropic Haiku, runs three fixed turns, appends prompt/completion/total token counts to `outputs/token_benchmarks.csv`; automatically skipped when `ANTHROPIC_API_KEY` is absent (`@pytest.mark.benchmark`) |
 | `test_prompt_audit.py` | Verifies `scripts/build_coverage.py` produces `outputs/coverage.json` with the expected `summary.total`, `summary.covered`, `summary.gap` keys and correct row schema |
 
@@ -575,7 +576,7 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 981+ pytest · 240+ Vitest · 13 Playwright mocked · 11 live Playwright tests | ✅ Complete |
+| Test suites — 1026+ pytest · 240+ Vitest · 15 Playwright mocked · 11 live Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
