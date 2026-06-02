@@ -13,7 +13,7 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
 
 ### Combat
 
-- [ ] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the LLM
+- [x] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the LLM
   writes HP, PCs should start at their `hp_max` from `_build_pc_combat_roster`. The roster reads
   `pc_profiles[*]["combat_stats"]["hp_max"]`. If this is 0, the JSON files are either missing
   the `hp.max` field or the field path in `_build_pc_profiles` doesn't match.

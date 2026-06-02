@@ -1375,6 +1375,53 @@ def _seed_round1_combatants(session: "GameSession", combat_state: "CombatState")
     combat_state.combatants = seeded
 
 
+def _seed_pc_stats(session: "GameSession", combat_state: "CombatState") -> None:
+    """Seed HP/AC for PCs already in the combat list from pc_profiles (B-C03b fix).
+
+    Called unconditionally on round-1 %%COMBAT%% parse.  Only fixes existing PC
+    rows — does NOT add PCs the LLM omitted (that is handled by _seed_round1_combatants
+    when a full combat event fires).
+    """
+    pc_keys = set(session.pc_profiles.keys())
+    fixed: list = []
+
+    for c in combat_state.combatants:
+        key = c.name.lower()
+        if key in pc_keys:
+            profile = session.pc_profiles[key]
+            cs_data = profile.get("combat_stats", {})
+            hp_max = cs_data.get("hp_max", 0) or 10
+            ac     = cs_data.get("ac",     10) or 10
+            c.hp_max     = hp_max
+            c.hp_current = hp_max
+            c.ac         = ac
+            fixed.append(c.name)
+
+    if fixed:
+        _log(session, f"\n> *[PC HP/AC seeded from profiles: {fixed}]*\n")
+
+
+def _seed_enemy_stats(session: "GameSession", combat_state: "CombatState") -> None:
+    """Seed enemy combatants from event file pending_combatants on round 1.
+
+    Only called when a combat event is active.  Replaces LLM-written enemy list
+    with individual named entries from the ## Combatants table (fixes grouped notation).
+    """
+    if not session.pending_combatants:
+        return
+    pc_keys = set(session.pc_profiles.keys())
+    # Keep PCs, replace all non-PCs with event-file data
+    seeded = [c for c in combat_state.combatants if c.name.lower() in pc_keys]
+    for _key, data in session.pending_combatants.items():
+        name    = data.get("name", _key.title())
+        hp      = data.get("hp", 5)
+        ac      = data.get("ac", 13)
+        attacks = data.get("attacks", {})
+        seeded.append(Combatant(name=name, hp_current=hp, hp_max=hp, ac=ac, initiative=0, attacks=attacks))
+    combat_state.combatants = seeded
+    _log(session, f"\n> *[Enemy stats seeded: {len(session.pending_combatants)} from event file]*\n")
+
+
 def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
     """Roll d20 + modifier for every combatant and update initiative order.
 
@@ -2949,7 +2996,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         _is_round1 = session.combat_state is None  # True before assignment
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
-                        # Auto-roll initiatives on round 1 when a combat event is active
+                        # Round 1: always seed PC HP/AC from pc_profiles so the
+                        # CombatPanel never shows 0/0 for PCs (B-C03b fix).
+                        if _is_round1 and _combat_result.round == 1:
+                            _seed_pc_stats(session, session.combat_state)
+
+                        # Initiative roll + enemy seeding only when a combat event is active
                         if _is_round1 and _combat_result.round == 1:
                             _idx = _get_event_index()
                             _has_combat_event = any(
@@ -2957,8 +3009,8 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                                 for ev in session.active_events
                             )
                             if _has_combat_event:
-                                # Seed authoritative PC + enemy stats, then wait for player to roll
-                                _seed_round1_combatants(session, session.combat_state)
+                                # Seed enemy stats from event file, then wait for player to roll
+                                _seed_enemy_stats(session, session.combat_state)
                                 session._await_initiative_roll = True
                                 _log(session, "\n> *[Initiative pending — awaiting player roll]*\n")
                     _write_session_state(session)
@@ -3070,13 +3122,14 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
                         if _is_round1_flat and _combat_result.round == 1:
+                            _seed_pc_stats(session, session.combat_state)
                             _idx = _get_event_index()
                             _has_combat_event = any(
                                 (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
                                 for ev in session.active_events
                             )
                             if _has_combat_event:
-                                _seed_round1_combatants(session, session.combat_state)
+                                _seed_enemy_stats(session, session.combat_state)
                                 session._await_initiative_roll = True
                                 _log(session, "\n> *[Initiative pending — awaiting player roll (flat path)]*\n")
                     _write_session_state(session)

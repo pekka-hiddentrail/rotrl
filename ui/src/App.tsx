@@ -232,6 +232,16 @@ export default function App() {
           setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
         }
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
+        if (event.type === 'action_card') {
+          // PC attack resolved — inject action card before the GM narrative bubble
+          setMessages(prev => {
+            const withoutEmpty = prev.slice(0, -1)
+            return [...withoutEmpty,
+              { role: 'combat-event' as const, content: '', attackResult: { ...event } },
+              { role: 'gm' as const, content: '' },
+            ]
+          })
+        }
         if (event.type === 'error') throw new Error(event.message)
       }
     } catch (e) {
