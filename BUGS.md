@@ -13,7 +13,7 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
 
 ### Combat
 
-- [ ] **B-C01 — Enemy turn dev mode: raw LLM output not visible** — In dev mode the enemy turn
+- [x] **B-C01 — Enemy turn dev mode: raw LLM output not visible** — In dev mode the enemy turn
   response shows only the flavor sentence; `%%NARRATIVE%%`, `%%ACTION%%`, and any other sections
   the LLM wrote are stripped before reaching the UI. `stream_enemy_turn` uses a blocking call
   and manually yields only the narrative portion as a `token` event, bypassing the dev-mode

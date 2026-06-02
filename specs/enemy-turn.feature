@@ -142,15 +142,18 @@ And   the query does NOT contain "14" or "16" as standalone AC references
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-006 — `stream_enemy_turn` uses _ENEMY_TURN_SYSTEM, not _build_combat_system_prompt
+### AC-006 — `stream_enemy_turn` uses a system message containing the full briefing
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
 Given stream_enemy_turn(session, "Goblin 1") is called
-Then  the LLM is called with _ENEMY_TURN_SYSTEM as the system message
-And   _ENEMY_TURN_SYSTEM is much shorter than _build_combat_system_prompt output
+Then  the LLM system message = _ENEMY_TURN_SYSTEM (GM identity) + [ENEMY TURN BRIEFING]
+And   the system message opens with "You are the Game Master for a Pathfinder 1E campaign"
+And   the system message contains the full actor/allies/PCs/weapons/format spec
 And   session.messages (chat history) is NOT included in the LLM payload
-And   the payload contains exactly one user message: the enemy turn query
+And   the user message is a short turn trigger:
+        "{last_actor} just acted. Now it is {actor.name}'s turn."
+        OR "Round {N} begins. It is {actor.name}'s turn." when session.last_actor is empty
 ```
 
 ---
@@ -377,6 +380,35 @@ And   the query is otherwise identical to the profile-absent case
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-017 — %%ACTION%% if_hit / if_miss conditional outcome narration
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM provides conditional outcome sentences; backend picks the correct branch
+
+```gherkin
+Given _parse_action_block receives an %%ACTION%% block with:
+      if_hit:  "The blade finds purchase in Vanx's shoulder!"
+      if_miss: "Vanx sidesteps and the blow glances off."
+Then  the returned dict contains if_hit and if_miss strings
+
+Given stream_enemy_turn resolves an attack that hits
+Then  the player-visible message is "{%%NARRATIVE%% text}\n\n{if_hit text}"
+And   the if_miss text does NOT appear in the token stream
+
+Given stream_enemy_turn resolves an attack that misses
+Then  the player-visible message is "{%%NARRATIVE%% text}\n\n{if_miss text}"
+And   the if_hit text does NOT appear in the token stream
+
+Given the %%ACTION%% block omits if_hit and if_miss
+Then  only the %%NARRATIVE%% text is streamed (graceful fallback)
+
+Given session.dev_mode is True
+Then  the full raw LLM response is streamed (both if_hit and if_miss visible for debugging)
+```
+
+---
+
 ## Out of Scope
 
 - `_execute_action` full dispatch table (Tier 2 SA-6) — actions beyond `attack` and `delay`
@@ -389,10 +421,18 @@ And   the query is otherwise identical to the profile-absent case
 
 ## Notes
 
-- `_ENEMY_TURN_SYSTEM` module-level constant (~4 lines): instructs the LLM to return exactly
-  `%%NARRATIVE%%` (one sentence) + `%%ACTION%%` block. No other sections permitted.
-- `_build_enemy_turn_query(session, combatant_name) → str` — builds the tactical briefing.
-  **Does not use** `_build_combat_system_prompt`; the query is the user message, `_ENEMY_TURN_SYSTEM` is the system message. Chat history is NOT injected.
+- `_ENEMY_TURN_SYSTEM` module-level constant (4 lines): GM identity header — "You are the
+  Game Master for a Pathfinder 1E campaign: Rise of the Runelords." + format instructions.
+- `_build_enemy_turn_system(session, name) → str` — builds the full system message:
+  `_ENEMY_TURN_SYSTEM` + `\n\n` + `[ENEMY TURN BRIEFING]` (actor, weapons, allies, PCs,
+  action budget, format spec). The briefing is authoritative instruction in the system message
+  for highest LLM compliance. Chat history is NOT injected.
+- `_build_enemy_turn_user(session, name) → str` — builds the short turn-trigger user message:
+  `"{last_actor} just acted. Now it is {name}'s turn."` or `"Round {N} begins. It is {name}'s turn."`.
+  Gives the LLM narrative continuity between turns.
+- `session.last_actor: str` — updated by `advance_combat_turn` to the outgoing actor's name
+  before changing `current_actor`. Used by `_build_enemy_turn_user`.
+- `_build_enemy_turn_query` — kept as a backward-compat alias for `_build_enemy_turn_system`.
 - `_parse_action_block(text) → Optional[dict]` — same field-separator pattern (`·`) as
   `_parse_combatant_line`. `%%ACTION%%` added to `_END_MARKERS` (stripped from player stream).
   `%%ACTION%%` NOT added to `_HAS_SECTION_MARKERS_RE` (same pattern as `%%ATTACK%%`).

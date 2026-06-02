@@ -777,14 +777,16 @@ def _parse_action_block(text: Optional[str]) -> Optional[dict]:
         action = "delay"
 
     return {
-        "action": action,
-        "target": fields.get("target", ""),
-        "weapon": fields.get("weapon", ""),
-        "bonus": fields.get("bonus", ""),
-        "damage": fields.get("damage", ""),
-        "ability": fields.get("ability", ""),
+        "action":   action,
+        "target":   fields.get("target",   ""),
+        "weapon":   fields.get("weapon",   ""),
+        "bonus":    fields.get("bonus",    ""),
+        "damage":   fields.get("damage",   ""),
+        "ability":  fields.get("ability",  ""),
         "movement": fields.get("movement", ""),
-        "reason": fields.get("reason", ""),
+        "reason":   fields.get("reason",   ""),
+        "if_hit":   fields.get("if_hit",   ""),
+        "if_miss":  fields.get("if_miss",  ""),
     }
 
 
@@ -1079,6 +1081,10 @@ class GameSession:
     # combatant before emitting the final combat_update SSE.  Mirrors the auto-advance
     # that stream_enemy_turn already does at the end of each enemy turn.
     _advance_combat_after_stream: bool = False
+    # Name of the combatant who most recently finished their turn.
+    # Set by advance_combat_turn before changing current_actor.
+    # Used by _build_enemy_turn_user to give the LLM narrative continuity.
+    last_actor: str = ""
     # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
     # Cleared to None when round == 0 or all combatants are inactive.
     combat_state: Optional[CombatState] = None
@@ -1166,6 +1172,7 @@ def advance_combat_turn(session: "GameSession") -> dict:
         # current_actor not found in active list (None, dead, etc.) → pick first.
         next_idx = 0
 
+    session.last_actor = combat.current_actor or ""
     combat.current_actor = names[next_idx]
     _write_session_state(session)
     is_pc = _is_pc_attacker(combat.current_actor, session)
@@ -3511,7 +3518,7 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
     return _response_text
 
 
-_ENEMY_TURN_SYSTEM = """You run one enemy turn in Pathfinder 1E.
+_ENEMY_TURN_SYSTEM = """You are the Game Master for a Pathfinder 1E campaign: Rise of the Runelords.
 Write vivid but brief action narration, then exactly one %%ACTION%% block.
 Do not roll dice, choose AC, alter HP, update initiative, or write %%COMBAT%%.
 The backend resolves mechanics after your action choice."""
@@ -3558,8 +3565,13 @@ def _current_enemy_actor(session: "GameSession", name: Optional[str] = None) -> 
     return active[0] if active else None
 
 
-def _build_enemy_turn_query(session: "GameSession", name: str) -> str:
-    """Build the focused user prompt for one backend-mediated enemy turn."""
+def _build_enemy_turn_system(session: "GameSession", name: str) -> str:
+    """Build the system message for one enemy turn: GM identity + full [ENEMY TURN BRIEFING].
+
+    The briefing is authoritative instruction (not a user request), so it belongs in the
+    system message for highest LLM compliance.  The user message is a short turn trigger
+    built by _build_enemy_turn_user().
+    """
     if session.combat_state is None:
         raise ValueError("No active combat")
     actor = _find_combatant(session, name)
@@ -3602,7 +3614,7 @@ def _build_enemy_turn_query(session: "GameSession", name: str) -> str:
     _allies_block = "\n".join(_ally_line(c) for c in allies) if allies else "- (none)"
     _pcs_block    = "\n".join(_pc_line(c)   for c in pcs)    if pcs    else "- (none)"
 
-    return f"""[ENEMY TURN BRIEFING]
+    briefing = f"""[ENEMY TURN BRIEFING]
 Round: {session.combat_state.round}
 Actor: {actor.name}, {actor.status}{_actor_cond}
 Action budget: {_enemy_action_budget(actor)}
@@ -3628,7 +3640,30 @@ action: attack|use_ability|move|delay
 target: <target name, if attacking or moving toward>
 weapon: <weapon name, if attack — must match Equipped or Available weapon>
 ability: <ability name, if use_ability>
-movement: <destination or direction, if move>"""
+movement: <destination or direction, if move>
+if_hit: <one sentence narrating the outcome if the attack hits — e.g. "The blade bites into Vanx's shoulder!">
+if_miss: <one sentence narrating the outcome if the attack misses — e.g. "Vanx sidesteps and the blow glances off.">"""
+
+    return f"{_ENEMY_TURN_SYSTEM}\n\n{briefing}"
+
+
+def _build_enemy_turn_user(session: "GameSession", name: str) -> str:
+    """Build the short user-message trigger for one enemy turn.
+
+    Gives the LLM narrative continuity: it knows who acted before this combatant
+    and can pick tactically coherent follow-up actions.
+    """
+    actor = _find_combatant(session, name)
+    actor_name = actor.name if actor else name
+    round_n = session.combat_state.round if session.combat_state else 1
+    if session.last_actor:
+        return f"{session.last_actor} just acted. Now it is {actor_name}'s turn."
+    return f"Round {round_n} begins. It is {actor_name}'s turn."
+
+
+def _build_enemy_turn_query(session: "GameSession", name: str) -> str:
+    """Backward-compat alias — returns the briefing portion only (for tests)."""
+    return _build_enemy_turn_system(session, name)
 
 
 def _extract_narrative(text: str) -> str:
@@ -3677,22 +3712,50 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
         yield f"data: {json.dumps({'type': 'error', 'message': 'Current actor is a PC'})}\n\n"
         return
 
-    query = _build_enemy_turn_query(session, actor.name)
+    system   = _build_enemy_turn_system(session, actor.name)
+    user_msg = _build_enemy_turn_user(session, actor.name)
     try:
-        response = _call_blocking(session, _ENEMY_TURN_SYSTEM, query)
+        response = _call_blocking(session, system, user_msg)
     except Exception as e:
         yield f"data: {json.dumps({'type': 'error', 'message': f'Enemy turn failed: {e}'})}\n\n"
         return
 
     narrative = _extract_narrative(response)
-    if narrative:
-        session.messages.append({"role": "assistant", "content": narrative})
-        yield f"data: {json.dumps({'type': 'token', 'content': narrative})}\n\n"
+    action    = _parse_action_block(response)
 
-    action = _parse_action_block(response)
+    # Resolve the attack before building the visible message so we know hit/miss
+    result: Optional[dict] = None
     if action and action.get("action") == "attack" and action.get("target"):
         attack = _get_attack_for_enemy(action, actor.name)
         result = _resolve_npc_attack(attack, session)
+
+    # Build the outcome sentence from the LLM's pre-authored branches
+    outcome = ""
+    if result is not None:
+        outcome = action.get("if_hit", "") if result["hit"] else action.get("if_miss", "")
+
+    # Combine narrative + outcome into a single player-facing message
+    full_narrative = narrative
+    if outcome:
+        full_narrative = f"{narrative}\n\n{outcome}" if narrative else outcome
+
+    # Dev mode: stream full raw response (all %%MARKERS%% visible) with the resolved
+    # outcome injected before %%ACTION%% so the developer can see which branch was chosen.
+    if session.dev_mode:
+        dev_response = response
+        if outcome:
+            label = "[HIT]" if (result and result.get("hit")) else "[MISS]"
+            annotation = f"\n\n{label} {outcome}"
+            # Insert just before %%ACTION%% so markers remain intact below
+            dev_response = response.replace("\n\n%%ACTION%%", f"{annotation}\n\n%%ACTION%%", 1)
+        yield f"data: {json.dumps({'type': 'token', 'content': dev_response})}\n\n"
+        session.messages.append({"role": "assistant", "content": dev_response})
+    else:
+        if full_narrative:
+            yield f"data: {json.dumps({'type': 'token', 'content': full_narrative})}\n\n"
+            session.messages.append({"role": "assistant", "content": full_narrative})
+
+    if result is not None:
         yield f"data: {json.dumps({'type': 'attack_result', **result})}\n\n"
 
     # Advance to the next combatant automatically — no manual "Next Turn" click needed

@@ -534,7 +534,12 @@ export default function App() {
         onPurgeNpcs={handlePurgeNpcs}
       />
 
-      {error && <div className="error-bar">{error}</div>}
+      {error && (
+        <div className="error-bar">
+          <span className="error-bar-message">{error}</span>
+          <button className="error-bar-close" onClick={() => setError(null)} title="Dismiss">✕</button>
+        </div>
+      )}
       {charsError && <div className="error-bar">Character data: {charsError}</div>}
 
       <div className={`main-content${combatState ? ' combat-active' : ''}`}>
