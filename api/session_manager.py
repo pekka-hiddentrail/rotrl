@@ -817,9 +817,17 @@ def _resolve_npc_attack(attack: dict, session: "GameSession") -> dict:
 
     damage_rolls: list = []
     damage_total = 0
+    damage_expr_error: Optional[str] = None
     if hit and session.combat_state is not None:
-        damage_rolls, damage_total = _roll_dice(attack["damage"])
-        _apply_hp_deltas(session.combat_state, [(attack["target"], -damage_total)])
+        expr = attack.get("damage", "")
+        if not _DICE_EXPR_RE.match(expr.strip()):
+            damage_expr_error = f"invalid damage_expr: '{expr}'"
+            _log(session, (
+                f"\n> *[WARN: {damage_expr_error} for {attack['attacker']} — 0 damage applied]*\n"
+            ))
+        else:
+            damage_rolls, damage_total = _roll_dice(expr)
+            _apply_hp_deltas(session.combat_state, [(attack["target"], -damage_total)])
         _log(session, (
             f"\n> *[NPC attack: {attack['attacker']}→{attack['target']} "
             f"rolled {roll}+{attack['bonus']}={total} vs AC {ac} — "
@@ -831,7 +839,7 @@ def _resolve_npc_attack(attack: dict, session: "GameSession") -> dict:
             f"rolled {roll}+{attack['bonus']}={total} vs AC {ac} — MISS]*\n"
         ))
 
-    return {
+    result: dict = {
         "attacker": attack["attacker"],
         "target": attack["target"],
         "roll": roll,
@@ -844,6 +852,9 @@ def _resolve_npc_attack(attack: dict, session: "GameSession") -> dict:
         "attack_type": attack["type"],
         "is_pc": False,
     }
+    if damage_expr_error:
+        result["error"] = damage_expr_error
+    return result
 
 
 def _build_attack_history_message(results: list, round_num: int) -> str:
@@ -3731,6 +3742,18 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
         _log(session, f"\n> *[Enemy turn warning: LLM wrote unexpected sections {_bad} — ignored]*\n")
         if session.dev_mode:
             yield f"data: {json.dumps({'type': 'token', 'content': f'[DEV WARNING: unexpected sections {_bad} in enemy turn response — only %%NARRATIVE%% and %%ACTION%% are processed]'})}\n\n"
+
+    # CB1.9-2: validate chosen weapon against combatant's seeded attack profile.
+    # If the LLM hallucinated a weapon, fall back to the first known one and log a warning.
+    if action and action.get("action") == "attack" and actor is not None:
+        _chosen = (action.get("weapon") or "").lower().strip()
+        _atk    = actor.attacks if isinstance(actor.attacks, dict) else {}
+        _known  = [w.lower() for w in _atk.get("melee", []) + _atk.get("ranged", [])]
+        if _known and _chosen not in _known:
+            _fallback = (_atk.get("melee") or _atk.get("ranged") or [None])[0]
+            if _fallback:
+                _log(session, f"\n> *[CB1.9-2: weapon '{_chosen}' not in profile — using '{_fallback}']*\n")
+                action = {**action, "weapon": _fallback}
 
     # Resolve the attack before building the visible message so we know hit/miss
     result: Optional[dict] = None

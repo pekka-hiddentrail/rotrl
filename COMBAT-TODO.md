@@ -457,15 +457,29 @@ Content and styling are a starting point — see TODO.md GUI Improvements for th
 
 - [x] **CB1.9-1 — Enemy turn prompt: attack profile, system/user split, if_hit/if_miss, auto-advance, api log** — `Combatant.attacks` dict seeded from event file melee/ranged columns; persists past initiative roll. `_build_enemy_turn_system` puts full briefing in the system message; `_build_enemy_turn_user` is the short turn trigger with `last_actor` continuity. `%%ACTION%%` format adds `if_hit`/`if_miss`; backend picks the matching branch and injects it into the narrative before streaming. `advance_combat_turn` fires automatically after enemy turns (and PC attack resolution — B-C09). `_call_blocking` logs to api_log (B-C01 dev-mode fix included). 978 pytest passing.
 
-- [ ] **CB1.9-2 — Backend validates chosen weapon against profile** — in `_parse_action_block` or `_execute_action`, when `action: attack` is declared, check that `weapon` matches a known attack name in `pending_combatants`. If no match (LLM hallucinated a weapon), fall back to the first available attack and log a warning. This prevents phantom weapons from reaching `_resolve_npc_attack`.
+- [x] **CB1.9-2 — Backend validates chosen weapon against profile** — in `_parse_action_block` or `_execute_action`, when `action: attack` is declared, check that `weapon` matches a known attack name in `pending_combatants`. If no match (LLM hallucinated a weapon), fall back to the first available attack and log a warning. This prevents phantom weapons from reaching `_resolve_npc_attack`.
 
 - [x] **CB1.9-3 — `action_card` SSE event and frontend action card component** — after `_resolve_npc_attack` resolves an enemy attack, emit `{ type: "action_card", attacker, target, weapon, roll, bonus, total, ac, hit, damage_total, hp_before, hp_after }`. Frontend renders this as a new message type (role: `"action"`) in the chat flow — centered, distinct from GM/player bubbles. Use the mock content above as the initial layout. *(See TODO.md GUI Improvements for the polish/content TODO.)*
 
-- [ ] **CB1.9-4 — Enforce `%%HP%%` as the only LLM-initiated HP path** — the `%%HP%%` block is the *only* way the LLM may propose an HP change outside of structured attack resolution (traps, environmental damage, spells, morale effects). Add a parser guard that logs a warning and discards any HP mutation that arrives outside `%%HP%%` or a backend-resolved `action_card`.
+- [ ] **CB1.9-4 — Strip `%%HP%%` from the LLM spec**
 
-- [ ] **CB1.9-5 — Damage expression validation** — `_resolve_npc_attack` receives a `damage_expr` string from the bestiary/event profile. Validate it against `_DAMAGE_EXPR_RE` before rolling; return `damage_total: 0` with an `error` field on invalid input.
+  `%%HP%%` is the only remaining place where the LLM writes numbers that directly mutate HP.
+  Nothing validates the delta; the LLM can write `delta: -99` and the backend applies it without
+  question. HP is backend-owned everywhere else — this is the exception that should not exist.
 
-- [x] **CB1.9-T — Tests** — `TestEnemyTurnQuery` (system/user split); `TestEnemyTurnQueryAttackProfile` (combatant.attacks); `TestEnemyTurnUser` (4 tests, last_actor continuity); `TestConditionalOutcomeNarration` (6 tests, if_hit/if_miss); `TestActionCardOrdering` (3 tests, action_card before token, required fields, no card for delay); dev/non-dev mode tests for B-C01 fix. 981 pytest + `CombatEventCard.test.tsx` (8 Vitest) all passing. Remaining: CB1.9-2 weapon validation.
+  **Immediate step:** remove `%%HP%%` from `_COMBAT_SECTION_SPECS` so the LLM is never
+  instructed to write it. Update the stream processors (lines ~2910 and ~3037) to silently
+  discard any `%%HP%%` block that arrives anyway, with a dev-mode log warning. Healing and
+  trap damage become narration-only until backend sources exist.
+
+  **Replacement sources (Tier 3 — corner cases, out of scope now):**
+  - *Traps / hazards* — event file `## Hazards` table + `%%ACTION%% action: trigger_trap`
+  - *Poison / DoT* — condition tick applied by backend at turn start (see CB1.11-2)
+  - *Healing* — PC spell/item profiles, `%%ACTION%% action: heal · source: cure_light_wounds`
+
+- [x] **CB1.9-5 — Damage expression validation** — `_resolve_npc_attack` validates `damage_expr` against `_DICE_EXPR_RE` before calling `_roll_dice`. On mismatch: `damage_total: 0`, no HP mutation, dev-mode log warning, `error` key added to the result dict (surfaces in `action_card` SSE). Valid expressions produce no `error` key. 3 new tests in `test_combat_attacks.py` — invalid bare `d6`, spaced `1d6 + 3`, and valid expr has no error. 49 pytest passing.
+
+- [x] **CB1.9-T — Tests** — `TestEnemyTurnQuery` (system/user split); `TestEnemyTurnQueryAttackProfile` (combatant.attacks); `TestEnemyTurnUser` (4 tests, last_actor continuity); `TestConditionalOutcomeNarration` (6 tests, if_hit/if_miss); `TestActionCardOrdering` (3 tests, action_card before token, required fields, no card for delay); dev/non-dev mode tests for B-C01 fix. 981 pytest + `CombatEventCard.test.tsx` (8 Vitest) all passing. All CB1.9 items complete. 985 pytest passing.
 
 ---
 

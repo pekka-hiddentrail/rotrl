@@ -65,6 +65,7 @@ python dev.py --skip-tests
 | [explore_logging.md](tests/exploratory/explore_logging.md) | session-logging | Chains A-E: log structure + latency, error-path nulls, session log content, API log browser, listing order |
 | ~~[explore_attack_resolution.md](tests/exploratory/explore_attack_resolution.md)~~ | attack-resolution | **DEPRECATED** — NPC attacks now via `POST /enemy_turn` + `%%ACTION%%`. PC-side action declaration pending CB1.9. Use `explore_combat_tracker.md` for current flow. |
 | [explore_combat_tracker.md](tests/exploratory/explore_combat_tracker.md) | combat-tracker | Chains A-D: panel appearance + initiative order, HP bar colour shift, condition chip+tooltip, End Combat cleanup |
+| [explore_enemy_turn.md](tests/exploratory/explore_enemy_turn.md) | enemy-turn | Chains A-E: action card before narrative, hit/miss with HP update, weapon profile, close combat, unexpected-section warning |
 | [explore_edge_cases.md](tests/exploratory/explore_edge_cases.md) | (multi-feature) | Chains A-E: long input, NPC typo, two NPCs, stress, delta inspection |
 | [explore_roll_initiatives.md](tests/exploratory/explore_roll_initiatives.md) | roll-initiatives | Chains A-D: initiative banner on combat event, correct PC HP, no panel before roll, rolled order in CombatPanel |
 

@@ -397,6 +397,8 @@ from api.session_manager import (
 class TestResumeCombatClearsStaleQueue:
     """B-C07: stream_resume_combat must clear orphaned attack_queue entries before
     calling the LLM so a subsequent /enemy_turn call does not return 409.
+
+    Covers: enemy-turn.feature AC-015
     """
 
     def _session_with_stale_queue(self) -> GameSession:
@@ -840,3 +842,123 @@ class TestActionCardOrdering:
         events = _events(list(stream_enemy_turn(session)))
         card = next((e for e in events if e["type"] == "action_card"), None)
         assert card is None, "No action_card should be emitted for delay action"
+
+
+# ── CB1.9-2 — weapon validation against combatant profile ────────────────────
+
+class TestWeaponValidation:
+    """Hallucinated weapons fall back to the first known weapon; known weapons pass through."""
+
+    def _session_with_profile(self) -> GameSession:
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = CombatState(
+            round=1,
+            current_actor="Goblin Warrior 1",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks={"melee": ["dogslicer"], "ranged": ["shortbow"]}),
+            ],
+        )
+        return session
+
+    def test_hallucinated_weapon_falls_back_to_melee(self, monkeypatch):
+        session = self._session_with_profile()
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "melee"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin charges!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: longsword")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "melee", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "dogslicer", f"expected dogslicer, got {captured.get('weapon')}"
+
+    def test_known_weapon_unchanged(self, monkeypatch):
+        session = self._session_with_profile()
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "melee"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin charges!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: dogslicer")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "melee", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "dogslicer"
+
+    def test_no_profile_no_validation(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = CombatState(
+            round=1,
+            current_actor="Goblin Warrior 1",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks={}),  # empty profile
+            ],
+        )
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "melee"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin charges!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: longsword")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "melee", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "longsword"  # passed through unchanged
+
+    def test_ranged_fallback_when_no_melee(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = CombatState(
+            round=1,
+            current_actor="Goblin Warrior 1",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks={"melee": [], "ranged": ["shortbow"]}),  # only ranged
+            ],
+        )
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "ranged"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin raises bow!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: crossbow")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "ranged", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "shortbow"

@@ -38,27 +38,32 @@ sees only the narrative; all mechanics are invisible.
 ```gherkin
 Given a text string containing:
   %%ACTION%%
-  combatant: Goblin Warchanter
-  action_type: standard
   action: attack
   weapon: shortbow
   target: Yanyeeku
+  if_hit: The arrow finds its mark!
+  if_miss: The arrow skips off the cobblestones.
 
 When  _parse_action_block(text) is called
-Then  it returns {
-    "combatant": "Goblin Warchanter",
-    "action_type": "standard",
-    "action": "attack",
-    "weapon": "shortbow",
+Then  it returns a dict with:
+    "action": "attack"
+    "weapon": "shortbow"
     "target": "Yanyeeku"
-  }
+    "if_hit": "The arrow finds its mark!"
+    "if_miss": "The arrow skips off the cobblestones."
+    "ability": "", "movement": "", "bonus": "", "damage": "", "reason": ""
 
 Given a text with action: use_ability and ability: inspire_courage
 Then  the returned dict contains "action": "use_ability" and "ability": "inspire_courage"
 
 Given a text with action: move_toward and target: Thaelion
-Then  the returned dict contains "action": "move_toward" and "target": "Thaelion"
+Then  the action is normalised to "delay" (move_toward is not in the valid set;
+      valid values are attack, use_ability, move, delay)
 ```
+
+> **Note:** `combatant:` and `action_type:` fields in the `%%ACTION%%` block are silently
+> ignored by the parser — they are not part of the returned dict. The actor is known at the
+> call site (`stream_enemy_turn` passes `actor.name` directly).
 
 ---
 
@@ -167,15 +172,18 @@ Given the LLM response contains:
   %%NARRATIVE%%
   The goblin looses an arrow at the sorcerer.
   %%ACTION%%
-  combatant: Goblin 1
-  action_type: standard
   action: attack
   target: Yanyeeku
+  weapon: shortbow
+  if_hit: The arrow buries itself in the sorcerer's shoulder!
+  if_miss: The arrow skitters past.
 
 When  stream_enemy_turn processes the response
-Then  a "token" SSE event is emitted containing the narrative sentence
+Then  a "token" SSE event is emitted containing the narrative +
+      the resolved outcome sentence (if_hit or if_miss based on roll)
 And   the %%ACTION%% block text is NOT included in the streamed tokens
 And   the %%NARRATIVE%% marker itself is NOT included in the streamed tokens
+And   in dev mode the full raw response IS streamed (with [HIT]/[MISS] annotation)
 ```
 
 ---
@@ -357,9 +365,9 @@ And   a subsequent POST /enemy_turn call returns 200 (not 409) once attacks are 
 ```gherkin
 Given session.pending_combatants["goblin warchanter"]["attacks"] ==
       {"melee": ["bite"], "ranged": ["shortbow"]}
-When  _build_enemy_turn_query(session, "Goblin Warchanter") is called
-Then  the output contains "Melee attacks: bite"
-And   the output contains "Ranged attacks: shortbow"
+When  _build_enemy_turn_system(session, "Goblin Warchanter") is called
+Then  the output contains "Equipped weapon: bite"   (primary = first melee)
+And   the output contains "Available weapon: shortbow"  (secondary = first ranged)
 And   the output does NOT contain "+5" or "1d4"  (mechanics stripped — LLM sees names only)
 And   no attack names from other combatants appear in the actor's section
 ```
@@ -367,16 +375,34 @@ And   no attack names from other combatants appear in the actor's section
 **Scenario:** No profile exists for the actor
 
 ```gherkin
-Given session.pending_combatants is empty
-When  _build_enemy_turn_query is called for any combatant
-Then  no "Melee attacks" or "Ranged attacks" line appears in the output
-And   the query is otherwise identical to the profile-absent case
+Given session.pending_combatants is empty (actor.attacks == {})
+When  _build_enemy_turn_system is called for any combatant
+Then  no "Equipped weapon" or "Available weapon" line appears in the output
+And   the system message is otherwise identical to the no-profile case
 ```
 
 > **Design note:** The LLM sees weapon names only — no bonuses, no damage dice. The backend
 > owns the mechanics and looks them up from `pending_combatants` when resolving the attack.
 > The split into `melee` / `ranged` categories gives the LLM enough tactical context to make
 > a sensible decision (does the target need to be adjacent?).
+
+**Scenario:** LLM writes a weapon not in the combatant's profile (CB1.9-2)
+
+```gherkin
+Given actor.attacks == {"melee": ["dogslicer"], "ranged": ["shortbow"]}
+And   %%ACTION%% contains weapon: longsword  (hallucinated)
+When  stream_enemy_turn resolves the action
+Then  the resolved attack uses "dogslicer" (first melee weapon from profile)
+And   a warning is logged: "weapon 'longsword' not in profile — using 'dogslicer'"
+
+Given actor.attacks is empty (no profile)
+And   %%ACTION%% contains weapon: longsword
+Then  the weapon passes through unchanged (graceful — no profile means no validation)
+
+Given actor.attacks == {"melee": ["dogslicer"], "ranged": ["shortbow"]}
+And   %%ACTION%% contains weapon: shortbow  (known weapon)
+Then  the weapon is used unchanged
+```
 
 ---
 
