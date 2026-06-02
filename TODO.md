@@ -170,9 +170,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
-> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, and 1.10 (partial) complete. Tier 1.8 next.
-> Also shipped outside tiers: **Roll Initiatives button** — `POST /combat/roll_initiatives`,
-> `🎲 Roll Initiatives` in CombatPanel header, d20+modifier per combatant.
+> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 next (damage/standard action); then 1.11 (death/dying/healing).
 > See `specs/roll-initiatives.feature` (9 ACs, 18 pytest + 8 Vitest tests).
 
 ---
@@ -228,7 +226,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 - [ ] **In-session HP editing** — sidebar ＋/－ buttons to adjust `hp.current` for any PC without leaving the session. Calls a new `PATCH /api/characters/{id}/hp` endpoint that updates in-memory player data and writes the JSON file. Needed for healing spells, potions, and damage taken outside the structured combat flow (traps, environmental hazards).
 - [ ] **Long rest** — "Rest" button (or a step in the end-session flow) that resets all PC `hp.current` to `hp.max` and spell slots to full. Writes updated player JSON files. Prompts GM to confirm before overwriting. Resets should respect penalties from negative levels or other long-duration effects if those are tracked.
 - [ ] **Party overview panel** — compact strip at the top of the character sidebar showing all three PCs: name, HP bar, active condition badges. Allows the GM to see the whole party state at a glance without opening individual sheets. Reads from `GET /api/characters`; refreshes when a `combat_update` or HP-edit event fires.
-- [ ] Hide sidebar (left) and dice panel (right) when not in a session — both panels are visible on the splash screen but serve no purpose before boot
+- [ ] **Hide sidebar (left) when not in a session** — sidebar is visible on the splash screen but serves no purpose before boot. *(Dice panel already hidden — wrapped in `{isBooted && ...}` in App.tsx.)*
 - [ ] Make sidebar character icons bigger
 - [ ] Splash portrait click opens character sheet — same behaviour as "Open Sheet" in session
 - [ ] Add fun rotating hints to splash screen — PF1e flavour or adventure-specific
@@ -316,6 +314,7 @@ Event-triggered context injection. When the LLM decides a scene condition is met
 > **Open design question:** N=5 turns is a starting point. Needs tuning against real sessions. Also deferred: full content → compressed summary mid-window.
 
 - [ ] **Monitor event firing in real sessions** — verify the LLM fires events at the right narrative moments and does not double-fire or skip. N=5 turns TTL is a starting point; tune against observed sessions. Also watch whether the CORRECT/WRONG examples in the prompt fully eliminate the double-write behavior over time.
+- [ ] **Rethink event TTL as dialogue milestones** — instead of a raw turn count, the `length` (or TTL) of an event should express "these are the dialogue lines/topics that must be said before event X resolves." A goblin attack event, for example, stays active until the key beats (screams heard, guards mobilised, players decide to fight/flee) have each been touched — not just after N turns have elapsed. Concrete approach: events declare a list of milestone phrases/topics; the system ticks them off as they appear in GM output, and the event expires only when all milestones are acknowledged (or a hard-cap turn limit is hit as a safety net).
 - [x] **Spec — `%%EVENT%%` block format** — `specs/event-injection.feature` written: 9 ACs (AC-009 adds `event_type` metadata), inline syntax `%%EVENT%% <id>`, single event per response, TTL-only expiry.
 - [x] **Event content files** — `adventure_path/02_events/` created with `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Format: metadata header above `<!-- INJECT -->`, injectable content below.
 - [x] **`EventIndex`** — `api/context/event_index.py`: `EventEntry` dataclass, `EventIndex` with lazy load, `get()`, `event_map_text()`, `_parse_event_file()`. Singleton + `_get_event_index()` in `session_manager.py`.

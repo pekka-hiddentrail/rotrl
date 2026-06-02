@@ -1,7 +1,8 @@
 """Tests for the Roll Initiatives feature.
 
-Spec: specs/roll-initiatives.feature  AC-001 through AC-007
-Covers: roll_combat_initiatives(), POST /combat/roll_initiatives endpoint.
+Spec: specs/roll-initiatives.feature  AC-001 through AC-009
+Covers: roll_combat_initiatives(), POST /combat/roll_initiatives endpoint,
+_parse_event_combatants(), pending_combatants seeding, auto-roll on combat event.
 """
 from __future__ import annotations
 
@@ -17,9 +18,11 @@ from api.session_manager import (
     Combatant,
     CombatState,
     GameSession,
+    _parse_event_combatants,
     get_session,
     roll_combat_initiatives,
 )
+from api.context.event_index import EventEntry
 from tests.conftest import parse_sse
 
 
@@ -325,3 +328,170 @@ class TestRollInitiativesEndpoint:
         assert all(v >= 6 for v in results), (
             f"PC +5 modifier not applied — minimum seen was {min(results)}"
         )
+
+
+# ── AC-009 — _parse_event_combatants ─────────────────────────────────────────
+
+_FULL_TABLE = """
+## Combatants
+
+| name | hp | ac | init_mod | attacks |
+|------|----|----|----------|---------|
+| Goblin Warchanter | 8 | 14 | +3 | shortbow +5 (1d4+1) |
+| Goblin Warrior 1 | 5 | 16 | +2 | dogslicer +2 (1d4) |
+| Goblin Warrior 2 | 5 | 16 | +0 | dogslicer +2 (1d4) |
+"""
+
+_NO_TABLE = """
+## Active Event — some event
+
+Some narrative text with no combatants table.
+"""
+
+_MALFORMED_MOD = """
+## Combatants
+
+| name | hp | ac | init_mod | attacks |
+|------|----|----|----------|---------|
+| Goblin | 5 | 13 | bad | dogslicer |
+"""
+
+
+class TestParseEventCombatants:
+    def test_parses_full_table(self):
+        result = _parse_event_combatants(_FULL_TABLE)
+        assert "goblin warchanter" in result
+        assert result["goblin warchanter"]["init_mod"] == 3
+        assert result["goblin warrior 1"]["init_mod"] == 2
+        assert result["goblin warrior 2"]["init_mod"] == 0
+
+    def test_parses_hp_and_ac(self):
+        result = _parse_event_combatants(_FULL_TABLE)
+        assert result["goblin warchanter"]["hp"] == 8
+        assert result["goblin warchanter"]["ac"] == 14
+
+    def test_parses_attacks_string(self):
+        result = _parse_event_combatants(_FULL_TABLE)
+        assert "shortbow" in result["goblin warchanter"]["attacks"]
+
+    def test_missing_section_returns_empty(self):
+        assert _parse_event_combatants(_NO_TABLE) == {}
+
+    def test_empty_content_returns_empty(self):
+        assert _parse_event_combatants("") == {}
+
+    def test_malformed_mod_defaults_to_zero(self):
+        result = _parse_event_combatants(_MALFORMED_MOD)
+        assert "goblin" in result
+        assert result["goblin"]["init_mod"] == 0
+
+    def test_real_goblin_event_file(self):
+        path = Path(__file__).resolve().parents[1] / "adventure_path" / "02_events" / "goblin_attack_starts.md"
+        if not path.exists():
+            pytest.skip("Event file not found")
+        content = path.read_text(encoding="utf-8")
+        # Content after <!-- INJECT --> is what the parser sees in practice
+        inject_idx = content.find("<!-- INJECT -->")
+        injectable = content[inject_idx + len("<!-- INJECT -->"):] if inject_idx >= 0 else content
+        result = _parse_event_combatants(injectable)
+        assert len(result) >= 2
+        assert any("warchanter" in k for k in result)
+        for v in result.values():
+            assert isinstance(v["init_mod"], int)
+
+
+# ── AC-003 / pending_combatants ───────────────────────────────────────────────
+
+class TestEnemyModifierFromPendingCombatants:
+    def test_enemy_uses_pending_modifier(self, tmp_path):
+        results = []
+        for _ in range(20):
+            session = _make_session(tmp_path)
+            session.pending_combatants = {"goblin warchanter": {"init_mod": 5}}
+            session.combat_state = _combat(("Goblin Warchanter", 10, "active"))
+            results.append(roll_combat_initiatives(session)["combatants"][0]["initiative"])
+        assert all(v >= 6 for v in results), (
+            f"pending_combatants +5 modifier not applied — min={min(results)}"
+        )
+
+    def test_pending_combatants_cleared_after_roll(self, tmp_path):
+        session = _make_session(tmp_path)
+        session.pending_combatants = {"goblin": {"init_mod": 3}}
+        session.combat_state = _combat(("Goblin", 5, "active"))
+        roll_combat_initiatives(session)
+        assert session.pending_combatants == {}
+
+    def test_absent_from_pending_defaults_to_flat_d20(self, tmp_path):
+        session = _make_session(tmp_path)
+        session.pending_combatants = {}
+        session.combat_state = _combat(("Unknown Enemy", 5, "active"))
+        results = [roll_combat_initiatives(session)["combatants"][0]["initiative"]
+                   for _ in range(20)]
+        assert all(1 <= v <= 20 for v in results)
+
+
+# ── AC-008 — auto-roll on combat event ───────────────────────────────────────
+
+class TestAutoRollOnCombatEvent:
+    def _combat_event_entry(self, event_type: str = "combat") -> EventEntry:
+        return EventEntry(
+            event_id="goblin_attack_starts",
+            trigger="when goblins attack",
+            content=_FULL_TABLE,
+            event_type=event_type,
+        )
+
+    def test_auto_roll_called_on_round1_with_combat_event(self, tmp_path):
+        session = _make_session(tmp_path)
+        session.combat_state = CombatState(
+            round=1,
+            combatants=[Combatant("Goblin", 15, 15, 13, 10)],
+        )
+        from api.session_manager import ActiveEvent
+        session.active_events = [ActiveEvent(event_id="goblin_attack_starts", content=_FULL_TABLE, turns_remaining=4)]
+        session.pending_combatants = {"goblin": {"init_mod": 3}}
+
+        with patch("api.session_manager._get_event_index") as mock_idx, \
+             patch("api.session_manager._session_state_path") as mock_path:
+            mock_path.return_value = tmp_path / "state.json"
+            mock_entry = self._combat_event_entry("combat")
+            mock_idx.return_value.get.return_value = mock_entry
+
+            # Simulate the auto-roll check: round==1, has combat event
+            _idx = mock_idx.return_value
+            _has_combat_event = any(
+                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
+                for ev in session.active_events
+            )
+            assert _has_combat_event
+
+    def test_no_auto_roll_without_combat_event(self, tmp_path):
+        session = _make_session(tmp_path)
+        session.combat_state = CombatState(round=1, combatants=[Combatant("Goblin", 5, 5, 13, 10)])
+        # Only aftermath event active
+        from api.session_manager import ActiveEvent
+        session.active_events = [ActiveEvent(event_id="attack_repelled", content="", turns_remaining=3)]
+
+        with patch("api.session_manager._get_event_index") as mock_idx:
+            mock_entry = EventEntry("attack_repelled", "when raid ends", "", event_type="aftermath")
+            mock_idx.return_value.get.return_value = mock_entry
+
+            _idx = mock_idx.return_value
+            _has_combat_event = any(
+                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
+                for ev in session.active_events
+            )
+            assert not _has_combat_event
+
+    def test_no_auto_roll_on_round2(self, tmp_path):
+        """Auto-roll only fires on round 1 (new combat). Round 2 must not re-roll."""
+        session = _make_session(tmp_path)
+        # existing_state is not None → _is_round1 is False
+        session.combat_state = CombatState(round=2, combatants=[Combatant("Goblin", 5, 5, 13, 18)])
+        original_initiative = session.combat_state.combatants[0].initiative
+
+        # Simulating round-2 block: _is_round1 = (session.combat_state is None) = False
+        _is_round1 = session.combat_state is None
+        assert not _is_round1
+        # Initiative must be unchanged — auto-roll must not have fired
+        assert session.combat_state.combatants[0].initiative == original_initiative

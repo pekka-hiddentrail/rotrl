@@ -1,137 +1,76 @@
 /**
- * CombatPanel — Roll Initiatives button tests.
+ * CombatPanel — initiative display tests.
  *
  * Spec: specs/roll-initiatives.feature  AC-008
- * Covers: button presence, absence when no handler, disabled states, click callback.
+ * Initiative is rolled automatically by the backend (no player button).
+ * These tests verify the panel displays the server-rolled order correctly
+ * and that the Roll Initiatives button is absent.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import CombatPanel from '../CombatPanel'
 import type { CombatState } from '../../types'
 
-// ── Fixture ───────────────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const COMBAT: CombatState = {
-  round: 2,
-  current_actor: 'Goblin 1',
+const ROLLED_STATE: CombatState = {
+  round: 1,
+  current_actor: 'Goblin Warchanter',
   combatants: [
-    { name: 'Thaelion', hp_current: 18, hp_max: 22, ac: 16, initiative: 10, status: 'active',      conditions: [] },
-    { name: 'Goblin 1', hp_current: 5,  hp_max: 5,  ac: 13, initiative: 14, status: 'active',      conditions: [] },
-    { name: 'Goblin 2', hp_current: 0,  hp_max: 5,  ac: 13, initiative: 6,  status: 'unconscious', conditions: [] },
+    { name: 'Goblin Warchanter', hp_current: 8, hp_max: 8,  ac: 14, initiative: 18, status: 'active', conditions: [] },
+    { name: 'Ani',               hp_current: 11, hp_max: 11, ac: 17, initiative: 14, status: 'active', conditions: [] },
+    { name: 'Goblin Warrior 1',  hp_current: 5,  hp_max: 5,  ac: 16, initiative: 9,  status: 'active', conditions: [] },
   ],
 }
 
-const INITIATIVE_PENDING: CombatState = {
-  ...COMBAT,
-  round: -1,
-}
+// ── No button ─────────────────────────────────────────────────────────────────
 
-// ── AC-008 — button presence and interaction ──────────────────────────────────
-
-describe('CombatPanel — Roll Initiatives button', () => {
-  it('renders the button when onRollInitiatives prop is provided', () => {
-    render(
-      <CombatPanel
-        combatState={COMBAT}
-        onEndCombat={vi.fn()}
-        onRollInitiatives={vi.fn()}
-      />,
-    )
-    expect(screen.getByRole('button', { name: /Roll Initiatives/i })).toBeInTheDocument()
-  })
-
-  it('does NOT render the button when onRollInitiatives is absent', () => {
-    render(<CombatPanel combatState={COMBAT} onEndCombat={vi.fn()} />)
+describe('CombatPanel — Roll Initiatives button removed (auto-roll)', () => {
+  it('does not render a Roll Initiatives button', () => {
+    render(<CombatPanel combatState={ROLLED_STATE} onEndCombat={vi.fn()} />)
     expect(screen.queryByRole('button', { name: /Roll Initiatives/i })).toBeNull()
   })
 
-  it('calls onRollInitiatives when clicked', () => {
-    const onRollInitiatives = vi.fn()
+  it('does not render a Roll Initiatives button even when combat is active', () => {
     render(
       <CombatPanel
-        combatState={COMBAT}
+        combatState={ROLLED_STATE}
         onEndCombat={vi.fn()}
-        onRollInitiatives={onRollInitiatives}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: /Roll Initiatives/i }))
-    expect(onRollInitiatives).toHaveBeenCalledOnce()
-  })
-
-  it('is disabled when disabled prop is true', () => {
-    render(
-      <CombatPanel
-        combatState={COMBAT}
-        onEndCombat={vi.fn()}
-        onRollInitiatives={vi.fn()}
-        disabled
-      />,
-    )
-    expect(screen.getByRole('button', { name: /Roll Initiatives/i })).toBeDisabled()
-  })
-
-  it('is disabled when enemyTurnStreaming is true', () => {
-    render(
-      <CombatPanel
-        combatState={COMBAT}
-        onEndCombat={vi.fn()}
-        onRollInitiatives={vi.fn()}
-        enemyTurnStreaming
-      />,
-    )
-    expect(screen.getByRole('button', { name: /Roll Initiatives/i })).toBeDisabled()
-  })
-
-  it('is disabled when combatClosing is true', () => {
-    render(
-      <CombatPanel
-        combatState={COMBAT}
-        onEndCombat={vi.fn()}
-        onRollInitiatives={vi.fn()}
-        combatClosing
-      />,
-    )
-    expect(screen.getByRole('button', { name: /Roll Initiatives/i })).toBeDisabled()
-  })
-
-  it('is enabled when none of the disabled conditions apply', () => {
-    render(
-      <CombatPanel
-        combatState={COMBAT}
-        onEndCombat={vi.fn()}
-        onRollInitiatives={vi.fn()}
         disabled={false}
-        enemyTurnStreaming={false}
-        combatClosing={false}
       />,
     )
-    expect(screen.getByRole('button', { name: /Roll Initiatives/i })).toBeEnabled()
+    expect(screen.queryByText(/Roll Initiatives/i)).toBeNull()
+  })
+})
+
+// ── Initiative order display ──────────────────────────────────────────────────
+
+describe('CombatPanel — server-rolled initiative order displayed', () => {
+  it('shows combatants sorted descending by server-rolled initiative', () => {
+    const { container } = render(<CombatPanel combatState={ROLLED_STATE} onEndCombat={vi.fn()} />)
+    const rows = container.querySelectorAll('.combatant-row')
+    expect(rows).toHaveLength(3)
+    // First row = highest initiative
+    expect(rows[0].textContent).toContain('Goblin Warchanter')
+    expect(rows[1].textContent).toContain('Ani')
+    expect(rows[2].textContent).toContain('Goblin Warrior 1')
   })
 
-  it('button is in the header area (beside Round badge)', () => {
+  it('shows the round badge when round >= 1', () => {
+    render(<CombatPanel combatState={ROLLED_STATE} onEndCombat={vi.fn()} />)
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+  })
+
+  it('highlights the current actor (highest after auto-roll)', () => {
     const { container } = render(
       <CombatPanel
-        combatState={COMBAT}
+        combatState={ROLLED_STATE}
+        currentCombatantName="Goblin Warchanter"
         onEndCombat={vi.fn()}
-        onRollInitiatives={vi.fn()}
       />,
     )
-    const header = container.querySelector('.combat-panel-header')
-    expect(header).not.toBeNull()
-    const btn = header!.querySelector('button')
-    expect(btn).not.toBeNull()
-    expect(btn!.textContent).toMatch(/Roll Initiatives/i)
-  })
-
-  it('hides the round badge while initiative is pending', () => {
-    render(
-      <CombatPanel
-        combatState={INITIATIVE_PENDING}
-        onEndCombat={vi.fn()}
-        onRollInitiatives={vi.fn()}
-      />,
-    )
-    expect(screen.getByRole('button', { name: /Roll Initiatives/i })).toBeInTheDocument()
-    expect(screen.queryByText(/Round/i)).not.toBeInTheDocument()
+    const current = container.querySelector('.combatant-current')
+    expect(current).not.toBeNull()
+    expect(current!.textContent).toContain('Goblin Warchanter')
   })
 })

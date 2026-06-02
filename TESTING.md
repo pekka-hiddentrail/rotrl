@@ -21,6 +21,14 @@ cd ui && npm run test -- CombatPanelEnemyTurn.test.tsx App.enemy-turn.test.tsx -
 cd ui && npx playwright test enemy-turn.spec.ts
 ```
 
+Tier 1.8 initiative authority coverage (user-triggered roll on combat event):
+
+```
+python -m pytest tests/test_roll_initiatives.py -q -p no:cacheprovider
+cd ui && npm run test -- CombatPanelRollInit.test.tsx App.roll-initiatives.test.tsx --run
+cd ui && npx playwright test initiative-roll.spec.ts
+```
+
 Start the stack:
 
 ```
@@ -49,7 +57,7 @@ python dev.py --skip-tests
 | [explore_attack_resolution.md](tests/exploratory/explore_attack_resolution.md) | attack-resolution | Chains A-H: NPC auto-HP update, PC to-hit banner, hit→damage→HP, miss path, multi-attack queue, attack log visual, %%ATTACK%% hidden from player, End Combat clears queue |
 | [explore_combat_tracker.md](tests/exploratory/explore_combat_tracker.md) | combat-tracker | Chains A-D: panel appearance + initiative order, HP bar colour shift, condition chip+tooltip, End Combat cleanup |
 | [explore_edge_cases.md](tests/exploratory/explore_edge_cases.md) | (multi-feature) | Chains A-E: long input, NPC typo, two NPCs, stress, delta inspection |
-| [explore_roll_initiatives.md](tests/exploratory/explore_roll_initiatives.md) | roll-initiatives | Chains pending — 🎲 Roll Initiatives button, d20+modifier rolls, initiative reorder, round badge hide/show |
+| [explore_roll_initiatives.md](tests/exploratory/explore_roll_initiatives.md) | roll-initiatives | Chains A-D: initiative banner on combat event, correct PC HP, no panel before roll, rolled order in CombatPanel |
 
 ---
 

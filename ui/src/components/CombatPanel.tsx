@@ -8,7 +8,6 @@ interface Props {
   attackPhase?: AttackPhase
   enemyTurnStreaming?: boolean
   combatClosing?: boolean
-  onRollInitiatives?: () => void
   onAdvanceTurn?: () => void
   onEnemyTurn?: () => void
   onEndCombat: () => void
@@ -47,7 +46,6 @@ export default function CombatPanel({
   attackPhase,
   enemyTurnStreaming,
   combatClosing,
-  onRollInitiatives,
   onAdvanceTurn,
   onEnemyTurn,
   onEndCombat,
@@ -70,16 +68,6 @@ export default function CombatPanel({
             </span>
           )}
           {showRound && <span className="combat-round-badge">Round {combatState.round}</span>}
-          {onRollInitiatives && (
-            <button
-              className="btn btn-secondary btn-xs combat-roll-init-btn"
-              onClick={onRollInitiatives}
-              disabled={Boolean(controlsDisabled || attackPhase)}
-              title="Roll d20 + modifier for each combatant and re-sort initiative"
-            >
-              🎲 Roll Initiatives
-            </button>
-          )}
         </div>
       </div>
 

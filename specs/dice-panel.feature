@@ -290,6 +290,31 @@ Then  no character identity is shown (raw roll, no portrait, no bonus)
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-015 — Dice panel hidden before session is booted
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given no session has been booted (session === null in App.tsx)
+When  the splash screen is displayed
+Then  the dice panel is NOT rendered in the DOM
+And   no dice buttons, roll history, or pending-roll banner are visible
+
+Given a session has been successfully booted
+When  the boot SSE stream emits "done"
+Then  the dice panel is rendered and fully functional
+And   all previous behaviour (AC-001 through AC-014) applies as normal
+
+Given a session is ended ("End Session" completes)
+When  the session state is cleared (session set to null)
+Then  the dice panel is removed from the DOM again
+```
+
+**Implementation:** `DicePanel` is wrapped in `{isBooted && (...)}` in `App.tsx`.
+`isBooted` is `session !== null`. No changes to the `DicePanel` component itself.
+
+---
+
 ## Out of Scope
 
 - Backend DC storage (covered by SPEC-006 %%ROLL%% parsing)

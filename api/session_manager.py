@@ -1062,6 +1062,15 @@ class GameSession:
     scene_locations: list = field(default_factory=list)
     # Events currently active — each has content injected for turns_remaining turns.
     active_events: list = field(default_factory=list)  # list[ActiveEvent]
+    # Combatant data seeded from event files when a combat event fires.
+    # Keys are lowercase names; values carry at minimum {"init_mod": int}.
+    # SA-2 will extend entries with hp, ac, attacks. Consumed by roll_combat_initiatives.
+    pending_combatants: dict = field(default_factory=dict)
+    # Set True when round-1 %%COMBAT%% is parsed with an active combat event and combatants
+    # have been seeded. Tells the SSE layer to emit "initiative_pending" instead of
+    # "combat_update" so the UI can prompt the player to click Roll Initiatives.
+    # Cleared after the initiative_pending SSE is emitted OR after roll_combat_initiatives.
+    _await_initiative_roll: bool = False
     # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
     # Cleared to None when round == 0 or all combatants are inactive.
     combat_state: Optional[CombatState] = None
@@ -1150,6 +1159,136 @@ def advance_combat_turn(session: "GameSession") -> dict:
     return {"current_actor": combat.current_actor, "is_pc": is_pc}
 
 
+def _parse_event_combatants(content: str) -> dict:
+    """Parse the ## Combatants markdown table from event file content.
+
+    Returns a dict keyed by lowercase name with at minimum {"init_mod": int}.
+    Returns {} if the section is absent or malformed — never raises.
+
+    Expected table format:
+        ## Combatants
+        | name | hp | ac | init_mod | attacks |
+        |------|----|----|----------|---------|
+        | Goblin Warchanter | 8 | 14 | +3 | shortbow +5 (1d4+1) |
+    """
+    import re as _re
+    result: dict = {}
+    try:
+        # Find the ## Combatants section
+        section_m = _re.search(r'^##\s+Combatants\s*$', content, _re.MULTILINE | _re.IGNORECASE)
+        if not section_m:
+            return {}
+        # Collect table lines after the header
+        lines = content[section_m.end():].splitlines()
+        header_idx = None
+        col_names: list = []
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith('|') and header_idx is None:
+                # First pipe-delimited line = column headers
+                col_names = [c.strip().lower() for c in stripped.strip('|').split('|')]
+                header_idx = i
+                continue
+            if header_idx is not None and stripped.startswith('|---'):
+                continue  # separator row
+            if header_idx is not None and stripped.startswith('|'):
+                values = [v.strip() for v in stripped.strip('|').split('|')]
+                if len(values) < len(col_names):
+                    continue
+                row = dict(zip(col_names, values))
+                name = row.get('name', '').strip()
+                if not name:
+                    continue
+                raw_mod = row.get('init_mod', '0').strip()
+                try:
+                    mod = int(raw_mod.replace('+', '').strip())
+                except ValueError:
+                    mod = 0
+                entry: dict = {'init_mod': mod}
+                # Preserve hp and ac for SA-2 consumption if present
+                for key in ('hp', 'ac'):
+                    if key in row:
+                        try:
+                            entry[key] = int(row[key])
+                        except ValueError:
+                            pass
+                if 'attacks' in row:
+                    entry['attacks'] = row['attacks']
+                entry['name'] = name  # preserve original capitalisation
+                result[name.lower()] = entry
+            elif header_idx is not None:
+                break  # end of table
+    except Exception:
+        return {}
+    return result
+
+
+def _seed_round1_combatants(session: "GameSession", combat_state: "CombatState") -> None:
+    """Override LLM-written round-1 combatant data with authoritative backend values.
+
+    - PCs: replace hp/ac with pc_profiles values (LLM often writes — when roster not
+      injected on the turn the event fires).
+    - Enemies: if pending_combatants is non-empty, REPLACE all non-PC combatants with
+      individual entries from the event file table (fixes grouped notation like
+      "Goblin Mob (Wave 1)").
+
+    Mutates combat_state.combatants in-place.
+    """
+    pc_keys = set(session.pc_profiles.keys())  # already lowercase
+
+    seeded: list = []
+    seen_pc_keys: set = set()
+
+    # First pass: PCs from the LLM's list — override with real HP/AC
+    for c in combat_state.combatants:
+        key = c.name.lower()
+        if key in pc_keys:
+            profile = session.pc_profiles[key]
+            cs_data = profile.get("combat_stats", {})
+            hp_max = cs_data.get("hp_max", 0) or 10
+            ac     = cs_data.get("ac",     10) or 10
+            c.hp_max     = hp_max
+            c.hp_current = hp_max  # PCs start at full HP
+            c.ac         = ac
+            seeded.append(c)
+            seen_pc_keys.add(key)
+
+    # Add any PCs the LLM omitted entirely
+    for key, profile in session.pc_profiles.items():
+        if key not in seen_pc_keys:
+            cs_data = profile.get("combat_stats", {})
+            name   = cs_data.get("name", "")
+            hp_max = cs_data.get("hp_max", 10)
+            ac     = cs_data.get("ac",     10)
+            if name:
+                seeded.append(Combatant(
+                    name=name, hp_current=hp_max, hp_max=hp_max, ac=ac, initiative=0,
+                ))
+
+    # Enemy combatants
+    if session.pending_combatants:
+        # Replace ALL non-PC combatants with authoritative entries from the event file
+        for _key, data in session.pending_combatants.items():
+            name = data.get("name", _key.title())
+            hp   = data.get("hp", 5)
+            ac   = data.get("ac", 13)
+            seeded.append(Combatant(
+                name=name, hp_current=hp, hp_max=hp, ac=ac, initiative=0,
+            ))
+        _log(session,
+             f"\n> *[Round-1 seed: replaced enemy list with {len(session.pending_combatants)} "
+             f"event-file combatants; {len(seen_pc_keys)} PC(s) seeded from profiles]*\n")
+    else:
+        # No event seeding — keep LLM-written enemies (may have 0 stats from —)
+        for c in combat_state.combatants:
+            if c.name.lower() not in pc_keys:
+                seeded.append(c)
+
+    combat_state.combatants = seeded
+
+
 def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
     """Roll d20 + modifier for every combatant and update initiative order.
 
@@ -1175,9 +1314,15 @@ def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
             except (ValueError, AttributeError):
                 modifier = 0
         else:
-            modifier = 0  # flat d20 for enemies until SA-2 seeds their bonuses
+            # Check pending_combatants for event-seeded modifier; default to flat d20
+            seeded = session.pending_combatants.get(c.name.lower(), {})
+            modifier = seeded.get("init_mod", 0)
 
         c.initiative = random.randint(1, 20) + modifier
+
+    # Consume pending_combatants entries and clear initiative-pending flag
+    session.pending_combatants.clear()
+    session._await_initiative_roll = False
 
     # Update current_actor to the new highest-initiative active combatant
     active_sorted = sorted(
@@ -1258,15 +1403,18 @@ summary: Abstalar Zantus asked Yanyeeku to fetch him a drink from the tavern.
 _COMBAT_SPEC_ROUND1 = """\
 COMBAT CONDUCT (binding for every combat turn):
 - Always write %%NARRATIVE%% first — narrate the action and its immediate result.
-- Never ask the player for initiative, equipment choice, or tactical decisions. Assign initiative now from stat blocks; for PCs use their init modifier from their profile (or DEX mod + 10 if unknown).
-- Never question or comment on the player's declared action. Accept it and resolve it.
+- Never ask the player for initiative. Never question or comment on the player's declared action.
 
-Format (round 1 — include hp for backend initialisation):
+Format (round 1):
 %%COMBAT%%
 round: 1
 combatants:
-  - name: <Name> · hp: <cur>/<max> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead
-Rules: sort descending by initiative; round: 0 ends combat and clears the tracker; list ALL combatants."""
+  - name: <Name> · hp: <cur>/<max> · ac: <AC> · init: <modifier> · status: active|unconscious|fled|dead
+
+PC rules: copy stats EXACTLY from [PARTY ROSTER] — never write — for any field.
+Enemy rules: list EVERY enemy as an INDIVIDUAL line — never group (write "Goblin Warrior 1", NOT "Goblins (4)"). Copy hp/ac from [Active Event] stats; write init modifier (e.g. +3, -1), NOT a total.
+NEVER write — or unknown for any field. If you do not know a value, use 0.
+Sort descending by initiative modifier; round: 0 ends combat and clears the tracker."""
 
 # Injected on round 2+. The backend owns HP values; the LLM must NOT write hp: fields for
 # existing combatants (they are ignored). New combatants entering after round 1 still need hp:.
@@ -2677,6 +2825,12 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    # Seed initiative modifiers (and future HP/AC/attacks) from ## Combatants table
+                    if _entry.event_type == "combat":
+                        _seeded = _parse_event_combatants(_entry.content)
+                        if _seeded:
+                            session.pending_combatants.update(_seeded)
+                            _log(session, f"\n> *[Combat event seeded {len(_seeded)} combatant(s) into pending_combatants]*\n")
                     _write_session_state(session)
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
@@ -2702,8 +2856,21 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         session.combat_state = None
                         _log(session, "\n> *[Combat state updated: cleared]*\n")
                     else:                                   # valid update
+                        _is_round1 = session.combat_state is None  # True before assignment
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
+                        # Auto-roll initiatives on round 1 when a combat event is active
+                        if _is_round1 and _combat_result.round == 1:
+                            _idx = _get_event_index()
+                            _has_combat_event = any(
+                                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
+                                for ev in session.active_events
+                            )
+                            if _has_combat_event:
+                                # Seed authoritative PC + enemy stats, then wait for player to roll
+                                _seed_round1_combatants(session, session.combat_state)
+                                session._await_initiative_roll = True
+                                _log(session, "\n> *[Initiative pending — awaiting player roll]*\n")
                     _write_session_state(session)
                 # None → parse failure; leave session.combat_state unchanged
             except Exception as _e:
@@ -2786,6 +2953,11 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    if _entry.event_type == "combat":
+                        _seeded = _parse_event_combatants(_entry.content)
+                        if _seeded:
+                            session.pending_combatants.update(_seeded)
+                            _log(session, f"\n> *[Combat event seeded {len(_seeded)} combatant(s) into pending_combatants]*\n")
                     _write_session_state(session)
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
@@ -2811,8 +2983,19 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         session.combat_state = None
                         _log(session, "\n> *[Combat state updated (flat): cleared]*\n")
                     else:
+                        _is_round1_flat = session.combat_state is None
                         session.combat_state = _combat_result
                         _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
+                        if _is_round1_flat and _combat_result.round == 1:
+                            _idx = _get_event_index()
+                            _has_combat_event = any(
+                                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
+                                for ev in session.active_events
+                            )
+                            if _has_combat_event:
+                                _seed_round1_combatants(session, session.combat_state)
+                                session._await_initiative_roll = True
+                                _log(session, "\n> *[Initiative pending — awaiting player roll (flat path)]*\n")
                     _write_session_state(session)
             except Exception as _e:
                 _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
@@ -2849,8 +3032,13 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     if roll_data:
         yield f"data: {json.dumps({'type': 'roll_request', **roll_data})}\n\n"
 
-    # Combat state — always emitted (null when no combat) so UI can show/hide panel.
-    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+    # Combat state — emitted as initiative_pending when waiting for player to roll,
+    # otherwise as combat_update (null when no combat so UI can show/hide panel).
+    if session._await_initiative_roll:
+        session._await_initiative_roll = False
+        yield f"data: {json.dumps({'type': 'initiative_pending', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+    else:
+        yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
 
     # Tier 1.5 — if PC attacks are queued, emit attack_request for the first one.
     if session.attack_queue:

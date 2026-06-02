@@ -41,6 +41,8 @@ interface Props {
   attackLog?: AttackResult[]
   onAttackRoll?: (rolled: number) => Promise<void>
   onDamageRoll?: (rolls: number[], total: number) => Promise<void>
+  initiativePending?: boolean
+  onRollInitiatives?: () => void
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -108,7 +110,7 @@ function signedStr(n: number): string {
 
 let nextId = 0
 
-export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPhase = null, attackLog = [], onAttackRoll, onDamageRoll }: Props) {
+export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPhase = null, attackLog = [], onAttackRoll, onDamageRoll, initiativePending = false, onRollInitiatives }: Props) {
   const [pending, setPending] = useState<number[]>([])
   const [history, setHistory] = useState<RollRecord[]>([])
   const [autoBonus, setAutoBonus] = useState(true)
@@ -189,7 +191,18 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
   const isAttackActive = attackPhase !== null
 
   return (
-    <aside className={`dice-panel${pendingRoll || isAttackActive ? ' dice-panel-active' : ''}`}>
+    <aside className={`dice-panel${pendingRoll || isAttackActive || initiativePending ? ' dice-panel-active' : ''}`}>
+      {initiativePending && onRollInitiatives && (
+        <div className="initiative-banner">
+          <div className="initiative-banner-label">⚔ Combat begins</div>
+          <button
+            className="btn btn-primary roll-initiative-btn"
+            onClick={onRollInitiatives}
+          >
+            🎲 Roll for all combatants
+          </button>
+        </div>
+      )}
       {attackPhase?.phase === 'to_hit' ? (
         <div className="roll-request-banner attack-banner">
           <button className="roll-request-prompt" onClick={handleAttackToHitClick} title="Click to roll d20">

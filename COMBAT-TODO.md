@@ -391,51 +391,27 @@ Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn 
 
 ### Tier 1.8 — Initiative Authority
 
-> **Bug:** B-C06 — LLM writes arbitrary initiative totals (e.g. every goblin at 12) rather
-> than rolling from modifiers. Fully fixed by this tier; B-C06 is marked obsolete in TODO.md.
+> **Bug:** B-C06 — LLM writes arbitrary initiative totals. Fixed. B-C06 marked obsolete in TODO.md.
 
-Mirrors Tier 1.1 (HP authority): the LLM currently writes final initiative totals in the
-`%%COMBAT%%` block, which means it can hallucinate values, ignore modifiers, or repeat the
-same number for every combatant. Tier 1.8 moves initiative rolls to the backend on round 1
-and treats the LLM's `init:` field as a **modifier** (e.g. `+3`, `−1`) rather than a total.
+**Implemented approach:** Auto-roll triggers when `%%COMBAT%%` (round 1) is parsed AND a combat event (`event_type == "combat"`) is active. The LLM's `init:` values are discarded — `roll_combat_initiatives()` rolls `1d20 + modifier` for all combatants. PC modifiers come from `pc_profiles`; enemy modifiers from the event file `## Combatants` table (via `_parse_event_combatants`). No manual button. The `combat_update` SSE carries the sorted server-rolled state. *(spec: roll-initiatives.feature AC-001 through AC-009)*
 
-> **Authority model after Tier 1.8:**
-> - **Round 1:** LLM writes `init: <modifier>` for each combatant. Backend rolls `1d20 +
->   modifier` for every combatant and stores the result. For PCs, the modifier is read from
->   `pc_profiles[*]["combat_stats"]["initiative"]` and the LLM's value is ignored entirely.
-> - **Round 2+:** Backend retains its own initiative values; `init:` columns in subsequent
->   `%%COMBAT%%` lines are silently discarded (same pattern as HP authority from Tier 1.1).
+> **Authority model:**
+> - **Round 1 with combat event:** `_process_event_block` seeds `session.pending_combatants` with `init_mod` from the `## Combatants` table. After `_parse_combat_block` sets `session.combat_state`, `roll_combat_initiatives()` fires automatically.
+> - **Round 2+:** `roll_combat_initiatives()` not called; existing values retained.
+> - **PC modifiers:** always from `pc_profiles[name]["combat_stats"]["initiative"]`.
+> - **Enemy modifiers:** from `pending_combatants[name]["init_mod"]`; flat d20 if absent.
 
-- [ ] **CB1.8-1 — `_COMBAT_SPEC_ROUND1` format update** — change `init:` field description
-  from "initiative score" to "initiative modifier (e.g. `+3`, `−1`); backend will roll
-  `1d20 + modifier`". Update `_COMBAT_SPEC_ONGOING` to state "omit `init:` — backend owns
-  initiative order from round 1 onward".
+- [x] **CB1.8-1 — `_COMBAT_SPEC_ROUND1` format update** — superseded by auto-roll approach; LLM's `init:` values are always discarded on round 1. The spec still describes `init:` as a modifier to guide the LLM toward writing sensible values, but the backend ignores them entirely.
 
-- [ ] **CB1.8-2 — Server-side initiative roll on round 1** — *Prerequisite: `EventEntry.event_type` detection is done (AC-009 in event-injection.feature; `feat/initiative-roller` branch).* In `_parse_combat_block`, when
-  `existing_state is None` (first parse): for each combatant extract the `init:` field as a
-  signed integer modifier; roll `random.randint(1, 20) + modifier`; store the result as
-  `combatant.initiative`. For PCs (name matches `pc_profiles` key), use the modifier from
-  `pc_profiles[name]["combat_stats"]["initiative"]` instead of the LLM-written value.
-  `_parse_combatant_line` updated to return the raw `init:` string; conversion and rolling
-  happen in `_parse_combat_block` where `existing_state` context is available.
+- [x] **CB1.8-2 — Server-side initiative roll on round 1** — implemented as post-`%%COMBAT%%` hook in `_stream_chat` (both section-based and flat-block paths). Fires when `_is_round1 and _combat_result.round == 1` and any active event has `event_type == "combat"`. `_parse_event_combatants(content)` added; `session.pending_combatants` added to `GameSession`.
 
-- [ ] **CB1.8-3 — Initiative preserved on round 2+** — in `_parse_combat_block` when
-  `existing_state is not None`, copy `initiative` from the matching existing combatant by
-  name (same lookup as HP authority). New combatants entering after round 1 still get
-  server-rolled initiative from their `init:` modifier field.
+- [x] **CB1.8-3 — Initiative preserved on round 2+** — `_is_round1 = (session.combat_state is None)` check ensures hook only fires on the transition from no-combat to combat. Round 2+ blocks don't trigger re-roll.
 
-- [ ] **CB1.8-4 — `[PARTY ROSTER]` init values updated** — `_build_pc_combat_roster` currently
-  writes the raw initiative modifier string (e.g. `+2`). After CB1.8-2 the roster should
-  still write the modifier (not a pre-rolled value) so the LLM can copy it into `init:` for
-  the backend to roll. No change needed to the roster builder — just confirm the format
-  remains a modifier, not a total.
+- [x] **CB1.8-4 — Party roster init values** — roster already writes modifier strings (e.g. `+2`); no change needed. Enemy modifiers now come from event file table rather than LLM.
 
-- [ ] **CB1.8-T — Tests** — `test_combat.py`: round-1 block with `init: +3` stores a value
-  in `[4, 23]` (d20 + 3); PC name in `pc_profiles` uses stored modifier and ignores
-  LLM value; round-2 block preserves existing initiative; new combatant on round 2 gets
-  fresh roll; `init: 0` and `init: −1` edge cases; two combatants with the same modifier
-  get independent rolls (not the same value). `test_inject_context.py`: `_COMBAT_SPEC_ROUND1`
-  no longer describes `init:` as a total.
+- [x] **CB1.8-T — Tests** — `tests/test_roll_initiatives.py` (31 tests): `TestParseEventCombatants` (7), `TestEnemyModifierFromPendingCombatants` (3), `TestAutoRollOnCombatEvent` (3), plus existing AC-001–AC-007 suite. `CombatPanelRollInit.test.tsx`: no-button tests, server-rolled order display, current actor highlight. `App.roll-initiatives.test.tsx`: `initiative_pending` SSE triggers banner, `combat_update` after roll shows CombatPanel. `ui/e2e/initiative-roll.spec.ts` (5 Playwright tests): banner visible before CombatPanel, DicePanel stays right, CombatPanel appears with rolled order, banner disappears, PC HP seeded correctly. 946 pytest + all Vitest + 5 Playwright passing.
+
+- [ ] **CB1.8-5 — `_COMBAT_SPEC_ROUND1` update for `## Combatants` table** — update the combat system prompt to instruct the LLM that `init:` fields are ignored and that the backend seeds HP/AC from the event file table. LLM should omit `init:` or write `+0` as a placeholder. *Depends on the system prompt work in combat-system-prompt.feature.*
 
 ---
 

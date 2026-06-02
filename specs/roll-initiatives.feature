@@ -1,4 +1,4 @@
-# FEATURE — Roll Initiatives
+# FEATURE — Automatic Initiative Roll on Combat Event
 
 **ID:** roll-initiatives
 **Status:** Approved
@@ -9,24 +9,26 @@
 
 ## Story
 
-> As the **player**,
-> I want a "🎲 Roll Initiatives" button in the combat tracker header,
-> so that I can re-roll all combatant initiatives at any point during combat
-> using d20 + the correct modifier for each combatant, and see the initiative
-> order update immediately.
+> As the **GM engine**,
+> when a combat event fires (`%%EVENT%%` with `event_type == "combat"`),
+> I want initiatives rolled automatically for all combatants using d20 + the correct modifier,
+> so that the initiative order is server-authoritative from the moment combat begins — with no
+> player action required.
 
-When combat is active a compact button appears in the CombatPanel header
-beside the round badge. Clicking it asks the backend to roll d20 + each
-combatant's initiative modifier, sort the order, set the new first actor,
-persist to `state.json`, and return the updated state — all in a single
-REST call with no streaming required.
+When a combat event fires, the backend seeds initiative modifiers from the event file's
+`## Combatants` table into `session.pending_combatants`. On the same turn, when the LLM
+writes `%%COMBAT%%` for round 1, the backend immediately calls `roll_combat_initiatives()`,
+which rolls `1d20 + modifier` for every combatant, sets `current_actor` to the highest active
+combatant, and persists to `state.json`. The resulting `combat_update` SSE carries the fully
+sorted, server-rolled state — the LLM's `init:` values are discarded.
 
 ---
 
 ## Background
 
 - Given a session is booted
-- And `session.combat_state` is set (round ≥ 1)
+- And a combat event file exists with `**Type:** combat` and a `## Combatants` table
+- And the LLM writes `%%EVENT%% <combat_event_id>` followed by `%%COMBAT%%` (round 1) in the same turn
 
 ---
 
@@ -40,9 +42,9 @@ REST call with no streaming required.
 Given session.combat_state has three combatants with arbitrary initiative values
 When  roll_combat_initiatives(session) is called
 Then  every combatant's initiative is replaced with a fresh roll (old value discarded)
-And   each new value is an integer in range [1, 20] for enemies (no modifier)
+And   each new value is in range [1, 20] for enemies with no modifier
 And   the same call does NOT raise or leave any combatant with initiative = 0 unless
-      the combatant had a −19 modifier (which is not a real case)
+      the combatant had a −19 modifier (not a real case)
 ```
 
 ---
@@ -58,7 +60,7 @@ When  roll_combat_initiatives(session) is called
 Then  Thaelion's new initiative is in range [4, 23]  (d20 + 3)
 
 Given a PC with initiative modifier "-1"
-Then  that PC's new initiative is in range [0, 19]  (d20 - 1, clamped to ≥ 0 by the result)
+Then  that PC's new initiative is in range [0, 19]
 
 Given a PC with initiative modifier "+0"
 Then  that PC's new initiative is in range [1, 20]
@@ -67,14 +69,17 @@ Then  that PC's new initiative is in range [1, 20]
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-003 — Enemy modifier defaults to +0 (flat d20)
+### AC-003 — Enemy modifier from pending_combatants; flat d20 if absent
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
 Given a combatant whose name does NOT match any key in session.pc_profiles
+And   session.pending_combatants contains that name with init_mod: +3
 When  roll_combat_initiatives(session) is called
-Then  that combatant's new initiative is in range [1, 20]
-And   no modifier is applied (SA-2 bestiary seeding will supply real modifiers later)
+Then  that combatant's new initiative is in range [4, 23]  (d20 + 3)
+
+Given a combatant whose name is absent from both pc_profiles and pending_combatants
+Then  that combatant's new initiative is in range [1, 20]  (flat d20, modifier = 0)
 ```
 
 ---
@@ -84,7 +89,7 @@ And   no modifier is applied (SA-2 bestiary seeding will supply real modifiers l
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
-Given roll_combat_initiatives produces initiatives: Shalelu 18, Goblin 11, Thaelion 7
+Given roll_combat_initiatives produces: Shalelu 18, Goblin 11, Thaelion 7
 And   all three are "active"
 When  roll_combat_initiatives returns
 Then  session.combat_state.current_actor = "Shalelu"
@@ -108,7 +113,7 @@ Then  current_actor = None
 ```gherkin
 Given a combatant has status "unconscious"
 When  roll_combat_initiatives(session) is called
-Then  that combatant's initiative is re-rolled (value changes)
+Then  that combatant's initiative is re-rolled
 And   it is NOT set as current_actor
 ```
 
@@ -123,98 +128,107 @@ Given roll_combat_initiatives is called
 When  it returns
 Then  _write_session_state(session) has been called
 And   state.json contains the updated active_character (= new current_actor)
+And   state.json combatants list reflects the new initiative values
 ```
 
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-007 — POST /sessions/{id}/combat/roll_initiatives endpoint
+### AC-007 — POST /sessions/{id}/combat/roll_initiatives endpoint (debug)
 <!-- ─────────────────────────────────────────────────────────────────────── -->
+
+The endpoint is retained for testing and tooling but is not exposed in the player UI.
 
 ```gherkin
 Given a valid session with active combat
 When  POST /sessions/{id}/combat/roll_initiatives is called
 Then  it returns 200
 And   the response body is { "combat_state": { "round": N, "current_actor": "...", "combatants": [...] } }
-And   every combatant in the response has a new initiative value (not the old one)
+And   every combatant has a new initiative value
 And   the combatant list is sorted descending by initiative
 
 Given session.combat_state is None
-When  POST /sessions/{id}/combat/roll_initiatives is called
 Then  it returns 409 Conflict
 
 Given an unknown session id
-When  POST /sessions/{id}/combat/roll_initiatives is called
 Then  it returns 404 Not Found
 ```
 
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-008 — "🎲 Roll Initiatives" button in CombatPanel header
+### AC-008 — initiative_pending SSE emitted when combat event fires with round-1 %%COMBAT%%
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
-Given CombatPanel renders with a valid combatState and an onRollInitiatives callback
-Then  a "🎲 Roll Initiatives" button is visible in the header area (beside the Round badge)
-And   clicking the button calls onRollInitiatives
+Given the LLM fires %%EVENT%% goblin_attack_starts (event_type == "combat")
+And   the same turn contains a %%COMBAT%% block with round: 1
+When  the response is fully processed
+Then  session._await_initiative_roll is True
+And   the "initiative_pending" SSE event is emitted (not "combat_update")
+And   combat_state in the event contains seeded combatants (real PC HP/AC, individual enemy names)
+And   CombatPanel does NOT appear (no combat_update received)
+And   DicePanel shows "⚔ Combat begins — roll for initiative" banner with a roll button
 
-Given onRollInitiatives prop is not provided
-Then  the button is not rendered
+Given the player clicks "Roll for all combatants"
+When  POST /sessions/{id}/combat/roll_initiatives is called
+Then  roll_combat_initiatives(session) rolls d20+modifier for every combatant
+And   the response carries the rolled combat_state sorted by initiative
+And   the frontend receives { combat_state } and calls setCombatState
+And   CombatPanel appears with server-rolled initiative order
+And   the initiative banner disappears
 
-Given the disabled prop is true
-Then  "🎲 Roll Initiatives" is disabled
-
-Given enemyTurnStreaming is true
-Then  "🎲 Roll Initiatives" is disabled
-
-Given combatClosing is true
-Then  "🎲 Roll Initiatives" is disabled
-
-Given attackPhase is set (a PC attack is in progress)
-Then  "🎲 Roll Initiatives" is disabled
-      (rerolling initiatives mid-attack would corrupt the active resolution flow)
+Given the LLM fires %%EVENT%% attack_repelled (event_type == "aftermath")
+And   the same turn contains a %%COMBAT%% block with round: 1
+Then  _await_initiative_roll is NOT set
+And   "combat_update" SSE is emitted as usual (no initiative prompt)
 ```
+
+> **Implementation note:** `_seed_round1_combatants(session, combat_state)` is called before
+> setting `_await_initiative_roll`. It overwrites PC combatants with real HP/AC from
+> `pc_profiles` and replaces all non-PC combatants with individual entries from
+> `pending_combatants` (event file `## Combatants` table). This prevents 0/0 HP and
+> grouped notation (e.g. "Goblin Mob (Wave 1)") from reaching the UI.
 
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-009 — App.tsx wiring: click → API → state update
+### AC-009 — _parse_event_combatants reads ## Combatants table
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
-Given a booted session with active combat
-When  the user clicks "🎲 Roll Initiatives"
-Then  App.tsx calls POST /sessions/{id}/combat/roll_initiatives
-And   combatState in App.tsx is replaced with the response combat_state
-And   currentCombatantName is set from combat_state.current_actor
-And   the CombatPanel initiative list re-renders with the new order immediately
+Given event content with a ## Combatants markdown table containing init_mod column
+When  _parse_event_combatants(content) is called
+Then  it returns a dict keyed by name (case-insensitive) with "init_mod" as int
+And   rows with missing or unparseable init_mod default to 0
+And   the function never raises — malformed tables return {}
 
-Given the API call fails (network error)
-Then  an error message is shown
-And   the existing combatState is unchanged
+Given event content with no ## Combatants section
+Then  _parse_event_combatants returns {}
 ```
 
 ---
 
 ## Out of Scope
 
-- Initiative modifier seeding from event files / bestiary (Tier 2 SA-2) — enemies always
-  get a flat d20 until SA-2 provides their real modifiers
-- Automatic initiative roll on combat start (Tier 1.9) — this button is the manual
-  trigger; Tier 1.9 will make it happen automatically on round 1 parse
-- Tie-breaking rules (PF1e dex-modifier tiebreak) — not implemented; ties left as-is
+- Tie-breaking rules (PF1e dex-modifier tiebreak) — ties left as-is
+- Enemy modifier seeding from bestiary (SA-4) — currently from event file `## Combatants` table or flat d20
+- Full stat seeding (HP, AC, attacks) from event file — SA-2 tracks this; `pending_combatants` is already the shared structure
+- Fully automatic silent roll — removed in favour of player-triggered button in DicePanel
 
 ---
 
 ## Notes
 
-- `roll_combat_initiatives(session: GameSession) → Optional[dict]` in `api/session_manager.py`
-  Returns the serialised `CombatState` dict, or `None` when no combat is active.
-- PC modifier parsed from `pc_profiles[name.lower()]["combat_stats"]["initiative"]`
-  as a signed string (e.g. `"+2"`, `"-1"`, `"0"`). Parse fails silently to `+0`.
-- Enemy modifier is `0` until `Combatant.attacks` / SA-2 supplies per-enemy stats.
-- `_write_session_state` called after every roll; `state.json` `active_character` = new `current_actor`.
+- `roll_combat_initiatives(session)` in `api/session_manager.py` — mutates `session.combat_state` in-place, calls `_write_session_state`, returns serialised dict.
+- `_parse_event_combatants(content)` in `api/session_manager.py` — tolerant parser; returns `{}` on any failure. Stores `"name"` (original case) alongside `"init_mod"`, `"hp"`, `"ac"`.
+- `_seed_round1_combatants(session, combat_state)` — called before `_await_initiative_roll` is set. Overwrites PC HP/AC with `pc_profiles` values; replaces non-PC combatants with `pending_combatants` entries when non-empty.
+- `session.pending_combatants: dict` on `GameSession` — populated when combat event fires; consumed (cleared) by `roll_combat_initiatives`.
+- `session._await_initiative_roll: bool` — set True on round-1 combat event; causes the SSE layer to emit `initiative_pending` instead of `combat_update`; cleared after emission or after `roll_combat_initiatives`.
+- PC modifier: `pc_profiles[name.lower()]["combat_stats"]["initiative"]` as signed string; parse fails silently to `+0`.
+- Enemy modifier: `pending_combatants[name]["init_mod"]` if present; otherwise `0`.
+- SSE `initiative_pending` carries the seeded-but-unrolled `combat_state`; frontend shows roll button in DicePanel.
+- SSE `combat_update` carries the rolled, sorted state after `POST /roll_initiatives`.
 - `rollInitiatives(sessionId)` in `ui/src/api.ts`; `handleRollInitiatives` in `App.tsx`.
-- Button placed in `.combat-panel-badges` in `CombatPanel.tsx`; CSS class `combat-roll-init-btn`.
-- Tests: `tests/test_roll_initiatives.py` (pytest); `CombatPanelRollInit.test.tsx` (Vitest).
+- Initiative banner: `.initiative-banner` in `DicePanel.tsx`; `initiativePending` prop from App.tsx.
+- Endpoint `POST /combat/roll_initiatives` is the roll trigger; also usable for debug/tooling.

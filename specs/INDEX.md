@@ -20,7 +20,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [session-logging.feature](session-logging.feature) | Backend \| Frontend | `@logging` `@session-log` `@api-log` `@dice` | 10 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok`, `ApiLogPanel.tsx` |
 | [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button, API Logs button |
 | [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 7 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
-| [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 14 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration, `pendingRoll.speaker` fallback speaker |
+| [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 15 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration, `pendingRoll.speaker` fallback speaker, hidden before session boot |
 | [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 12 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
 | [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 10 | `_build_slim_system_prompt()`, per-turn copy, Groq cap, `_FORMAT_EXAMPLE`, `_COMBAT_FULL_SPEC`, `_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC`, `_build_pc_profiles()` |
@@ -37,9 +37,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [combat-system-prompt.feature](combat-system-prompt.feature) | Backend | `@combat` `@prompt` `@injection` `@per-turn` `@token` | 16 | `_build_combat_system_prompt()`, `_COMBAT_SECTION_SPECS`, `_inject_context` combat branch (live + pre-combat), `[INITIATIVE ORDER]`, `[CURRENT HP]`, `[PC COMBAT STATS]`, `[ACTIVE CONDITIONS]`, `tests/test_combat_prompt.py` |
 | [session-state.feature](session-state.feature) | Backend | `@session` `@state` `@persistence` `@boot` | 17 | `_write_session_state()`, `write_session_state()`, `set_active_character()`, `PUT /active_character`, `sessions/state.template.json`, `sessions/session_NNN/state.json`, `create_session()` boot init, `tests/test_session_state.py` |
 | [combat-active-character.feature](combat-active-character.feature) | Backend \| Frontend | `@combat` `@session` `@prompt` `@streaming` `@layout` | 14 | `CombatState.current_actor`, `advance_combat_turn()`, `POST /combat/advance_turn`, `_write_session_state` combat actor, `ActiveSpeaker.isEnemy`, `InputBar` hostile state + skull icon + taunting placeholder, `tests/test_combat_active_character.py`, `InputBarHostile.test.tsx` |
-| [roll-initiatives.feature](roll-initiatives.feature) | Backend \| Frontend | `@combat` `@initiative` `@session` `@layout` | 9 | `roll_combat_initiatives()`, `POST /combat/roll_initiatives`, `CombatPanel` "🎲 Roll Initiatives" header button, `App.tsx` `handleRollInitiatives`, `rollInitiatives()` in `api.ts`, `tests/test_roll_initiatives.py`, `CombatPanelRollInit.test.tsx` |
+| [roll-initiatives.feature](roll-initiatives.feature) | Backend \| Frontend | `@combat` `@initiative` `@session` `@layout` | 9 | `roll_combat_initiatives()`, `_parse_event_combatants()`, `pending_combatants` seeding, auto-roll hook on round-1 `%%COMBAT%%` with combat event, `POST /combat/roll_initiatives` (debug), `tests/test_roll_initiatives.py`, `CombatPanelRollInit.test.tsx` |
 
-**Total: 272 acceptance criteria across 30 feature files**
+**Total: 273 acceptance criteria across 30 feature files**
 
 ---
 

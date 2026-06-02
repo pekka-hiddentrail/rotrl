@@ -5,6 +5,17 @@
 
 <!-- INJECT -->
 
+## Combatants
+
+| name | hp | ac | init_mod | attacks |
+|------|----|----|----------|---------|
+| Goblin Arsonist 1 | 5 | 20 | +2 | torch throw +4 (1d3 fire, 10 ft range) |
+| Goblin Arsonist 2 | 5 | 20 | +2 | torch throw +4 (1d3 fire, 10 ft range) |
+| Goblin Arsonist 3 | 5 | 20 | +2 | torch throw +4 (1d3 fire, 10 ft range) |
+| Alley Goblin 1 | 5 | 16 | +2 | dogslicer +2 (1d4), shortbow +4 (1d4) |
+| Alley Goblin 2 | 5 | 16 | +2 | dogslicer +2 (1d4), shortbow +4 (1d4) |
+| Alley Goblin 3 | 5 | 16 | +2 | dogslicer +2 (1d4), shortbow +4 (1d4) |
+
 ## Active Event — Goblin Raid: Wave 2 (Fire)
 
 Wave 1 is over. Goblin arsonists have appeared on rooftops; alley goblins are cutting off retreat to the south.

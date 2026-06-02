@@ -1,7 +1,8 @@
 /**
- * Spec: specs/roll-initiatives.feature  AC-009
- * Covers: App.tsx handleRollInitiatives — click → rollInitiatives API call →
- *         setCombatState + setCurrentCombatantName updated; error path shows error bar.
+ * Spec: specs/roll-initiatives.feature  AC-008
+ * Covers: App.tsx handles combat_update SSE with reordered combatants after
+ *         auto-initiative roll — CombatPanel reflects server-rolled order.
+ * The roll happens automatically on the backend; no player button is involved.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -18,7 +19,6 @@ vi.mock('../api', () => ({
   resolveRoll: vi.fn().mockResolvedValue({ passed: true, outcome: 'ok' }),
   purgeSessionNpcs: vi.fn().mockResolvedValue({ purged: 0 }),
   closeCombat: vi.fn().mockReturnValue((async function* () {})()),
-  rollInitiatives: vi.fn(),
   runEnemyTurn: vi.fn().mockReturnValue((async function* () {})()),
   resolveAttackRoll: vi.fn(),
   resolveDamageRoll: vi.fn(),
@@ -30,29 +30,21 @@ vi.mock('../data/characters', () => ({
   useCharacters: vi.fn(),
 }))
 
-import { bootSession, rollInitiatives, sendTurn } from '../api'
+import { bootSession, sendTurn } from '../api'
 import { useCharacters } from '../data/characters'
 
 const mockBoot = vi.mocked(bootSession)
 const mockSend = vi.mocked(sendTurn)
-const mockRollInitiatives = vi.mocked(rollInitiatives)
 const mockUseCharacters = vi.mocked(useCharacters)
 
-const initialCombatState: CombatState = {
+// State the backend emits AFTER auto-rolling initiatives (server-sorted, server-rolled values)
+const autoRolledCombatState: CombatState = {
   round: 1,
-  current_actor: 'Goblin Warrior 1',
+  current_actor: 'Goblin Warchanter',
   combatants: [
-    { name: 'Goblin Warrior 1', hp_current: 5, hp_max: 5, ac: 13, initiative: 14, status: 'active', conditions: [] },
-    { name: 'Thaelion', hp_current: 18, hp_max: 22, ac: 16, initiative: 8, status: 'active', conditions: [] },
-  ],
-}
-
-const rerolledCombatState: CombatState = {
-  round: 1,
-  current_actor: 'Thaelion',
-  combatants: [
-    { name: 'Thaelion', hp_current: 18, hp_max: 22, ac: 16, initiative: 19, status: 'active', conditions: [] },
-    { name: 'Goblin Warrior 1', hp_current: 5, hp_max: 5, ac: 13, initiative: 6, status: 'active', conditions: [] },
+    { name: 'Goblin Warchanter', hp_current: 8,  hp_max: 8,  ac: 14, initiative: 18, status: 'active', conditions: [] },
+    { name: 'Ani',               hp_current: 11, hp_max: 11, ac: 17, initiative: 14, status: 'active', conditions: [] },
+    { name: 'Goblin Warrior 1',  hp_current: 5,  hp_max: 5,  ac: 16, initiative: 9,  status: 'active', conditions: [] },
   ],
 }
 
@@ -68,19 +60,23 @@ function stubFetch() {
   }))
 }
 
-async function bootIntoCombat(user: ReturnType<typeof userEvent.setup>) {
+async function bootIntoAutoRolledCombat(user: ReturnType<typeof userEvent.setup>) {
   mockBoot.mockImplementation(() => makeGen({ type: 'done' as const, session_id: 'sess-ri' }))
-  mockSend.mockImplementation(() => makeGen({ type: 'combat_update' as const, combat_state: initialCombatState }))
+  // Backend emits combat_update with the auto-rolled state (no button click needed)
+  mockSend.mockImplementation(() => makeGen(
+    { type: 'combat_update' as const, combat_state: autoRolledCombatState },
+    { type: 'done' as const },
+  ))
   const { container } = render(<App />)
   await user.click(screen.getByRole('button', { name: 'Boot Session' }))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument())
   await user.type(screen.getByPlaceholderText(/What do you do/i), 'Goblins attack!')
   await user.click(screen.getByRole('button', { name: 'Send' }))
-  await waitFor(() => expect(screen.getByRole('button', { name: /Roll Initiatives/i })).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText('Round 1')).toBeInTheDocument())
   return { container }
 }
 
-describe('App — Roll Initiatives wiring (AC-009)', () => {
+describe('App — Auto-initiative roll via combat_update SSE (AC-008)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     stubFetch()
@@ -94,54 +90,30 @@ describe('App — Roll Initiatives wiring (AC-009)', () => {
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls rollInitiatives with the session id when button is clicked', async () => {
+  it('CombatPanel shows server-rolled initiative order from combat_update', async () => {
     const user = userEvent.setup()
-    mockRollInitiatives.mockResolvedValue({ combat_state: rerolledCombatState })
-    await bootIntoCombat(user)
+    const { container } = await bootIntoAutoRolledCombat(user)
 
-    await user.click(screen.getByRole('button', { name: /Roll Initiatives/i }))
-
-    await waitFor(() => expect(mockRollInitiatives).toHaveBeenCalledWith('sess-ri'))
+    const rows = container.querySelectorAll('.combatant-row')
+    expect(rows.length).toBeGreaterThanOrEqual(3)
+    // Goblin Warchanter rolled 18 → should be first row
+    expect(rows[0].textContent).toContain('Goblin Warchanter')
+    expect(rows[1].textContent).toContain('Ani')
+    expect(rows[2].textContent).toContain('Goblin Warrior 1')
   })
 
-  it('updates CombatPanel with the new current_actor after rolling', async () => {
+  it('current actor is the highest-initiative combatant from auto-roll', async () => {
     const user = userEvent.setup()
-    mockRollInitiatives.mockResolvedValue({ combat_state: rerolledCombatState })
-    const { container } = await bootIntoCombat(user)
+    const { container } = await bootIntoAutoRolledCombat(user)
 
-    await user.click(screen.getByRole('button', { name: /Roll Initiatives/i }))
-
-    // Thaelion should now be the highlighted current actor (initiative 19 after reroll)
-    await waitFor(() => {
-      const currentRow = container.querySelector('.combatant-current')
-      expect(currentRow).not.toBeNull()
-      expect(currentRow!.textContent).toContain('Thaelion')
-    })
+    const current = container.querySelector('.combatant-current')
+    expect(current).not.toBeNull()
+    expect(current!.textContent).toContain('Goblin Warchanter')
   })
 
-  it('shows an error message when rollInitiatives fails', async () => {
+  it('no Roll Initiatives button is visible', async () => {
     const user = userEvent.setup()
-    mockRollInitiatives.mockRejectedValue(new Error('Roll initiatives failed (503)'))
-    await bootIntoCombat(user)
-
-    await user.click(screen.getByRole('button', { name: /Roll Initiatives/i }))
-
-    await waitFor(() =>
-      expect(screen.getByText(/Roll initiatives failed/i)).toBeInTheDocument(),
-    )
-  })
-
-  it('does not change combatState when rollInitiatives fails', async () => {
-    const user = userEvent.setup()
-    mockRollInitiatives.mockRejectedValue(new Error('503'))
-    const { container } = await bootIntoCombat(user)
-
-    await user.click(screen.getByRole('button', { name: /Roll Initiatives/i }))
-
-    await waitFor(() => expect(mockRollInitiatives).toHaveBeenCalled())
-    // Original current_actor still shown — Goblin Warrior 1 should still be current
-    const currentRow = container.querySelector('.combatant-current')
-    expect(currentRow).not.toBeNull()
-    expect(currentRow!.textContent).toContain('Goblin Warrior 1')
+    await bootIntoAutoRolledCombat(user)
+    expect(screen.queryByRole('button', { name: /Roll Initiatives/i })).toBeNull()
   })
 })

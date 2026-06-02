@@ -5,6 +5,17 @@
 
 <!-- INJECT -->
 
+## Combatants
+
+| name | hp | ac | init_mod | attacks |
+|------|----|----|----------|---------|
+| Goblin Commando 1 | 9 | 17 | +3 | mwk horsechopper +2 (1d8+1), shortbow +5 (1d4) |
+| Goblin Commando 2 | 9 | 17 | +3 | mwk horsechopper +2 (1d8+1), shortbow +5 (1d4) |
+| Goblin Commando 3 | 9 | 17 | +3 | mwk horsechopper +2 (1d8+1), shortbow +5 (1d4) |
+| Goblin Dog 1 | 14 | 13 | +2 | bite +3 (1d6+2 plus Goblin Pox) |
+| Goblin Dog 2 | 14 | 13 | +2 | bite +3 (1d6+2 plus Goblin Pox) |
+| Goblin Dog 3 | 14 | 13 | +2 | bite +3 (1d6+2 plus Goblin Pox) |
+
 ## Active Event — Goblin Raid: Wave 3 (Cavalry)
 
 Three goblin commandos on goblin dogs have burst into the square. This is the final wave.
