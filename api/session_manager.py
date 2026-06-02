@@ -1146,7 +1146,12 @@ def _write_session_state(session: "GameSession") -> None:
             if session.combat_state is not None else []
         ),
     }
-    path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
+    try:
+        path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
+    except PermissionError:
+        # File is locked by another process (e.g. editor has it open).
+        # Log and continue — state.json is a convenience snapshot, not the source of truth.
+        _log(session, f"\n> *[WARN: could not write state.json — file locked ({path})]*\n")
 
 
 def advance_combat_turn(session: "GameSession") -> dict:

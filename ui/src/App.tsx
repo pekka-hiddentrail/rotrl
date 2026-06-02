@@ -611,6 +611,14 @@ export default function App() {
               onSend={handleSend}
               disabled={streaming || ending || enemyTurnStreaming || combatClosing}
               activeSpeaker={inputActiveSpeaker}
+              combatWeapons={(() => {
+                if (!combatState || !currentCombatantName) return undefined
+                const pc = Object.values(characterMap).find(
+                  c => c.name.toLowerCase() === currentCombatantName.toLowerCase()
+                )
+                if (!pc || !pc.weapons?.length) return undefined
+                return pc.weapons.map((w: { name: string }) => w.name)
+              })()}
             />
           )}
         </div>
