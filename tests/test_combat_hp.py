@@ -379,7 +379,8 @@ class TestHpBlockStrippedFromStream:
 class TestHpDeltaIntegration:
     """%%HP%% block in a full turn response updates session.combat_state HP."""
 
-    def test_hp_delta_applied_via_turn(self, booted_session):
+    def test_hp_delta_discarded_via_turn(self, booted_session):
+        """CB1.9-4: %%HP%% block in LLM response is now silently discarded."""
         import api.session_manager as sm
         client, session_id = booted_session
         session = sm.get_session(session_id)
@@ -408,8 +409,9 @@ class TestHpDeltaIntegration:
 
         shalelu = next(c for c in session.combat_state.combatants if c.name == "Shalelu")
         goblin = next(c for c in session.combat_state.combatants if c.name == "Goblin 1")
-        assert shalelu.hp_current == 14   # 22 - 8
-        assert goblin.hp_current == 0     # clamped from -45
+        # %%HP%% discarded — HP unchanged from what was set before the turn
+        assert shalelu.hp_current == 22
+        assert goblin.hp_current == 5
 
     def test_hp_preserved_across_round_update(self, booted_session):
         """Round 2 %%COMBAT%% block does not overwrite backend HP values."""

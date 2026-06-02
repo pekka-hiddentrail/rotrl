@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_resume_combat, stream_turn, write_session_state
+from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_pc_turn, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -201,6 +201,21 @@ def post_resume_combat(session_id: str):
     if session.attack_queue:
         raise HTTPException(status_code=409, detail="Attack queue not empty — resolve all PC attacks first")
     return StreamingResponse(stream_resume_combat(session), media_type="text/event-stream", headers=_SSE_HEADERS)
+
+
+@app.post("/api/sessions/{session_id}/pc_turn")
+def post_pc_turn(session_id: str, req: TurnRequest):
+    """Handle a PC combat turn: extract intent, queue attack from profile, emit attack_request.
+
+    Routes the player's free-text action through backend intent extraction rather than
+    relying on the LLM to write %%ATTACK%% blocks. No LLM call is made at this stage.
+    """
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.combat_state is None:
+        raise HTTPException(status_code=409, detail="No active combat")
+    return StreamingResponse(stream_pc_turn(session, req.input), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 @app.post("/api/sessions/{session_id}/enemy_turn")

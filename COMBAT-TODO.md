@@ -483,6 +483,30 @@ Content and styling are a starting point — see TODO.md GUI Improvements for th
 
 ---
 
+### Tier 1.10.5 — PC Combat Action System
+
+Backend-driven PC combat turns: player types free text, backend extracts intent (weapon + target), queues attack from PC profile data, prompts for dice, then calls LLM with the resolved outcome to narrate. Mirrors the enemy turn architecture. The LLM no longer writes `%%ATTACK%%` blocks on PC turns.
+
+> **Fallback rule (by design):** anything unparseable → standard attack with equipped weapon vs random active enemy. No confirmation prompt. Player's fault if vague.
+>
+> **Future complexity** (deferred — see CB1.10.5-F): charge, full attack, ability/spell use, combat maneuvers. These require tracking position, iterative attacks, and spell slots.
+
+- [ ] **CB1.10.5-1 — Weapons in `pc_profiles`** — extend `_build_pc_profiles` to read `player_*.json["weapons"]` and store as `pc_profiles[name]["weapons"]: list[dict]` with keys `name`, `atk`, `dmg`, `type`. First weapon = equipped (primary).
+
+- [ ] **CB1.10.5-2 — `_extract_pc_combat_intent(text, session) → dict`** — pure function (no LLM call). Extracts `actor`, `action_type`, `weapon_name`/`atk`/`dmg`/`type`, `target`, `original_text` from player text using substring matching against pc_profiles weapons and combatant names. Fallback to equipped weapon + random active enemy.
+
+- [ ] **CB1.10.5-3 — `stream_pc_turn(session, player_text)` + `/pc_turn` endpoint** — new SSE generator that calls `_extract_pc_combat_intent`, appends player text to history, queues `PendingAttack` from profile data (not LLM-generated bonus/damage), sets `session._pending_pc_narration`, and emits `attack_request` + `done`. `GameSession._pending_pc_narration: Optional[dict] = None` added.
+
+- [ ] **CB1.10.5-4 — `_stream_pc_turn_narration` + `_PC_TURN_SYSTEM` + `_build_pc_turn_system`** — after all PC dice resolved, `stream_resume_combat` detects `_pending_pc_narration` flag and delegates to focused narration. System message = GM identity + `[PC TURN BRIEFING]` (actor/target/to-hit/damage/combat state). User message = player's original text. LLM writes `%%NARRATIVE%%` only. Auto-advances turn. Emits `action_card` (outcome already known) before narrative token.
+
+- [ ] **CB1.10.5-5 — Frontend routing** — when combat is active and `currentCombatantName` is a PC (in `characterMap`), App.tsx routes Send → `POST /pc_turn` instead of `POST /turn`. Add `pcTurn()` to `api.ts`.
+
+- [ ] **CB1.10.5-F — Future: complex PC actions** — "I charge" (move + attack), full attack (iterative), ability/spell use, combat maneuvers (trip, disarm, grapple). These need movement tracking, spell slot state, CMB/CMD resolution. Track in a later tier.
+
+- [ ] **CB1.10.5-T — Tests** — `tests/test_pc_combat_turn.py` (18 pytest: TestIntentExtraction ×6, TestPcTurnSystem ×4, TestStreamPcTurn ×4, TestPcTurnNarration ×4); `App.pc-combat-turn.test.tsx` (7 Vitest); `pc-combat-turn.spec.ts` (3 Playwright); `explore_pc_combat_turn.md` (5 exploratory chains).
+
+---
+
 ### Tier 1.10 — Combat Turn Auto-Speaker
 
 When the current turn advances in the combat tracker, automatically update the active chat speaker to match.

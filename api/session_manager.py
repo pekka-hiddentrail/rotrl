@@ -1096,6 +1096,9 @@ class GameSession:
     # Set by advance_combat_turn before changing current_actor.
     # Used by _build_enemy_turn_user to give the LLM narrative continuity.
     last_actor: str = ""
+    # Stores resolved PC turn intent + original text pending LLM narration.
+    # Set by stream_pc_turn; consumed by stream_resume_combat → _stream_pc_turn_narration.
+    _pending_pc_narration: Optional[dict] = None
     # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
     # Cleared to None when round == 0 or all combatants are inactive.
     combat_state: Optional[CombatState] = None
@@ -1501,7 +1504,6 @@ Sort descending by initiative modifier; round: 0 ends combat and clears the trac
 
 # Injected on round 2+. The backend owns HP values; the LLM must NOT write hp: fields for
 # existing combatants (they are ignored). New combatants entering after round 1 still need hp:.
-# Non-attack HP changes (traps, poison, healing) use the %%HP%% block instead.
 _COMBAT_SPEC_ONGOING = """\
 COMBAT CONDUCT (binding):
 - Always write %%NARRATIVE%% first. Never ask the player for information. Never question their declared action. Resolve it.
@@ -1512,10 +1514,6 @@ round: N
 combatants:
   - name: <Name> · ac: <AC> · init: <init> · status: active|unconscious|fled|dead [· conditions: [prone,shaken]]
   [NEW combatants only: add hp: <cur>/<max>]
-
-Non-attack HP changes (traps, poison, healing):
-%%HP%%
-- name: <Name> · delta: -N   (negative = damage, positive = healing)
 
 Attacks (write alongside %%COMBAT%% when attacks happen this round):
 %%ATTACK%%
@@ -1558,8 +1556,7 @@ _COMBAT_SECTION_SPECS = """\
 %%NARRATIVE%%  — 1–2 paragraphs; physical action and immediate observable result only.
 %%COMBAT%%     — always required this turn; full format spec below.
 %%ATTACK%%     — one line per attack this round; omit when no attacks occur.
-%%HP%%         — non-attack HP changes only (traps, poison, healing); omit otherwise.
-FORBIDDEN in combat: do NOT write GENERATE, DELTAS, ROLL, or EVENT sections."""
+FORBIDDEN in combat: do NOT write GENERATE, DELTAS, ROLL, EVENT, or HP sections."""
 
 
 def _build_combat_system_prompt(session: "GameSession") -> str:
@@ -1587,7 +1584,7 @@ COMBAT CONDUCT (binding every turn)
 - Never ask the player for information. Accept and resolve their declared action immediately.
 - Never invent a d20 result, damage number, or HP total. Write %%ATTACK%% and let the backend roll.
 - Round 1 ONLY: MUST include hp: cur/max for EVERY combatant — the backend seeds HP from these values.
-- Round 2+: NEVER write hp: for existing combatants — backend owns HP from round 1. Use %%HP%% only for non-attack changes (traps, poison, healing).
+- Round 2+: NEVER write hp: for existing combatants — backend owns HP from round 1.
 - Never narrate what a PC does before the player declares it.
 
 FORBIDDEN in combat — do NOT write GENERATE, DELTAS, ROLL, or EVENT sections.
@@ -1747,6 +1744,21 @@ def _build_pc_profiles(data_dir: Path) -> dict:
         if spell_names:
             mech_lines.append("Spells: " + ", ".join(spell_names[:6]))
 
+        # Weapon list — used by PC combat action system to queue attacks from real stats
+        weapons = []
+        for w in data.get("weapons", []):
+            w_name = w.get("name", "").strip()
+            w_atk  = w.get("atk",  "").strip()
+            w_dmg  = w.get("dmg",  "").strip()
+            w_type = w.get("type", "Melee").strip().lower()
+            if w_name:
+                weapons.append({
+                    "name":  w_name,
+                    "atk":   w_atk  or "+0",
+                    "dmg":   w_dmg  or "1d4",
+                    "type":  "ranged" if "ranged" in w_type else "melee",
+                })
+
         profiles[name.lower()] = {
             "narrative": "\n".join(narr_lines),
             "mechanical": "\n".join(mech_lines),
@@ -1758,6 +1770,8 @@ def _build_pc_profiles(data_dir: Path) -> dict:
                 "ac": int(ac_total) if str(ac_total).isdigit() else 10,
                 "initiative": initiative or "+0",
             },
+            # Weapon list: first entry = equipped (primary).
+            "weapons": weapons,
         }
 
     return profiles
@@ -2918,16 +2932,9 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
-        # ── %%HP%% (Tier 1.1 — non-attack HP deltas) ─────────────────────────
-        _hp_section = _sections.get("HP", "")
-        if _hp_section and session.combat_state is not None:
-            try:
-                _hp_deltas = _parse_hp_deltas(_hp_section)
-                if _hp_deltas:
-                    _apply_hp_deltas(session.combat_state, _hp_deltas)
-                    _log(session, f"\n> *[HP deltas applied: {_hp_deltas}]*\n")
-            except Exception as _e:
-                _log(session, f"\n> *[%%HP%% processing error: {_e}]*\n")
+        # ── %%HP%% — discarded; LLM no longer instructed to write this block ──
+        if _sections.get("HP"):
+            _log(session, "\n> *[WARN: %%HP%% block received and discarded — LLM should not write this]*\n")
 
         # ── %%COMBAT%% ────────────────────────────────────────────────────────
         _combat_section = _sections.get("COMBAT", "")
@@ -3045,16 +3052,9 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
-        # %%HP%% (flat-block fallback path — Tier 1.1)
-        _hp_m = _HP_BLOCK_RE.search(response_text)
-        if _hp_m and session.combat_state is not None:
-            try:
-                _hp_deltas = _parse_hp_deltas(_hp_m.group(1))
-                if _hp_deltas:
-                    _apply_hp_deltas(session.combat_state, _hp_deltas)
-                    _log(session, f"\n> *[HP deltas applied (flat): {_hp_deltas}]*\n")
-            except Exception as _e:
-                _log(session, f"\n> *[%%HP%% processing error: {_e}]*\n")
+        # %%HP%% (flat-block fallback path) — discarded
+        if _HP_BLOCK_RE.search(response_text):
+            _log(session, "\n> *[WARN: %%HP%% block received and discarded (flat path) — LLM should not write this]*\n")
 
         # %%COMBAT%% (flat-block fallback path)
         _combat_m = _COMBAT_BLOCK_RE.search(response_text)
@@ -3713,6 +3713,126 @@ def _get_attack_for_enemy(action: dict, attacker_name: str) -> dict:
     }
 
 
+def _hp_descriptor(hp_current: int, hp_max: int) -> str:
+    """Return a plain-English HP descriptor for the LLM briefing."""
+    if hp_max <= 0 or hp_current <= 0:
+        return "dying"
+    pct = hp_current / hp_max
+    if pct > 0.66:
+        return "healthy"
+    if pct > 0.33:
+        return "wounded"
+    return "badly wounded"
+
+
+def _parse_atk_bonus(atk_str: str) -> int:
+    """Parse an attack bonus string like '+4' or '-1' into an int."""
+    try:
+        return int(str(atk_str).replace("+", "").strip())
+    except (ValueError, AttributeError):
+        return 0
+
+
+def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
+    """Extract PC combat intent from free-text player input.
+
+    Returns a dict with: actor, action_type, weapon_name, weapon_atk,
+    weapon_dmg, weapon_type, target, original_text.
+
+    Fallback rule: anything unparseable → standard attack with equipped
+    (first) weapon against a random active enemy. No confirmation prompt.
+    """
+    if session.combat_state is None:
+        return {}
+
+    actor_name = session.combat_state.current_actor or ""
+    actor_key  = actor_name.lower()
+    profile    = session.pc_profiles.get(actor_key, {})
+    weapons    = profile.get("weapons", [])
+
+    # ── Weapon resolution ────────────────────────────────────────────────
+    matched_weapon: Optional[dict] = None
+    text_lower = text.lower()
+    for w in weapons:
+        if w["name"].lower() in text_lower:
+            matched_weapon = w
+            break
+    # Partial / substring match (e.g. "sword" matching "longsword")
+    if matched_weapon is None:
+        for w in weapons:
+            parts = w["name"].lower().split()
+            if any(p in text_lower for p in parts if len(p) >= 4):
+                matched_weapon = w
+                break
+    # Fallback to first (equipped) weapon
+    if matched_weapon is None and weapons:
+        matched_weapon = weapons[0]
+
+    weapon_name = matched_weapon["name"]  if matched_weapon else "unarmed"
+    weapon_atk  = matched_weapon["atk"]   if matched_weapon else "+0"
+    weapon_dmg  = matched_weapon["dmg"]   if matched_weapon else "1d3"
+    weapon_type = matched_weapon["type"]  if matched_weapon else "melee"
+
+    # ── Action type ───────────────────────────────────────────────────────
+    _attack_words  = {"attack", "strike", "swing", "hit", "stab", "shoot",
+                      "fire", "slash", "smash", "bash", "charge", "lunge"}
+    _move_words    = {"move", "run", "walk", "step", "approach", "retreat",
+                      "flee", "position", "go to"}
+    _ability_words = {"cast", "use", "activate", "channel", "lay on",
+                      "inspire", "rage", "bardic"}
+    action_type = "attack"  # default
+    for word in _attack_words:
+        if word in text_lower:
+            action_type = "attack"
+            break
+    for phrase in _move_words:
+        if phrase in text_lower and "attack" not in text_lower:
+            action_type = "move"
+            break
+    for phrase in _ability_words:
+        if phrase in text_lower:
+            action_type = "use_ability"
+            break
+
+    # ── Target resolution ─────────────────────────────────────────────────
+    active_enemies = [
+        c for c in session.combat_state.combatants
+        if c.status == "active" and not _is_pc_attacker(c.name, session)
+    ]
+    matched_target: Optional[Combatant] = None
+    # Full name match first
+    for c in active_enemies:
+        if c.name.lower() in text_lower:
+            matched_target = c
+            break
+    # Partial match (e.g. "goblin" matching "Goblin Warrior 1")
+    if matched_target is None:
+        for c in active_enemies:
+            for part in c.name.lower().split():
+                if len(part) >= 4 and part in text_lower:
+                    matched_target = c
+                    break
+            if matched_target:
+                break
+    # Fallback to first active enemy
+    if matched_target is None and active_enemies:
+        import random as _random
+        matched_target = _random.choice(active_enemies)
+
+    target_name = matched_target.name if matched_target else ""
+
+    return {
+        "actor":         actor_name,
+        "action_type":   action_type,
+        "weapon_name":   weapon_name,
+        "weapon_atk":    weapon_atk,
+        "weapon_dmg":    weapon_dmg,
+        "weapon_type":   weapon_type,
+        "target":        target_name,
+        "original_text": text,
+    }
+
+
 def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Generator[str, None, None]:
     """Run one focused enemy turn and let the backend resolve mechanics."""
     actor = _current_enemy_actor(session, name)
@@ -3804,6 +3924,75 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
+def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, None, None]:
+    """Handle a PC combat turn: extract intent, queue attack from profile, prompt dice.
+
+    No LLM call is made here — the attack is queued from the PC's actual weapon stats.
+    The narration happens later in _stream_pc_turn_narration (called from stream_resume_combat).
+    """
+    if session.combat_state is None:
+        yield f"data: {json.dumps({'type': 'error', 'message': 'No active combat'})}\n\n"
+        return
+
+    intent = _extract_pc_combat_intent(player_text, session)
+    if not intent:
+        yield f"data: {json.dumps({'type': 'error', 'message': 'Could not resolve PC turn intent'})}\n\n"
+        return
+
+    # Append the player's original text to message history
+    session.messages.append({"role": "user", "content": player_text})
+
+    if intent["action_type"] == "attack":
+        if not intent["target"]:
+            # No active enemies — can't attack
+            yield f"data: {json.dumps({'type': 'error', 'message': 'No active enemies to attack. All foes may be defeated or fled.'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+
+        # Queue the attack from profile data — not from LLM-generated bonus/damage
+        bonus = _parse_atk_bonus(intent["weapon_atk"])
+        session.attack_queue.append(PendingAttack(
+            attacker=intent["actor"],
+            target=intent["target"],
+            bonus=bonus,
+            damage_expr=intent["weapon_dmg"],
+            attack_type=intent["weapon_type"],
+            is_pc=True,
+        ))
+        session._pending_pc_narration = intent
+        _log(session,
+             f"\n> *[PC turn: {intent['actor']} → {intent['target']} "
+             f"with {intent['weapon_name']} ({intent['weapon_atk']}, {intent['weapon_dmg']})]*\n")
+
+        # Emit attack_request to activate the dice tray
+        target_ac = _get_combatant_ac(intent["target"], session.combat_state)
+        yield f"data: {json.dumps({'type': 'attack_request', 'attacker': intent['actor'], 'target': intent['target'], 'bonus': bonus, 'ac': target_ac, 'damage_expr': intent['weapon_dmg'], 'attack_type': intent['weapon_type']})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    else:
+        # Non-attack actions (move, use_ability, delay).
+        # No dice to roll — narrate immediately in this stream rather than waiting for resume_combat.
+        _log(session, f"\n> *[PC turn: {intent['actor']} action={intent['action_type']}]*\n")
+        system   = _build_pc_turn_system(session, intent, {})
+        user_msg = intent.get("original_text", "")
+        try:
+            response = _call_blocking(session, system, user_msg)
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': f'PC turn narration failed: {e}'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+        narrative = _extract_narrative(response)
+        if narrative:
+            session.messages.append({"role": "assistant", "content": narrative})
+            yield f"data: {json.dumps({'type': 'token', 'content': narrative})}\n\n"
+        try:
+            advance_combat_turn(session)
+        except ValueError:
+            _write_session_state(session)
+        yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
 def _build_combat_close_directive(session: "GameSession") -> str:
     """Build the focused close-combat instruction with the current snapshot."""
     if session.combat_state is None:
@@ -3845,6 +4034,117 @@ def stream_close_combat(session: GameSession) -> Generator[str, None, None]:
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
+_PC_TURN_SYSTEM = """You are the Game Master for a Pathfinder 1E campaign: Rise of the Runelords.
+Write vivid but brief action narration (%%NARRATIVE%% only, 2–5 sentences).
+Write ONLY %%NARRATIVE%%. Do NOT write %%ACTION%%, %%COMBAT%%, %%ATTACK%%, %%ROLL%%, %%GENERATE%%, %%DELTAS%%, or %%EVENT%%.
+Do not mention dice numbers, bonuses, or AC values. The backend has already resolved all mechanics."""
+
+
+def _build_pc_turn_system(session: "GameSession", intent: dict, result: dict) -> str:
+    """Build the focused system message for PC turn narration.
+
+    The roll outcome is already known — the LLM just writes the story.
+    """
+    actor_name  = intent.get("actor", "")
+    target_name = intent.get("target", "")
+    hit         = result.get("hit", False)
+    roll        = result.get("roll", 0)
+    bonus       = result.get("bonus", 0)
+    total       = result.get("total", 0)
+    ac          = result.get("ac", 0)
+    damage      = result.get("damage_total", 0)
+    sign        = f"+{bonus}" if bonus >= 0 else str(bonus)
+
+    outcome_line = (
+        f"To hit: 1d20 {sign} = {total} vs AC {ac} → HIT\nDamage: {damage}"
+        if hit else
+        f"To hit: 1d20 {sign} = {total} vs AC {ac} → MISS"
+    )
+
+    # Build combatant blocks
+    pcs      = [c for c in (session.combat_state.combatants if session.combat_state else [])
+                if _is_pc_attacker(c.name, session)]
+    enemies  = [c for c in (session.combat_state.combatants if session.combat_state else [])
+                if not _is_pc_attacker(c.name, session)]
+
+    def _pc_line(c: Combatant) -> str:
+        return f"- {c.name}: hp {c.hp_current}/{c.hp_max}, {_hp_descriptor(c.hp_current, c.hp_max)}"
+
+    def _enemy_line(c: Combatant) -> str:
+        return f"- {c.name}: {c.status}, {_hp_descriptor(c.hp_current, c.hp_max)}"
+
+    # Target descriptor (after damage applied)
+    target_combatant = next((c for c in enemies if c.name == target_name), None)
+    target_desc = _hp_descriptor(target_combatant.hp_current, target_combatant.hp_max) \
+        if target_combatant else "active"
+
+    briefing = f"""[PC TURN BRIEFING]
+Actor: {actor_name}
+Target: {target_name} ({target_desc})
+{outcome_line}
+
+PCs:
+{chr(10).join(_pc_line(c) for c in pcs) if pcs else "- (none)"}
+
+Enemies:
+{chr(10).join(_enemy_line(c) for c in enemies) if enemies else "- (none)"}"""
+
+    return f"{_PC_TURN_SYSTEM}\n\n{briefing}"
+
+
+def _stream_pc_turn_narration(session: GameSession) -> Generator[str, None, None]:
+    """Narrate the outcome of a resolved PC combat turn.
+
+    Called from stream_resume_combat when session._pending_pc_narration is set.
+    The roll result is already known — no if_hit/if_miss branching needed.
+    Emits action_card BEFORE the narrative token (mirrors enemy turn ordering).
+    """
+    intent = session._pending_pc_narration
+    session._pending_pc_narration = None
+
+    # Use most recent attack result if available
+    result: dict = session.attack_results[-1] if session.attack_results else {}
+    session.attack_results = []
+
+    system   = _build_pc_turn_system(session, intent, result)
+    user_msg = intent.get("original_text", "")
+
+    try:
+        response = _call_blocking(session, system, user_msg)
+    except Exception as e:
+        yield f"data: {json.dumps({'type': 'error', 'message': f'PC turn narration failed: {e}'})}\n\n"
+        return
+
+    # Warn if LLM wrote unexpected sections (B-C04 parity with enemy turns)
+    _unexpected = [s for s in _SECTION_MARKER_RE.findall(response) if s not in {"NARRATIVE"}]
+    if _unexpected:
+        _log(session, f"\n> *[PC turn narration warning: LLM wrote unexpected sections {_unexpected} — ignored]*\n")
+        if session.dev_mode:
+            yield f"data: {json.dumps({'type': 'token', 'content': f'[DEV WARNING: unexpected sections {_unexpected} in PC narration response]'})}\n\n"
+
+    # Action card BEFORE narrative (emitted regardless of dev mode)
+    if result:
+        yield f"data: {json.dumps({'type': 'action_card', **result})}\n\n"
+
+    # Dev mode: stream full raw response so all markers are visible
+    if session.dev_mode:
+        yield f"data: {json.dumps({'type': 'token', 'content': response})}\n\n"
+        session.messages.append({"role": "assistant", "content": response})
+    else:
+        narrative = _extract_narrative(response)
+        if narrative:
+            session.messages.append({"role": "assistant", "content": narrative})
+            yield f"data: {json.dumps({'type': 'token', 'content': narrative})}\n\n"
+
+    # Auto-advance to next combatant
+    try:
+        advance_combat_turn(session)
+    except ValueError:
+        _write_session_state(session)
+    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
 def stream_resume_combat(session: GameSession) -> Generator[str, None, None]:
     """Inject resolved attack results into history, then call LLM to narrate outcomes.
 
@@ -3857,6 +4157,12 @@ def stream_resume_combat(session: GameSession) -> Generator[str, None, None]:
     if session.attack_queue:
         _log(session, f"\n> *[Combat resume: clearing {len(session.attack_queue)} stale attack-queue entries]*\n")
         session.attack_queue = []
+
+    # PC combat action path — focused narration with known outcome
+    if session._pending_pc_narration:
+        _log(session, "\n> *[Combat resume: PC turn narration path]*\n")
+        yield from _stream_pc_turn_narration(session)
+        return
 
     round_num = session.combat_state.round if session.combat_state else 0
     history_msg = _build_attack_history_message(session.attack_results, round_num)

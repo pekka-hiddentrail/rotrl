@@ -14,7 +14,7 @@ import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi } from './api'
+import { advanceCombatTurn, bootSession, sendTurn, pcTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
   const [imgOk, setImgOk] = useState(true)
@@ -152,8 +152,21 @@ export default function App() {
     ])
     setStreaming(true)
 
+    // During a PC's combat turn, route through /pc_turn (intent extraction + profile-driven
+    // attack queue) instead of /turn (which relies on LLM writing %%ATTACK%% blocks).
+    const isPcCombatTurn = !!(
+      combatState &&
+      currentCombatantName &&
+      Object.values(characterMap).some(
+        c => c.name.toLowerCase() === currentCombatantName.toLowerCase()
+      )
+    )
+    const turnStream = isPcCombatTurn
+      ? pcTurn(session.id, sentInput)
+      : sendTurn(session.id, sentInput)
+
     try {
-      for await (const event of sendTurn(session.id, sentInput)) {
+      for await (const event of turnStream) {
         if (event.type === 'token') appendToken(event.content)
         if (event.type === 'context') setIntent({ ...event, scene_npcs: event.scene_npcs ?? [] })
         if (event.type === 'patch_last') {
