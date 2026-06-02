@@ -1146,9 +1146,14 @@ def advance_combat_turn(session: "GameSession") -> dict:
 
     # Find the current actor's position; advance to the next (with wrap-around).
     names = [c.name for c in active]
+    round_incremented = False
     try:
         idx = names.index(combat.current_actor)
         next_idx = (idx + 1) % len(names)
+        # Wrapped past the last combatant → new round.
+        if next_idx == 0 and idx == len(names) - 1:
+            combat.round += 1
+            round_incremented = True
     except ValueError:
         # current_actor not found in active list (None, dead, etc.) → pick first.
         next_idx = 0
@@ -1156,7 +1161,14 @@ def advance_combat_turn(session: "GameSession") -> dict:
     combat.current_actor = names[next_idx]
     _write_session_state(session)
     is_pc = _is_pc_attacker(combat.current_actor, session)
-    return {"current_actor": combat.current_actor, "is_pc": is_pc}
+    return {
+        "current_actor": combat.current_actor,
+        "is_pc": is_pc,
+        "position": next_idx + 1,          # 1-based position in initiative order
+        "combatant_count": len(names),
+        "round": combat.round,
+        "round_incremented": round_incremented,
+    }
 
 
 def _parse_event_combatants(content: str) -> dict:

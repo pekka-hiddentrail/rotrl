@@ -229,6 +229,9 @@ export default function App() {
     try {
       const result = await advanceCombatTurn(session.id)
       setCurrentCombatantName(result.current_actor)
+      if (result.round_incremented) {
+        setCombatState(prev => prev ? { ...prev, round: result.round } : prev)
+      }
     } catch {
       // Fallback: advance client-side if endpoint fails (e.g. offline)
       const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)

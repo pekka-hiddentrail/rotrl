@@ -110,7 +110,14 @@ export async function* closeCombat(sessionId: string): AsyncGenerator<SseEvent> 
 
 export async function advanceCombatTurn(
   sessionId: string,
-): Promise<{ current_actor: string | null; is_pc: boolean }> {
+): Promise<{
+  current_actor: string | null
+  is_pc: boolean
+  position: number
+  combatant_count: number
+  round: number
+  round_incremented: boolean
+}> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/combat/advance_turn`, { method: 'POST' })
   if (!res.ok) throw new Error(`Advance turn failed (${res.status})`)
   return res.json()

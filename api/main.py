@@ -242,8 +242,9 @@ def delete_combat(session_id: str):
 def post_advance_combat_turn(session_id: str):
     """Advance the initiative to the next active combatant and write state.json.
 
-    Returns { current_actor: str | null, is_pc: bool }.
-    409 when no combat is active; 404 when session not found.
+    Returns { current_actor, is_pc, position, combatant_count, round, round_incremented }.
+    round_incremented is true when the last combatant in the order wraps back to the first
+    (end of round).  409 when no combat is active; 404 when session not found.
     """
     session = get_session(session_id)
     if not session:

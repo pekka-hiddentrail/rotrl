@@ -245,6 +245,24 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ---
 
+## GUI Improvements
+
+Visual and interaction improvements to the UI. These are not blocked by backend work unless noted.
+
+- [ ] **Rename "dice panel" → "dice tray" everywhere** — the component is currently called `DicePanel` / `dice-panel` throughout the codebase but "dice tray" is a better name and matches tabletop convention. Scope: `DicePanel.tsx` → `DiceTray.tsx`; CSS class `dice-panel` → `dice-tray`; all props (`DicePanel.test.tsx`, `App.tsx` import, `api.ts` mentions, README, TESTING.md, specs, COMBAT-TODO.md, exploratory docs, Playwright selectors in `live-flows.spec.ts`). **Do this in a single dedicated commit so grep/search stays consistent.** Everything going forward should use "dice tray" in code, docs, and conversation.
+
+- [ ] **Dice tray — always show context for the current roll** — when a `roll_request` is active the banner shows skill and DC, but when rolling outside a pending request (e.g. manual queue) there is no label. Always show a one-liner explaining what the roll is for: skill-check prompt text from `pendingRoll.success/failure` preview, or "Free roll" when no pending roll.
+
+- [ ] **Dice tray — condensed layout when combat is active** — in combat the dice tray moves to the left column and competes for vertical space with the character sidebar. Consider a compact "collapsed" mode: only the die buttons and the pending-roll banner visible; roll history hidden behind a toggle. Expands on click.
+
+- [ ] **Combat panel — show initiative numbers in each row** — currently the row shows name, HP bar, AC, and status badge. The initiative value (e.g. `⚡ 18`) is sorted by but not displayed. Add it as a small badge so the GM can see at a glance why the order is what it is.
+
+- [ ] **Combat panel — highlight when it is a PC's turn vs. enemy's turn** — the current-actor gold glow exists, but a stronger visual difference (e.g. green row tint for PC turns, red tint for enemy turns) would make the flow clearer, especially on a busy screen.
+
+- [ ] **Input bar — show current combatant's name/portrait during combat** — already partially done via `inputActiveSpeaker`, but B-C02 means the `handleSend` prefix still uses `activeCharacter` instead of the initiative actor. Fixing B-C02 is the prerequisite; the visual is already present.
+
+---
+
 ## Message Pipeline
 
 Separates the internal session model from the API payload. Currently `session.messages` IS the payload — context is string-concatenated into the system message each turn, which prevents Groq caching and makes adding new context types invasive. The goal: `GameSession` holds a typed internal model; `serialize_messages()` produces the API payload on demand.
