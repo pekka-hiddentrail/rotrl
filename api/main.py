@@ -77,7 +77,7 @@ def get_intro(session: int = 1):
 
 @app.post("/api/sessions")
 def post_sessions(req: BootRequest):
-    if req.session_number > 1:
+    if req.session_number > 1 and not req.dev_mode:
         sessions_dir = _REPO_ROOT / "sessions"
         boot = sessions_dir / f"session_{req.session_number:03d}" / "boot.md"
         recap = sessions_dir / f"session_{req.session_number - 1:03d}" / "recap.md"
