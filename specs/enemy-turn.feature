@@ -38,27 +38,32 @@ sees only the narrative; all mechanics are invisible.
 ```gherkin
 Given a text string containing:
   %%ACTION%%
-  combatant: Goblin Warchanter
-  action_type: standard
   action: attack
   weapon: shortbow
   target: Yanyeeku
+  if_hit: The arrow finds its mark!
+  if_miss: The arrow skips off the cobblestones.
 
 When  _parse_action_block(text) is called
-Then  it returns {
-    "combatant": "Goblin Warchanter",
-    "action_type": "standard",
-    "action": "attack",
-    "weapon": "shortbow",
+Then  it returns a dict with:
+    "action": "attack"
+    "weapon": "shortbow"
     "target": "Yanyeeku"
-  }
+    "if_hit": "The arrow finds its mark!"
+    "if_miss": "The arrow skips off the cobblestones."
+    "ability": "", "movement": "", "bonus": "", "damage": "", "reason": ""
 
 Given a text with action: use_ability and ability: inspire_courage
 Then  the returned dict contains "action": "use_ability" and "ability": "inspire_courage"
 
 Given a text with action: move_toward and target: Thaelion
-Then  the returned dict contains "action": "move_toward" and "target": "Thaelion"
+Then  the action is normalised to "delay" (move_toward is not in the valid set;
+      valid values are attack, use_ability, move, delay)
 ```
+
+> **Note:** `combatant:` and `action_type:` fields in the `%%ACTION%%` block are silently
+> ignored by the parser — they are not part of the returned dict. The actor is known at the
+> call site (`stream_enemy_turn` passes `actor.name` directly).
 
 ---
 
@@ -95,13 +100,14 @@ Given session.combat_state has:
   - Yanyeeku: 4/7 HP, active — PC
 
 When  _build_enemy_turn_query(session, "Goblin Warchanter") is called
-Then  the output contains "Goblin Warchanter"
-And   the output contains "6/8" (acting combatant HP)
-And   the output contains "Goblin 1" (ally listed)
-And   the output contains "Thaelion" (enemy PC listed)
-And   the output contains "Yanyeeku" (enemy PC listed)
-And   the output contains "standard" or "Standard action" (available action budget)
+Then  the output contains "Actor: Goblin Warchanter, active"
+And   the output contains "Equipped weapon" or "Available weapon" lines
+And   allies are listed by name and status only (no HP — enemies don't track each other's HP)
+And   PCs are listed with HP ("Thaelion: hp 18/22") so the enemy knows who is wounded
+And   the output contains "Standard:" and "Full-round:" action instructions
 And   the output contains the %%ACTION%% format specification
+And   the output does NOT contain "bonus:" or "damage:" fields (backend owns mechanics)
+And   the output does NOT contain "%%END%%" or "reason:" fields
 ```
 
 ---
@@ -141,15 +147,18 @@ And   the query does NOT contain "14" or "16" as standalone AC references
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-006 — `stream_enemy_turn` uses _ENEMY_TURN_SYSTEM, not _build_combat_system_prompt
+### AC-006 — `stream_enemy_turn` uses a system message containing the full briefing
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
 Given stream_enemy_turn(session, "Goblin 1") is called
-Then  the LLM is called with _ENEMY_TURN_SYSTEM as the system message
-And   _ENEMY_TURN_SYSTEM is much shorter than _build_combat_system_prompt output
+Then  the LLM system message = _ENEMY_TURN_SYSTEM (GM identity) + [ENEMY TURN BRIEFING]
+And   the system message opens with "You are the Game Master for a Pathfinder 1E campaign"
+And   the system message contains the full actor/allies/PCs/weapons/format spec
 And   session.messages (chat history) is NOT included in the LLM payload
-And   the payload contains exactly one user message: the enemy turn query
+And   the user message is a short turn trigger:
+        "{last_actor} just acted. Now it is {actor.name}'s turn."
+        OR "Round {N} begins. It is {actor.name}'s turn." when session.last_actor is empty
 ```
 
 ---
@@ -163,15 +172,18 @@ Given the LLM response contains:
   %%NARRATIVE%%
   The goblin looses an arrow at the sorcerer.
   %%ACTION%%
-  combatant: Goblin 1
-  action_type: standard
   action: attack
   target: Yanyeeku
+  weapon: shortbow
+  if_hit: The arrow buries itself in the sorcerer's shoulder!
+  if_miss: The arrow skitters past.
 
 When  stream_enemy_turn processes the response
-Then  a "token" SSE event is emitted containing the narrative sentence
+Then  a "token" SSE event is emitted containing the narrative +
+      the resolved outcome sentence (if_hit or if_miss based on roll)
 And   the %%ACTION%% block text is NOT included in the streamed tokens
 And   the %%NARRATIVE%% marker itself is NOT included in the streamed tokens
+And   in dev mode the full raw response IS streamed (with [HIT]/[MISS] annotation)
 ```
 
 ---
@@ -344,12 +356,114 @@ And   a subsequent POST /enemy_turn call returns 200 (not 409) once attacks are 
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-016 — _build_enemy_turn_query includes actor's attack names by type (CB1.9-1)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Actor has a known attack profile in pending_combatants
+
+```gherkin
+Given session.pending_combatants["goblin warchanter"]["attacks"] ==
+      {"melee": ["bite"], "ranged": ["shortbow"]}
+When  _build_enemy_turn_system(session, "Goblin Warchanter") is called
+Then  the output contains "Equipped weapon: bite"   (primary = first melee)
+And   the output contains "Available weapon: shortbow"  (secondary = first ranged)
+And   the output does NOT contain "+5" or "1d4"  (mechanics stripped — LLM sees names only)
+And   no attack names from other combatants appear in the actor's section
+```
+
+**Scenario:** No profile exists for the actor
+
+```gherkin
+Given session.pending_combatants is empty (actor.attacks == {})
+When  _build_enemy_turn_system is called for any combatant
+Then  no "Equipped weapon" or "Available weapon" line appears in the output
+And   the system message is otherwise identical to the no-profile case
+```
+
+> **Design note:** The LLM sees weapon names only — no bonuses, no damage dice. The backend
+> owns the mechanics and looks them up from `pending_combatants` when resolving the attack.
+> The split into `melee` / `ranged` categories gives the LLM enough tactical context to make
+> a sensible decision (does the target need to be adjacent?).
+
+**Scenario:** LLM writes a weapon not in the combatant's profile (CB1.9-2)
+
+```gherkin
+Given actor.attacks == {"melee": ["dogslicer"], "ranged": ["shortbow"]}
+And   %%ACTION%% contains weapon: longsword  (hallucinated)
+When  stream_enemy_turn resolves the action
+Then  the resolved attack uses "dogslicer" (first melee weapon from profile)
+And   a warning is logged: "weapon 'longsword' not in profile — using 'dogslicer'"
+
+Given actor.attacks is empty (no profile)
+And   %%ACTION%% contains weapon: longsword
+Then  the weapon passes through unchanged (graceful — no profile means no validation)
+
+Given actor.attacks == {"melee": ["dogslicer"], "ranged": ["shortbow"]}
+And   %%ACTION%% contains weapon: shortbow  (known weapon)
+Then  the weapon is used unchanged
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-017 — %%ACTION%% if_hit / if_miss conditional outcome narration
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** LLM provides conditional outcome sentences; backend picks the correct branch
+
+```gherkin
+Given _parse_action_block receives an %%ACTION%% block with:
+      if_hit:  "The blade finds purchase in Vanx's shoulder!"
+      if_miss: "Vanx sidesteps and the blow glances off."
+Then  the returned dict contains if_hit and if_miss strings
+
+Given stream_enemy_turn resolves an attack that hits
+Then  the player-visible message is "{%%NARRATIVE%% text}\n\n{if_hit text}"
+And   the if_miss text does NOT appear in the token stream
+
+Given stream_enemy_turn resolves an attack that misses
+Then  the player-visible message is "{%%NARRATIVE%% text}\n\n{if_miss text}"
+And   the if_hit text does NOT appear in the token stream
+
+Given the %%ACTION%% block omits if_hit and if_miss
+Then  only the %%NARRATIVE%% text is streamed (graceful fallback)
+
+Given session.dev_mode is True
+Then  the full raw LLM response is streamed (both if_hit and if_miss visible for debugging)
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-018 — action_card SSE emitted before narrative; renders as centered card (CB1.9-3)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Backend emits action_card before narrative token
+
+```gherkin
+Given stream_enemy_turn resolves an attack
+When  the SSE stream is produced
+Then  the "action_card" event is emitted before the first "token" event
+And   the action_card carries: attacker, target, roll, bonus, total, ac, hit, damage_total, attack_type
+And   if no attack occurs (action: delay), no action_card is emitted
+
+Given the frontend receives an action_card event
+Then  a message with role "combat-event" is prepended before the GM narrative bubble
+And   MessageBubble renders it as a centered .combat-event-card block
+And   HIT cards show damage total with .combat-event-hit styling
+And   MISS cards show "MISS" with .combat-event-miss styling
+```
+
+> **UX note:** The action card acts as a combat log header — player sees the mechanical outcome
+> (HIT — 3 damage) before reading the narrative flavor text. This mirrors tabletop GM practice.
+
+---
+
 ## Out of Scope
 
 - `_execute_action` full dispatch table (Tier 2 SA-6) — actions beyond `attack` and `delay`
   are logged but not mechanically resolved in Tier 1.7
-- Combatant attack/ability seeding from event files (Tier 2 SA-2) — attacks list is empty in
-  Tier 1.7; `_get_attack_for_enemy` uses defaults (+0 to hit, 1d4 damage)
 - PC `attack_request` during enemy turn — enemy attacks are always auto-resolved server-side
 - Multi-combatant enemy turn loop — CB1.7-3 endpoint resolves one combatant per call;
   the UI calls it per-combatant by advancing with `combat/advance_turn` between enemy actions
@@ -358,10 +472,18 @@ And   a subsequent POST /enemy_turn call returns 200 (not 409) once attacks are 
 
 ## Notes
 
-- `_ENEMY_TURN_SYSTEM` module-level constant (~4 lines): instructs the LLM to return exactly
-  `%%NARRATIVE%%` (one sentence) + `%%ACTION%%` block. No other sections permitted.
-- `_build_enemy_turn_query(session, combatant_name) → str` — builds the tactical briefing.
-  **Does not use** `_build_combat_system_prompt`; the query is the user message, `_ENEMY_TURN_SYSTEM` is the system message. Chat history is NOT injected.
+- `_ENEMY_TURN_SYSTEM` module-level constant (4 lines): GM identity header — "You are the
+  Game Master for a Pathfinder 1E campaign: Rise of the Runelords." + format instructions.
+- `_build_enemy_turn_system(session, name) → str` — builds the full system message:
+  `_ENEMY_TURN_SYSTEM` + `\n\n` + `[ENEMY TURN BRIEFING]` (actor, weapons, allies, PCs,
+  action budget, format spec). The briefing is authoritative instruction in the system message
+  for highest LLM compliance. Chat history is NOT injected.
+- `_build_enemy_turn_user(session, name) → str` — builds the short turn-trigger user message:
+  `"{last_actor} just acted. Now it is {name}'s turn."` or `"Round {N} begins. It is {name}'s turn."`.
+  Gives the LLM narrative continuity between turns.
+- `session.last_actor: str` — updated by `advance_combat_turn` to the outgoing actor's name
+  before changing `current_actor`. Used by `_build_enemy_turn_user`.
+- `_build_enemy_turn_query` — kept as a backward-compat alias for `_build_enemy_turn_system`.
 - `_parse_action_block(text) → Optional[dict]` — same field-separator pattern (`·`) as
   `_parse_combatant_line`. `%%ACTION%%` added to `_END_MARKERS` (stripped from player stream).
   `%%ACTION%%` NOT added to `_HAS_SECTION_MARKERS_RE` (same pattern as `%%ATTACK%%`).
@@ -371,11 +493,19 @@ And   a subsequent POST /enemy_turn call returns 200 (not 409) once attacks are 
 - `_get_attack_for_enemy(session, attacker_name, weapon_name) → dict` — returns
   `{"bonus": N, "damage_expr": "NdN+M", "type": "melee|ranged"}` from `combatant.attacks`
   when available; falls back to `{"bonus": 0, "damage_expr": "1d4", "type": "melee"}`.
+- `_extract_attack_names(raw: str) → list[str]` (CB1.9-1) — strips bonus and damage from a
+  single weapon string. `"shortbow +5 (1d4+1)"` → `["shortbow"]`. Splits on comma first for
+  multi-weapon strings.
+- **`pending_combatants[name]["attacks"]` shape (CB1.9-1):** `{"melee": ["bite"], "ranged": ["shortbow"]}`.
+  Parsed by `_parse_event_combatants` from the `melee` and `ranged` columns of the
+  `## Combatants` table. Names only — bonuses and damage dice stripped at parse time.
 - `_build_combat_close_directive(session) → str` — injects the combat snapshot without using
   `_build_combat_system_prompt`. Short directive (~10 lines).
 - `stream_close_combat(session)` — blocking LLM call, streams narrative as tokens, clears
   combat state, writes state.json. Fallback: clear combat state silently on error.
-- Tests: `tests/test_enemy_turn.py`; Vitest: `CombatPanelEnemyTurn.test.tsx`
+- **SSE emission order in `stream_enemy_turn`** (CB1.9-3): `action_card` → `token` (narrative+outcome) → `attack_result` → `combat_update` → `done`. The action card arrives before narrative so the player sees the mechanical result first.
+- **`action_card` SSE** — carries same fields as `attack_result` (`attacker`, `target`, `roll`, `bonus`, `total`, `ac`, `hit`, `damage_total`, `attack_type`, `is_pc`). Frontend creates a `Message` with `role: 'combat-event'` and `attackResult` set; `MessageBubble.tsx` renders it as a centered `.combat-event-card`.
+- Tests: `tests/test_enemy_turn.py` (53 tests including `TestActionCardOrdering`); Vitest: `CombatPanelEnemyTurn.test.tsx`, `CombatEventCard.test.tsx` (8 tests)
 - **B-C07 fix (2026-05-31):** `stream_resume_combat` clears `session.attack_queue` defensively
   before the LLM call. When the LLM writes `%%ATTACK%%` blocks inside the resume narration, PC
   attacks were added to the backend queue but the frontend's `doResumeCombat` had no

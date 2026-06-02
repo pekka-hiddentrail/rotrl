@@ -147,7 +147,7 @@ The GM response is structured internally into sections that are stripped before 
 | `%%ATTACK%%` | One line per attack this round — `attacker · target · bonus · damage · type`; NPC attacks auto-resolved, PC attacks queued for player dice |
 | `%%ACTION%%` | Focused enemy-turn response — `action`, `target`, `weapon`/`ability`/`movement`, and `reason`; parsed by the backend and stripped from player-facing text |
 
-In **dev mode** all markers are visible in the stream so you can see the raw output.
+In **dev mode** all markers are visible in the stream so you can see the raw output, including `%%EVENT%%` tags. In full mode the stream filter forwards only narrative text and hides control sections such as `%%EVENT%%`.
 
 ### Output files and directories
 
@@ -166,7 +166,7 @@ In **dev mode** all markers are visible in the stream so you can see the raw out
 
 | | Dev mode | Full mode |
 |-|----------|-----------|
-| Stream filter | All tokens visible (markers shown) | Only `%%NARRATIVE%%` streamed |
+| Stream filter | All tokens visible (markers shown, including `%%EVENT%%`) | Only `%%NARRATIVE%%` streamed; control sections such as `%%EVENT%%` are hidden |
 | History sent | last **6** messages | last **10** (Groq) / **30** (Ollama) messages |
 | `patch_last` event | Suppressed (raw text stays in UI) | Sent (strips markers from display) |
 | System prompt | Same full prompt | Same full prompt |
@@ -326,7 +326,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 940+ pytest tests passing across 28 test files:
+**Backend:** 981+ pytest tests passing across 28 test files:
 
 | File | Covers |
 |------|--------|
@@ -358,11 +358,13 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_combat_lookup.py` | `CombatRulesIndex` loading, trigger detection, longest-match, word boundary, `_parse_combat_rule_file`, `<!-- REFERENCE -->` boundary, `format_context` |
 | `test_combat_attacks.py` | All 9 attack-resolution ACs: `_roll_dice`, `_parse_attack_line/block`, `_is_pc_attacker`, `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `stream_resume_combat`, multi-attack queue, `attack_result`/`attack_request` SSE, stream filter, endpoint HTTP guards (404/409) |
 | `test_roll_initiatives.py` | All 9 roll-initiatives ACs: `roll_combat_initiatives`, PC/enemy modifier, `current_actor` set to highest active, `state.json` written, endpoint guards, `_parse_event_combatants` (table parsing, missing section, malformed), `pending_combatants` seeding/clearing, auto-roll detection on round-1 combat event |
-| `test_enemy_turn.py` | Enemy-turn Tier 1.7: `%%ACTION%%` parser, focused enemy-turn query, short enemy system prompt, backend-resolved attack/delay streams, endpoint guards, close-combat stream and silent-clear fallback |
+| `test_enemy_turn.py` | Enemy-turn Tiers 1.7–1.9: `%%ACTION%%` parser, enemy-turn system/user prompt split, `last_actor` continuity, if_hit/if_miss conditional narration, action_card SSE ordering (before narrative), weapon profile injection, attack/delay streams, endpoint guards |
 | `test_token_benchmark.py` | Real-API token benchmark — boots Anthropic Haiku, runs three fixed turns, appends prompt/completion/total token counts to `outputs/token_benchmarks.csv`; automatically skipped when `ANTHROPIC_API_KEY` is absent (`@pytest.mark.benchmark`) |
 | `test_prompt_audit.py` | Verifies `scripts/build_coverage.py` produces `outputs/coverage.json` with the expected `summary.total`, `summary.covered`, `summary.gap` keys and correct row schema |
 
 **Frontend:** 230+ Vitest tests passing across 15 test files (run separately — `cd ui && npm run test`):
+
+Recent streaming regressions are covered explicitly: `test_stream_filter.py` asserts dev mode passes raw `%%EVENT%%` tokens while full mode hides them, `test_event_injection.py` asserts event tags do not leak to player-visible non-dev chat, `ChatWindow.test.tsx` covers empty GM bubbles with three thinking dots, and `App.enemy-turn.test.tsx` covers the enemy-turn pre-token loading state.
 
 | File | Covers |
 |------|--------|
@@ -573,7 +575,7 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 940+ pytest · 230+ Vitest · 13 Playwright mocked · 11 live Playwright tests | ✅ Complete |
+| Test suites — 981+ pytest · 240+ Vitest · 13 Playwright mocked · 11 live Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |

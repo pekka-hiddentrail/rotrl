@@ -130,7 +130,12 @@ export default function App() {
 
   const handleSend = async (input: string) => {
     if (!session) return
-    const speaker = activeCharacter ? characterMap[activeCharacter] : null
+    // During combat, the current initiative actor is the speaker (if they're a PC).
+    // Falls back to the manually selected activeCharacter outside combat.
+    const combatPc = (combatState && currentCombatantName)
+      ? Object.values(characterMap).find(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()) ?? null
+      : null
+    const speaker = combatPc ?? (activeCharacter ? characterMap[activeCharacter] : null)
     const sentInput = speaker ? `@${speaker.name}: "${input}"` : input
     setError(null)
     setLastInput(input)
@@ -327,6 +332,16 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'gm', content: '' }])
     try {
       for await (const event of runEnemyTurn(session.id)) {
+        if (event.type === 'action_card') {
+          // Inject action card BEFORE the narrative (empty GM bubble placeholder above)
+          setMessages(prev => {
+            const withoutEmpty = prev.slice(0, -1)  // remove the empty gm placeholder
+            return [...withoutEmpty,
+              { role: 'combat-event' as const, content: '', attackResult: { ...event } },
+              { role: 'gm' as const, content: '' },  // new empty placeholder for narrative
+            ]
+          })
+        }
         if (event.type === 'token') appendToken(event.content)
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
         if (event.type === 'combat_update') {
@@ -529,7 +544,12 @@ export default function App() {
         onPurgeNpcs={handlePurgeNpcs}
       />
 
-      {error && <div className="error-bar">{error}</div>}
+      {error && (
+        <div className="error-bar">
+          <span className="error-bar-message">{error}</span>
+          <button className="error-bar-close" onClick={() => setError(null)} title="Dismiss">✕</button>
+        </div>
+      )}
       {charsError && <div className="error-bar">Character data: {charsError}</div>}
 
       <div className={`main-content${combatState ? ' combat-active' : ''}`}>
@@ -556,8 +576,11 @@ export default function App() {
             </div>
           )}
 
-          {(messages.length > 0 || streaming) && (
-            <ChatWindow messages={messages} streaming={streaming} />
+          {(messages.length > 0 || streaming || enemyTurnStreaming || combatClosing) && (
+            <ChatWindow
+              messages={messages}
+              streaming={streaming || enemyTurnStreaming || combatClosing}
+            />
           )}
 
           {isBooted && (

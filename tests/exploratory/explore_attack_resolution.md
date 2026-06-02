@@ -1,16 +1,32 @@
 # Exploratory Tests — Attack Resolution
 
+> ⚠️ **DEPRECATED** — These chains no longer reflect the current attack flow.
+>
+> **What changed:**
+> - NPC attacks no longer come from `%%ATTACK%%` blocks written by the LLM on a regular
+>   player turn. They are resolved by the backend via `POST /enemy_turn` → `%%ACTION%%` →
+>   `_resolve_npc_attack`. See `explore_combat_tracker.md` Chains A–D for current enemy flow.
+> - PC attacks via `%%ATTACK%%` blocks (Chains B–H) are still in the codebase but the
+>   intention is to replace them with `%%ACTION%%` on the player side in a future tier
+>   (CB1.9 player-side action declaration). These chains may still work today but are not
+>   maintained.
+>
+> **Do not use these chains as acceptance criteria.** Refer to:
+> - `explore_combat_tracker.md` — CombatPanel, initiative, HP bars, End Combat
+> - `explore_roll_initiatives.md` — initiative roll flow
+> - *(future)* `explore_enemy_turn.md` — enemy turn via Enemy Turn button
+
 Spec: specs/attack-resolution.feature
 
 **What automated tests cover:** `_roll_dice`, `_parse_attack_line/block`, `_is_pc_attacker`,
 `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `stream_resume_combat`,
 `_build_attack_history_message`, multi-attack queue progression, SSE events, stream filter.
 
-**What these chains verify:** the interactive dice flow as a player experiences it — banner
-rendering, HP bar animation, attack log appearance, and the complete round-trip from
-`%%ATTACK%%` block to resumed GM narration.
+**What these chains verified (historical):** the interactive dice flow as a player experiences
+it — banner rendering, HP bar animation, attack log appearance, and the complete round-trip
+from `%%ATTACK%%` block to resumed GM narration.
 
-**Pre-requisites:** `python dev.py --skip-tests` — stack running, Dev Mode OFF.
+**Pre-requisites (historical):** `python dev.py --skip-tests` — stack running, Dev Mode OFF.
 
 ---
 

@@ -335,11 +335,11 @@ class TestRollInitiativesEndpoint:
 _FULL_TABLE = """
 ## Combatants
 
-| name | hp | ac | init_mod | attacks |
-|------|----|----|----------|---------|
-| Goblin Warchanter | 8 | 14 | +3 | shortbow +5 (1d4+1) |
-| Goblin Warrior 1 | 5 | 16 | +2 | dogslicer +2 (1d4) |
-| Goblin Warrior 2 | 5 | 16 | +0 | dogslicer +2 (1d4) |
+| name | hp | ac | init_mod | melee | ranged |
+|------|----|----|----------|-------|--------|
+| Goblin Warchanter | 8 | 14 | +3 | bite +1 (1d4) | shortbow +5 (1d4+1) |
+| Goblin Warrior 1 | 5 | 16 | +2 | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 2 | 5 | 16 | +0 | dogslicer +2 (1d4) | |
 """
 
 _NO_TABLE = """
@@ -370,9 +370,11 @@ class TestParseEventCombatants:
         assert result["goblin warchanter"]["hp"] == 8
         assert result["goblin warchanter"]["ac"] == 14
 
-    def test_parses_attacks_string(self):
+    def test_parses_attacks_dict(self):
         result = _parse_event_combatants(_FULL_TABLE)
-        assert "shortbow" in result["goblin warchanter"]["attacks"]
+        attacks = result["goblin warchanter"]["attacks"]
+        assert attacks["ranged"] == ["shortbow"]
+        assert attacks["melee"] == ["bite"]
 
     def test_missing_section_returns_empty(self):
         assert _parse_event_combatants(_NO_TABLE) == {}

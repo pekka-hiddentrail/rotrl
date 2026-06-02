@@ -17,7 +17,7 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## Bugs
 
-> All known bugs live in **[BUGS.md](BUGS.md)**. Open items: B-C01, B-C02, B-C03b, B-C04, B-C05, B-Q01.
+> All known bugs live in **[BUGS.md](BUGS.md)**. Open items: B-C02, B-C03b, B-C04, B-C05, B-Q01.
 
 ---
 
@@ -170,14 +170,24 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
-> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 next (damage/standard action); then 1.11 (death/dying/healing).
+> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 in progress (CB1.9-1 done: attack profile, system/user split, if_hit/if_miss, auto-advance, api log); CB1.9-2 next. Then 1.11.
 > See `specs/roll-initiatives.feature` (9 ACs, 18 pytest + 8 Vitest tests).
 
 ---
 
 ## Nice-to-Have
 
-- [ ] **Redesign dice panel** — panel is too large relative to its usage; decide on visibility model and condense the layout
+- [ ] **Action trigger-phrase reference** — build a lookup table (or inline reference in the input bar tooltip) that maps natural-language phrases to their Pathfinder action type, so the player knows what they're spending before they type. Examples:
+  - *"I grab my X"* / *"I draw my sword"* → **Move action** (draw/retrieve item not in hand)
+  - *"I retreat"* / *"I back away"* / *"I disengage"* → **Full-round action — Disengage** (avoids AoO)
+  - *"I shoot at"* / *"I fire my"* → **Standard action — Ranged attack** (equipped ranged weapon)
+  - *"I swing at"* / *"I hit"* / *"I strike"* → **Standard action — Melee attack**
+  - *"I run"* / *"I sprint"* → **Full-round action — Run** (×4 speed, loses DEX to AC)
+  - *"I charge"* → **Full-round action — Charge** (+2 attack, −2 AC until next turn)
+  - *"I cast"* → **Standard action — Cast spell** (possibly full-round for some spells)
+  - *"I shout"* / *"I call out"* → **Free action** (brief communication)
+  - *"I reload"* → **Move action** (most crossbows/firearms)
+  - The reference could appear as a small collapsible cheat-sheet near the input bar, or as a tooltip on a "?" icon. Backend-side, detected phrases could also pre-fill the `%%ROLL%%` type or add a hint to the per-turn prompt so the GM narrates the correct action economy.
 - [ ] Dice panel should always show why the roll is made. As in "X tries to spot..."
 - [ ] Dice panel option A — always visible but collapsed to a thin strip, expands on click
 - [ ] Dice panel option B — show only when a `roll_request` event is active, hide otherwise
@@ -260,6 +270,10 @@ Visual and interaction improvements to the UI. These are not blocked by backend 
 - [ ] **Combat panel — highlight when it is a PC's turn vs. enemy's turn** — the current-actor gold glow exists, but a stronger visual difference (e.g. green row tint for PC turns, red tint for enemy turns) would make the flow clearer, especially on a busy screen.
 
 - [ ] **Input bar — show current combatant's name/portrait during combat** — already partially done via `inputActiveSpeaker`, but B-C02 means the `handleSend` prefix still uses `activeCharacter` instead of the initiative actor. Fixing B-C02 is the prerequisite; the visual is already present.
+
+- [ ] **Action card — richer content and polish** — the initial action card layout (CB1.9-3) uses a minimal mock. Follow-up: decide final information hierarchy (weapon flavour name vs. mechanical name, condition effects applied, death/KO indicator when HP hits 0), typography, colour coding (red for hits, grey for misses), and animation (brief slide-in). Requires CB1.9-3 to land first. *(Blocked on: CB1.9-3)*
+
+- [ ] **Combat action overlay toast** — after a resolved enemy attack, flash a brief ephemeral overlay (auto-dismiss ~2 s) like *"Goblin Warchanter hits Yanyeeku with an arrow!"* on top of the chat area. Pure UI — reads from the same `action_card` SSE payload. Gives the combat kinetic feedback before the player reads the narrative. *(Blocked on: CB1.9-3)*
 
 ---
 

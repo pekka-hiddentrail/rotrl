@@ -13,11 +13,11 @@ npm run test:e2e
 npx playwright test --config playwright.live.config.ts
 ```
 
-Tier 1.7 enemy-turn coverage is implemented at all three automated layers:
+Tier 1.7 / 1.9 enemy-turn and action card coverage:
 
 ```
 python -m pytest tests/test_enemy_turn.py -q -p no:cacheprovider
-cd ui && npm run test -- CombatPanelEnemyTurn.test.tsx App.enemy-turn.test.tsx --run
+cd ui && npm run test -- CombatPanelEnemyTurn.test.tsx App.enemy-turn.test.tsx CombatEventCard.test.tsx --run
 cd ui && npx playwright test enemy-turn.spec.ts
 ```
 
@@ -28,6 +28,15 @@ python -m pytest tests/test_roll_initiatives.py -q -p no:cacheprovider
 cd ui && npm run test -- CombatPanelRollInit.test.tsx App.roll-initiatives.test.tsx --run
 cd ui && npx playwright test initiative-roll.spec.ts
 ```
+
+Streaming marker and enemy-turn loading regressions:
+
+```
+python -m pytest tests/test_stream_filter.py tests/test_event_injection.py -q -p no:cacheprovider
+cd ui && npm run test -- ChatWindow.test.tsx App.enemy-turn.test.tsx --run
+```
+
+These cover the mode contract for `%%EVENT%%`: dev mode shows raw markers for debugging, while normal/full mode hides event tags from player-visible chat. They also cover the empty GM bubble showing three thinking dots while an enemy-turn stream is waiting for its first token.
 
 Start the stack:
 
@@ -54,8 +63,9 @@ python dev.py --skip-tests
 | [explore_session_controls.md](tests/exploratory/explore_session_controls.md) | session-controls | Chains A-F: pre-boot state, post-boot state, purge confirm, rate-limit badge, kill button, benchmarks/coverage buttons |
 | [explore_event_injection.md](tests/exploratory/explore_event_injection.md) | event-injection | Chains A-E: event fires, hidden from player, TTL expiry, wave transition, event map |
 | [explore_logging.md](tests/exploratory/explore_logging.md) | session-logging | Chains A-E: log structure + latency, error-path nulls, session log content, API log browser, listing order |
-| [explore_attack_resolution.md](tests/exploratory/explore_attack_resolution.md) | attack-resolution | Chains A-H: NPC auto-HP update, PC to-hit banner, hit→damage→HP, miss path, multi-attack queue, attack log visual, %%ATTACK%% hidden from player, End Combat clears queue |
+| ~~[explore_attack_resolution.md](tests/exploratory/explore_attack_resolution.md)~~ | attack-resolution | **DEPRECATED** — NPC attacks now via `POST /enemy_turn` + `%%ACTION%%`. PC-side action declaration pending CB1.9. Use `explore_combat_tracker.md` for current flow. |
 | [explore_combat_tracker.md](tests/exploratory/explore_combat_tracker.md) | combat-tracker | Chains A-D: panel appearance + initiative order, HP bar colour shift, condition chip+tooltip, End Combat cleanup |
+| [explore_enemy_turn.md](tests/exploratory/explore_enemy_turn.md) | enemy-turn | Chains A-E: action card before narrative, hit/miss with HP update, weapon profile, close combat, unexpected-section warning |
 | [explore_edge_cases.md](tests/exploratory/explore_edge_cases.md) | (multi-feature) | Chains A-E: long input, NPC typo, two NPCs, stress, delta inspection |
 | [explore_roll_initiatives.md](tests/exploratory/explore_roll_initiatives.md) | roll-initiatives | Chains A-D: initiative banner on combat event, correct PC HP, no panel before roll, rolled order in CombatPanel |
 

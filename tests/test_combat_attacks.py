@@ -199,6 +199,35 @@ class TestResolveNpcAttack:  # AC-002, AC-007
             assert key in result
         assert result["is_pc"] is False
 
+    def test_invalid_damage_expr_deals_zero(self, booted_session):
+        """CB1.9-5: invalid damage_expr → damage_total 0, no HP change, error key present."""
+        _, _, session = _fake_session(booted_session)
+        shalelu_before = next(c for c in session.combat_state.combatants if c.name == "Shalelu")
+        hp_before = shalelu_before.hp_current
+        attack = {"attacker": "Goblin 1", "target": "Shalelu", "bonus": 100, "damage": "d6", "type": "melee"}
+        result = _resolve_npc_attack(attack, session)
+        assert result["hit"] is True
+        assert result["damage_total"] == 0
+        assert result["damage_rolls"] == []
+        assert "error" in result
+        assert "d6" in result["error"]
+        assert shalelu_before.hp_current == hp_before  # no HP was mutated
+
+    def test_invalid_damage_expr_with_spaces(self, booted_session):
+        """CB1.9-5: '1d6 + 3' (spaces around +) is rejected as invalid."""
+        _, _, session = _fake_session(booted_session)
+        attack = {"attacker": "Goblin 1", "target": "Shalelu", "bonus": 100, "damage": "1d6 + 3", "type": "melee"}
+        result = _resolve_npc_attack(attack, session)
+        assert result["damage_total"] == 0
+        assert "error" in result
+
+    def test_valid_damage_expr_has_no_error_key(self, booted_session):
+        """CB1.9-5: valid expr produces no 'error' key in result."""
+        _, _, session = _fake_session(booted_session)
+        attack = {"attacker": "Goblin 1", "target": "Shalelu", "bonus": 100, "damage": "1d6+2", "type": "melee"}
+        result = _resolve_npc_attack(attack, session)
+        assert "error" not in result
+
 
 # ── resolve_attack_roll ───────────────────────────────────────────────────────
 

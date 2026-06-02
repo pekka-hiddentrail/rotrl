@@ -1,7 +1,7 @@
 """Combat Tier 1.7 enemy-turn and close-combat tests.
 
 Spec: specs/enemy-turn.feature
-Covers: enemy-turn.feature AC-001 through AC-012
+Covers: enemy-turn.feature AC-001 through AC-012, AC-016
 Covers: combat-tracker.feature AC-016, AC-017, AC-018
 """
 from __future__ import annotations
@@ -18,8 +18,12 @@ from api.session_manager import (
     GameSession,
     _build_combat_close_directive,
     _build_enemy_turn_query,
+    _build_enemy_turn_system,
+    _build_enemy_turn_user,
     _ENEMY_TURN_SYSTEM,
+    _extract_attack_names,
     _parse_action_block,
+    _parse_event_combatants,
     get_session,
     stream_close_combat,
     stream_enemy_turn,
@@ -74,14 +78,16 @@ class TestActionBlockParser:
             "reason: closest threat"
         )
         assert attack == {
-            "action": "attack",
-            "target": "Vanx",
-            "weapon": "dogslicer",
-            "bonus": "",
-            "damage": "",
-            "ability": "",
+            "action":   "attack",
+            "target":   "Vanx",
+            "weapon":   "dogslicer",
+            "bonus":    "",
+            "damage":   "",
+            "ability":  "",
             "movement": "",
-            "reason": "closest threat",
+            "reason":   "closest threat",
+            "if_hit":   "",
+            "if_miss":  "",
         }
 
         ability = _parse_action_block("action: use_ability | target: Ani | ability: demoralize")
@@ -168,20 +174,29 @@ class TestActionBlockParser:
 
 
 class TestEnemyTurnQuery:
-    def test_enemy_turn_query_lists_actor_allies_pcs_budget_and_action_spec(self):
+    def test_enemy_turn_system_contains_briefing_and_identity(self):
         session = _session()
         session.combat_state = _combat()
-        query = _build_enemy_turn_query(session, "Goblin Warrior 1")
+        system = _build_enemy_turn_system(session, "Goblin Warrior 1")
 
-        assert "Actor: * Goblin Warrior 1: hp 5/5, status active" in query
-        assert "Goblin Warrior 2: hp 5/5" in query
-        assert "Vanx: hp 10/10" in query
-        assert "Ani: hp 9/9" in query
-        assert "Normal turn" in query
-        assert "%%ACTION%%" in query
-        assert "action: attack|use_ability|move|delay" in query
-        assert "bonus:" in query
-        assert "damage:" in query
+        # GM identity header
+        assert "You are the Game Master" in system
+        assert "Pathfinder 1E" in system
+        # Briefing content in the system message
+        assert "Actor: Goblin Warrior 1, active" in system
+        assert "[ENEMY TURN BRIEFING]" in system
+        # Allies: status only, no HP
+        assert "Goblin Warrior 2: active" in system
+        assert "hp 5/5" not in system.split("Player characters")[0]
+        # PCs: HP shown
+        assert "Vanx: hp 10/10" in system
+        assert "Ani: hp 9/9" in system
+        assert "Normal turn" in system
+        assert "%%ACTION%%" in system
+        assert "action: attack|use_ability|move|delay" in system
+        # bonus and damage removed — backend owns mechanics
+        assert "bonus:" not in system
+        assert "damage:" not in system
 
     def test_enemy_turn_query_adjusts_action_budget_for_restrictive_conditions(self):
         session = _session()
@@ -216,18 +231,40 @@ class TestEnemyTurnQuery:
         monkeypatch.setattr(sm, "_call_blocking", fake_call)
         events = _events(list(stream_enemy_turn(session)))
 
-        assert captured["system"] == _ENEMY_TURN_SYSTEM
+        # System must start with the identity header and contain the full briefing
+        assert captured["system"].startswith(_ENEMY_TURN_SYSTEM)
+        assert "[ENEMY TURN BRIEFING]" in captured["system"]
+        # User message is the short turn trigger — no chat history
         assert "old history" not in captured["user"]
+        assert "old history" not in captured["system"]
         assert events[-1]["type"] == "done"
 
 
 class TestEnemyTurnStreaming:
-    def test_stream_enemy_turn_streams_narrative_tokens_without_action_markup(self, monkeypatch):
-        session = _session()
+    def test_dev_mode_streams_full_response_with_all_markers(self, monkeypatch):
+        """B-C01 fix: dev mode shows %%NARRATIVE%%, %%ACTION%%, etc. in token stream."""
+        session = _session()  # dev_mode=True
         session.combat_state = _combat()
         monkeypatch.setattr(
-            sm,
-            "_call_blocking",
+            sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nThe goblin darts in with a shriek.\n\n%%ACTION%%\naction: delay",
+        )
+
+        events = _events(list(stream_enemy_turn(session)))
+        token_text = "".join(e["content"] for e in events if e["type"] == "token")
+
+        assert "The goblin darts in" in token_text
+        assert "%%ACTION%%" in token_text     # dev mode shows all markers
+        assert "%%NARRATIVE%%" in token_text
+        assert events[-1]["type"] == "done"
+
+    def test_non_dev_mode_strips_action_markup(self, monkeypatch):
+        """Non-dev mode: only the narrative sentence reaches the player."""
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(
+            sm, "_call_blocking",
             lambda *_: "%%NARRATIVE%%\nThe goblin darts in with a shriek.\n\n%%ACTION%%\naction: delay",
         )
 
@@ -360,6 +397,8 @@ from api.session_manager import (
 class TestResumeCombatClearsStaleQueue:
     """B-C07: stream_resume_combat must clear orphaned attack_queue entries before
     calling the LLM so a subsequent /enemy_turn call does not return 409.
+
+    Covers: enemy-turn.feature AC-015
     """
 
     def _session_with_stale_queue(self) -> GameSession:
@@ -457,3 +496,469 @@ class TestEnemyTurnStaleQueue:
         with patch.object(sm, "_call_blocking", return_value="%%NARRATIVE%%\nThe goblin sneers.\n%%ACTION%%\naction: delay"):
             resp = client.post(f"/api/sessions/{session_id}/enemy_turn")
         assert resp.status_code == 200
+
+
+# ── AC-016 — _extract_attack_names ───────────────────────────────────────────
+
+class TestExtractAttackNames:
+    """Unit tests for _extract_attack_names — strips bonuses/dice, returns name list."""
+
+    def test_single_attack_with_bonus_and_damage(self):
+        assert _extract_attack_names("shortbow +5 (1d4+1)") == ["shortbow"]
+
+    def test_single_bare_name(self):
+        assert _extract_attack_names("bite") == ["bite"]
+
+    def test_empty_string_returns_empty_list(self):
+        assert _extract_attack_names("") == []
+
+    def test_multi_word_weapon_name(self):
+        assert _extract_attack_names("horse chopper +2 (1d8)") == ["horse chopper"]
+
+    def test_strips_damage_dice_only_no_bonus(self):
+        # weapon_name (damage) format — no + present
+        assert _extract_attack_names("bite (1d4)") == ["bite"]
+
+
+# ── AC-016 — _build_enemy_turn_query attack profile injection ─────────────────
+
+class TestEnemyTurnQueryAttackProfile:
+    """AC-016: attack names injected from pending_combatants; mechanics stripped."""
+
+    def _warchanter_session(self) -> GameSession:
+        session = _session()
+        warchanter_attacks = {"melee": ["bite"], "ranged": ["shortbow"]}
+        warrior_attacks    = {"melee": ["dogslicer"], "ranged": ["shortbow"]}
+        session.combat_state = CombatState(
+            round=2,
+            current_actor="Goblin Warchanter",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Ani", hp_current=9, hp_max=9, ac=15, initiative=12),
+                Combatant(name="Goblin Warchanter", hp_current=6, hp_max=8, ac=14, initiative=18,
+                          attacks=warchanter_attacks),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks=warrior_attacks),
+            ],
+        )
+        return session
+
+    def test_melee_attacks_in_query(self):
+        # Warchanter has melee=["bite"], ranged=["shortbow"]
+        # melee is primary → Equipped weapon: bite
+        session = self._warchanter_session()
+        system = _build_enemy_turn_system(session, "Goblin Warchanter")
+        assert "Equipped weapon: bite" in system
+
+    def test_ranged_attacks_in_query(self):
+        session = self._warchanter_session()
+        system = _build_enemy_turn_system(session, "Goblin Warchanter")
+        assert "Available weapon: shortbow" in system
+
+    def test_mechanics_stripped_from_query(self):
+        session = self._warchanter_session()
+        system = _build_enemy_turn_system(session, "Goblin Warchanter")
+        equipped_line  = next((l for l in system.splitlines() if "Equipped weapon:" in l), "")
+        available_line = next((l for l in system.splitlines() if "Available weapon:" in l), "")
+        assert "+5" not in equipped_line and "+5" not in available_line
+        assert "1d4" not in equipped_line and "1d4" not in available_line
+        assert "bite"     in equipped_line
+        assert "shortbow" in available_line
+
+    def test_only_actor_attacks_injected(self):
+        # Other combatants' attacks must not appear in the actor section
+        session = self._warchanter_session()
+        system = _build_enemy_turn_system(session, "Goblin Warchanter")
+        assert "dogslicer" not in system  # Goblin Warrior 1's weapon
+
+    def test_graceful_fallback_no_attacks_on_combatant(self):
+        session = self._warchanter_session()
+        # Remove attacks from the warchanter combatant
+        for c in session.combat_state.combatants:
+            if c.name == "Goblin Warchanter":
+                c.attacks = {}
+        system = _build_enemy_turn_system(session, "Goblin Warchanter")
+        assert "Melee attacks" not in system
+        assert "Ranged attacks" not in system
+        assert "%%ACTION%%" in system  # rest of system still present
+
+    def test_graceful_fallback_attacks_not_dict(self):
+        session = self._warchanter_session()
+        # Corrupted attacks field
+        for c in session.combat_state.combatants:
+            if c.name == "Goblin Warchanter":
+                c.attacks = None  # type: ignore
+        system = _build_enemy_turn_system(session, "Goblin Warchanter")
+        assert "Melee attacks" not in system
+        assert "Ranged attacks" not in system
+
+
+# ── AC-016 — _parse_event_combatants melee/ranged columns ────────────────────
+
+class TestParseEventCombatantsAttackColumns:
+    """Tests for updated _parse_event_combatants that reads melee/ranged columns."""
+
+    _TABLE_MELEE_RANGED = """
+## Combatants
+
+| name | hp | ac | init_mod | melee | ranged |
+|------|----|----|----------|-------|--------|
+| Goblin Warchanter | 8 | 14 | +3 | bite +1 (1d4) | shortbow +5 (1d4+1) |
+| Goblin Warrior 1 | 5 | 16 | +2 | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+"""
+
+    _TABLE_MELEE_ONLY = """
+## Combatants
+
+| name | hp | ac | init_mod | melee |
+|------|----|----|----------|-------|
+| Cave Bear | 30 | 14 | +1 | claw +8 (1d6+5) |
+"""
+
+    _TABLE_OLD_ATTACKS = """
+## Combatants
+
+| name | hp | ac | init_mod | attacks |
+|------|----|----|----------|---------|
+| Goblin Warchanter | 8 | 14 | +3 | shortbow +5 (1d4+1), bite +1 (1d4) |
+"""
+
+    def test_melee_ranged_columns_parsed(self):
+        result = _parse_event_combatants(self._TABLE_MELEE_RANGED)
+        warchanter = result.get("goblin warchanter", {})
+        attacks = warchanter.get("attacks", {})
+        assert attacks.get("melee") == ["bite"]
+        assert attacks.get("ranged") == ["shortbow"]
+
+    def test_warrior_melee_ranged_columns_parsed(self):
+        result = _parse_event_combatants(self._TABLE_MELEE_RANGED)
+        warrior = result.get("goblin warrior 1", {})
+        attacks = warrior.get("attacks", {})
+        assert attacks.get("melee") == ["dogslicer"]
+        assert attacks.get("ranged") == ["shortbow"]
+
+    def test_melee_only_column_ranged_empty(self):
+        result = _parse_event_combatants(self._TABLE_MELEE_ONLY)
+        bear = result.get("cave bear", {})
+        attacks = bear.get("attacks", {})
+        assert attacks.get("melee") == ["claw"]
+        assert attacks.get("ranged", []) == []
+
+    def test_old_attacks_column_falls_back_gracefully(self):
+        # Old format (single 'attacks' column) — should not crash
+        # attacks dict may be absent or empty — just must not raise
+        result = _parse_event_combatants(self._TABLE_OLD_ATTACKS)
+        assert "goblin warchanter" in result
+        warchanter = result["goblin warchanter"]
+        # hp and ac still parsed
+        assert warchanter.get("hp") == 8
+        assert warchanter.get("ac") == 14
+
+
+# ── AC-006 — _build_enemy_turn_user ──────────────────────────────────────────
+
+class TestEnemyTurnUser:
+    """Tests for the short user-message trigger built by _build_enemy_turn_user."""
+
+    def _session_with_combat(self) -> GameSession:
+        session = _session()
+        session.combat_state = _combat()
+        return session
+
+    def test_last_actor_in_user_message(self):
+        session = self._session_with_combat()
+        session.last_actor = "Goblin Warchanter"
+        msg = _build_enemy_turn_user(session, "Goblin Warrior 1")
+        assert "Goblin Warchanter just acted" in msg
+
+    def test_current_actor_in_user_message(self):
+        session = self._session_with_combat()
+        session.last_actor = "Goblin Warchanter"
+        msg = _build_enemy_turn_user(session, "Goblin Warrior 1")
+        assert "Goblin Warrior 1" in msg
+
+    def test_no_last_actor_uses_round(self):
+        session = self._session_with_combat()
+        session.last_actor = ""
+        msg = _build_enemy_turn_user(session, "Goblin Warrior 1")
+        assert "Round" in msg
+        assert "begins" in msg
+        assert "Goblin Warrior 1" in msg
+
+    def test_round_number_correct(self):
+        session = self._session_with_combat()
+        session.last_actor = ""
+        session.combat_state.round = 3
+        msg = _build_enemy_turn_user(session, "Goblin Warrior 1")
+        assert "Round 3" in msg
+
+
+# ── AC-017 — if_hit / if_miss conditional outcome narration ──────────────────
+
+class TestConditionalOutcomeNarration:
+    """if_hit and if_miss parsed from %%ACTION%%; backend appends correct branch."""
+
+    _HIT_MISS_RESPONSE = (
+        "%%NARRATIVE%%\n"
+        "The goblin charges forward!\n\n"
+        "%%ACTION%%\n"
+        "action: attack\n"
+        "target: Vanx\n"
+        "weapon: dogslicer\n"
+        "if_hit: The blade bites into Vanx's shoulder!\n"
+        "if_miss: Vanx sidesteps and the blow glances off."
+    )
+
+    def test_parse_action_block_extracts_if_hit_and_if_miss(self):
+        parsed = _parse_action_block(self._HIT_MISS_RESPONSE)
+        assert parsed is not None
+        assert parsed["if_hit"]  == "The blade bites into Vanx's shoulder!"
+        assert parsed["if_miss"] == "Vanx sidesteps and the blow glances off."
+
+    def test_parse_action_block_defaults_to_empty_when_absent(self):
+        parsed = _parse_action_block(
+            "%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: dogslicer"
+        )
+        assert parsed is not None
+        assert parsed["if_hit"]  == ""
+        assert parsed["if_miss"] == ""
+
+    def test_hit_outcome_appended_to_narrative_on_hit(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: self._HIT_MISS_RESPONSE)
+        # Force a hit by making AC very low
+        for c in session.combat_state.combatants:
+            if c.name == "Vanx":
+                c.ac = 1
+
+        events = _events(list(stream_enemy_turn(session)))
+        token_text = "".join(e["content"] for e in events if e["type"] == "token")
+
+        assert "The goblin charges forward!" in token_text
+        assert "The blade bites into Vanx's shoulder!" in token_text
+        assert "Vanx sidesteps" not in token_text  # miss branch absent
+
+    def test_miss_outcome_appended_to_narrative_on_miss(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: self._HIT_MISS_RESPONSE)
+        # Force a miss by making AC very high
+        for c in session.combat_state.combatants:
+            if c.name == "Vanx":
+                c.ac = 999
+
+        events = _events(list(stream_enemy_turn(session)))
+        token_text = "".join(e["content"] for e in events if e["type"] == "token")
+
+        assert "The goblin charges forward!" in token_text
+        assert "Vanx sidesteps and the blow glances off." in token_text
+        assert "blade bites" not in token_text  # hit branch absent
+
+    def test_no_outcome_when_if_hit_if_miss_absent(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(
+            sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nThe goblin charges!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: dogslicer",
+        )
+
+        events = _events(list(stream_enemy_turn(session)))
+        token_text = "".join(e["content"] for e in events if e["type"] == "token")
+
+        assert "The goblin charges!" in token_text
+
+    def test_dev_mode_shows_both_branches(self, monkeypatch):
+        session = _session()  # dev_mode=True
+        session.combat_state = _combat()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: self._HIT_MISS_RESPONSE)
+
+        events = _events(list(stream_enemy_turn(session)))
+        token_text = "".join(e["content"] for e in events if e["type"] == "token")
+
+        # Both branches visible in dev mode
+        assert "if_hit" in token_text
+        assert "if_miss" in token_text
+        assert "The blade bites" in token_text
+        assert "Vanx sidesteps" in token_text
+
+
+# ── CB1.9-3 — action_card SSE ordering ────────────────────────────────────────
+
+class TestActionCardOrdering:
+    """action_card is emitted BEFORE the narrative token (CB1.9-3)."""
+
+    _RESPONSE = (
+        "%%NARRATIVE%%\nThe goblin charges!\n\n"
+        "%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: dogslicer\n"
+        "if_hit: A hit!\nif_miss: A miss!"
+    )
+
+    def test_action_card_emitted_before_token(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: self._RESPONSE)
+        # Force a miss (high AC)
+        for c in session.combat_state.combatants:
+            if c.name == "Vanx":
+                c.ac = 999
+
+        events = _events(list(stream_enemy_turn(session)))
+        types = [e["type"] for e in events]
+
+        card_idx  = next((i for i, e in enumerate(events) if e["type"] == "action_card"), None)
+        token_idx = next((i for i, e in enumerate(events) if e["type"] == "token"), None)
+
+        assert card_idx is not None, "action_card event not found"
+        assert token_idx is not None, "token event not found"
+        assert card_idx < token_idx, "action_card must come before token"
+
+    def test_action_card_has_required_fields(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: self._RESPONSE)
+
+        events = _events(list(stream_enemy_turn(session)))
+        card = next((e for e in events if e["type"] == "action_card"), None)
+
+        assert card is not None
+        for field in ("attacker", "target", "roll", "bonus", "total", "ac", "hit", "damage_total", "attack_type"):
+            assert field in card, f"action_card missing field: {field}"
+
+    def test_no_action_card_when_action_is_delay(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(
+            sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nThe goblin waits.\n\n%%ACTION%%\naction: delay",
+        )
+
+        events = _events(list(stream_enemy_turn(session)))
+        card = next((e for e in events if e["type"] == "action_card"), None)
+        assert card is None, "No action_card should be emitted for delay action"
+
+
+# ── CB1.9-2 — weapon validation against combatant profile ────────────────────
+
+class TestWeaponValidation:
+    """Hallucinated weapons fall back to the first known weapon; known weapons pass through."""
+
+    def _session_with_profile(self) -> GameSession:
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = CombatState(
+            round=1,
+            current_actor="Goblin Warrior 1",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks={"melee": ["dogslicer"], "ranged": ["shortbow"]}),
+            ],
+        )
+        return session
+
+    def test_hallucinated_weapon_falls_back_to_melee(self, monkeypatch):
+        session = self._session_with_profile()
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "melee"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin charges!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: longsword")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "melee", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "dogslicer", f"expected dogslicer, got {captured.get('weapon')}"
+
+    def test_known_weapon_unchanged(self, monkeypatch):
+        session = self._session_with_profile()
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "melee"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin charges!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: dogslicer")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "melee", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "dogslicer"
+
+    def test_no_profile_no_validation(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = CombatState(
+            round=1,
+            current_actor="Goblin Warrior 1",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks={}),  # empty profile
+            ],
+        )
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "melee"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin charges!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: longsword")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "melee", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "longsword"  # passed through unchanged
+
+    def test_ranged_fallback_when_no_melee(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = CombatState(
+            round=1,
+            current_actor="Goblin Warrior 1",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks={"melee": [], "ranged": ["shortbow"]}),  # only ranged
+            ],
+        )
+        captured: dict = {}
+
+        def fake_get_attack(action, attacker_name):
+            captured["weapon"] = action.get("weapon")
+            return {"attacker": attacker_name, "target": "Vanx", "bonus": 2, "damage": "1d4", "type": "ranged"}
+
+        monkeypatch.setattr(sm, "_get_attack_for_enemy", fake_get_attack)
+        monkeypatch.setattr(sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nGoblin raises bow!\n\n%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: crossbow")
+        monkeypatch.setattr(sm, "_resolve_npc_attack", lambda attack, s: {
+            "attacker": attack["attacker"], "target": attack["target"], "roll": 10,
+            "bonus": 2, "total": 12, "ac": 18, "hit": False,
+            "damage_rolls": [], "damage_total": 0, "attack_type": "ranged", "is_pc": False,
+        })
+
+        list(stream_enemy_turn(session))
+        assert captured.get("weapon") == "shortbow"

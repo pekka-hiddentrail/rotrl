@@ -7,13 +7,13 @@
 
 ## Combatants
 
-| name | hp | ac | init_mod | attacks |
-|------|----|----|----------|---------|
-| Goblin Warchanter | 8 | 14 | +3 | shortbow +5 (1d4+1), bite +1 (1d4) |
-| Goblin Warrior 1 | 5 | 16 | +2 | dogslicer +2 (1d4), shortbow +4 (1d4) |
-| Goblin Warrior 2 | 5 | 16 | +2 | dogslicer +2 (1d4), shortbow +4 (1d4) |
-| Goblin Warrior 3 | 5 | 16 | +2 | dogslicer +2 (1d4), shortbow +4 (1d4) |
-| Goblin Warrior 4 | 5 | 16 | +2 | dogslicer +2 (1d4), shortbow +4 (1d4) |
+| name | hp | ac | init_mod | melee | ranged |
+|------|----|----|----------|-------|--------|
+| Goblin Warchanter | 8 | 14 | +3 | bite +1 (1d4) | shortbow +5 (1d4+1) |
+| Goblin Warrior 1 | 5 | 16 | +2 | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 2 | 5 | 16 | +2 | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 3 | 5 | 16 | +2 | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 4 | 5 | 16 | +2 | dogslicer +2 (1d4) | shortbow +4 (1d4) |
 
 ## Active Event — Goblin Raid: Wave 1
 

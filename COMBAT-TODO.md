@@ -1,4 +1,4 @@
-# Combat System Backlog
+﻿# Combat System Backlog
 
 All combat-related work lives here. [TODO.md](TODO.md) links here rather than carrying the full tier tree inline.
 
@@ -35,7 +35,7 @@ Items that span multiple combat tiers or require coordination with non-combat la
 
 - [x] **Vitest — attack resolution UI** — 15 tests in `DicePanelAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
 - [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DicePanel.tsx `handleDamageRollClick`)*
-- [ ] **Enemy turn auto-advance policy** — decide whether `POST /enemy_turn` should automatically advance initiative after it emits `combat_update`, or whether the GM should click **Next Turn** explicitly. Add tests for whichever policy wins so enemy turns cannot accidentally repeat the same actor forever.
+- [x] **Enemy turn auto-advance policy** — implemented: `advance_combat_turn(session)` fires automatically at the end of both `stream_enemy_turn` (enemy turns) and `stream_resume_combat` (PC attack resolution). `GameSession.last_actor` tracks the outgoing actor; `_build_enemy_turn_user` uses it to give the LLM narrative continuity between turns (e.g. "Goblin Warchanter just acted. Now it is Goblin Warrior 1's turn."). B-C09 fixed simultaneously.
 
 ---
 
@@ -293,7 +293,7 @@ interaction model entirely.
 > The per-combatant query gives the LLM only `action`, `target`, and flavor — the backend
 > looks up the numbers. See Tier 2 SA-2/SA-6 for the complementary state and dispatch work.
 
-- ~~[ ] **CB1.7-1 — `_ENEMY_TURN_DIRECTIVE` constant**~~ — *obsolete; superseded by
+- ~~[ ] CB1.7-1 — `_ENEMY_TURN_DIRECTIVE` constant~~ — *obsolete; superseded by
   `_build_enemy_turn_query` (CB1.7-2 below). A broad directive that asks the LLM to write
   %%ATTACK%% blocks for all enemies still gives the LLM authority over attack stats.
   The per-combatant query approach removes that authority entirely.*
@@ -417,19 +417,69 @@ Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn 
 
 ---
 
-### Tier 1.9 — Damage Dealing and Standard Action
+### Tier 1.9 — Enemy Turn: Attack Profile + Action Card
 
-The existing attack flow (Tier 1.5) resolves PC attacks through the dice panel and NPC attacks through `_resolve_npc_attack`. This tier makes damage the canonical source of HP change for all standard combat actions, and ensures the LLM never guesses damage outcomes when a dice result is available.
+This tier has two goals: (1) give the LLM the enemy's attack menu so it picks a real weapon instead of inventing one, while keeping all mechanics on the backend; (2) surface the resolved action as a distinct **action card** in the message flow — not a GM bubble, not a player bubble, but a centered combat-event block the player can read at a glance.
 
-> **Goal:** every HP change in combat traces to a backend-resolved dice roll or an explicit `%%HP%%` delta. The LLM narrates outcomes but never writes numbers that modify HP.
+> **Design principle:** the LLM plays the character, not the statblock. It knows *what* the Goblin Warchanter can do by name (`shortbow`, `bite`, `inspire courage`) — it does not see bonuses or damage dice. The backend owns the numbers. The LLM picks based on narrative intent and tactical context.
 
-- [ ] **CB1.9-1 — Enforce `%%HP%%` as the only LLM-initiated HP path** — after Tier 1.1 the LLM is blocked from writing HP in `%%COMBAT%%` blocks. This item closes the remaining gap: the `%%HP%%` block is the *only* way the LLM may propose an HP change (traps, environmental damage, spells, morale effects). Add a parser guard that logs a warning and discards any HP mutation that arrives outside `%%HP%%` or a backend-resolved attack result.
+#### Enemy turn — as implemented (CB1.9-1 complete)
 
-- [ ] **CB1.9-2 — Standard action damage confirmation** — when the LLM's `%%ACTION%%` specifies `action: attack` and the backend resolves it via `_resolve_npc_attack`, the resulting `damage_total` is authoritative. Emit it as an `attack_result` SSE event (already done in Tier 1.7) and ensure the UI displays the damage value before the HP bar animates. No additional confirmation step — the backend result is final.
+**System message** (`_build_enemy_turn_system`): `_ENEMY_TURN_SYSTEM` identity header + full `[ENEMY TURN BRIEFING]` (actor, Equipped/Available weapons from `combatant.attacks`, allies status-only, PCs with HP, action budget, format spec including `if_hit`/`if_miss`).
 
-- [ ] **CB1.9-3 — Damage expression validation** — `_resolve_npc_attack` receives a `damage_expr` string (e.g. `"1d6+2"`). Validate it against `_DAMAGE_EXPR_RE` before calling `_roll_dice`; reject and log malformed expressions rather than crashing. Return `damage_total: 0` with an `error` field on invalid input so the caller can handle gracefully.
+**User message** (`_build_enemy_turn_user`): `"{last_actor} just acted. Now it is {actor.name}'s turn."` or `"Round N begins."` — gives the LLM narrative continuity between turns. `session.last_actor` updated by `advance_combat_turn` before changing `current_actor`.
 
-- [ ] **CB1.9-T — Tests** — `_resolve_npc_attack`: valid expr rolls and applies damage; malformed expr returns `damage_total: 0` with error; HP change outside `%%HP%%`/attack result is discarded with warning logged; `%%HP%%` positive delta (healing) is accepted (prerequisite: CB1.11-3). `test_combat.py` existing HP clamp tests still pass.
+**`%%ACTION%%` format includes:**
+- `if_hit: <one sentence if hit>` / `if_miss: <one sentence if miss>` — backend picks the matching branch and appends it to `%%NARRATIVE%%` text before streaming to the player. Dev mode shows `[HIT]`/`[MISS]` annotation inline.
+
+**Auto-advance:** `advance_combat_turn(session)` fires at end of both `stream_enemy_turn` and `stream_resume_combat` (PC attack resolution). B-C09 fixed.
+
+**API log:** `_call_blocking` now writes to `outputs/api_log/` — enemy turns visible in API Logs panel.
+
+> **Future:** `%%ACTION%%` on PC turns follows the same pattern once player-side action declaration is designed. Enemy first.
+
+#### Action card (CB1.9-3)
+
+When the backend resolves an enemy attack, emit a new SSE event type `action_card` that the frontend renders as a centered inline block in the chat flow:
+
+```
+┌──────────────────────────────────────┐
+│ ⚔ Goblin Warchanter → Yanyeeku       │
+│ shortbow · rolled 15 +5 = 20 vs AC 12│
+│ HIT — 3 damage                        │
+│ Yanyeeku: 7 → 4 HP                   │
+└──────────────────────────────────────┘
+```
+
+Content and styling are a starting point — see TODO.md GUI Improvements for the polish item.
+
+---
+
+- [x] **CB1.9-1 — Enemy turn prompt: attack profile, system/user split, if_hit/if_miss, auto-advance, api log** — `Combatant.attacks` dict seeded from event file melee/ranged columns; persists past initiative roll. `_build_enemy_turn_system` puts full briefing in the system message; `_build_enemy_turn_user` is the short turn trigger with `last_actor` continuity. `%%ACTION%%` format adds `if_hit`/`if_miss`; backend picks the matching branch and injects it into the narrative before streaming. `advance_combat_turn` fires automatically after enemy turns (and PC attack resolution — B-C09). `_call_blocking` logs to api_log (B-C01 dev-mode fix included). 978 pytest passing.
+
+- [x] **CB1.9-2 — Backend validates chosen weapon against profile** — in `_parse_action_block` or `_execute_action`, when `action: attack` is declared, check that `weapon` matches a known attack name in `pending_combatants`. If no match (LLM hallucinated a weapon), fall back to the first available attack and log a warning. This prevents phantom weapons from reaching `_resolve_npc_attack`.
+
+- [x] **CB1.9-3 — `action_card` SSE event and frontend action card component** — after `_resolve_npc_attack` resolves an enemy attack, emit `{ type: "action_card", attacker, target, weapon, roll, bonus, total, ac, hit, damage_total, hp_before, hp_after }`. Frontend renders this as a new message type (role: `"action"`) in the chat flow — centered, distinct from GM/player bubbles. Use the mock content above as the initial layout. *(See TODO.md GUI Improvements for the polish/content TODO.)*
+
+- [ ] **CB1.9-4 — Strip `%%HP%%` from the LLM spec**
+
+  `%%HP%%` is the only remaining place where the LLM writes numbers that directly mutate HP.
+  Nothing validates the delta; the LLM can write `delta: -99` and the backend applies it without
+  question. HP is backend-owned everywhere else — this is the exception that should not exist.
+
+  **Immediate step:** remove `%%HP%%` from `_COMBAT_SECTION_SPECS` so the LLM is never
+  instructed to write it. Update the stream processors (lines ~2910 and ~3037) to silently
+  discard any `%%HP%%` block that arrives anyway, with a dev-mode log warning. Healing and
+  trap damage become narration-only until backend sources exist.
+
+  **Replacement sources (Tier 3 — corner cases, out of scope now):**
+  - *Traps / hazards* — event file `## Hazards` table + `%%ACTION%% action: trigger_trap`
+  - *Poison / DoT* — condition tick applied by backend at turn start (see CB1.11-2)
+  - *Healing* — PC spell/item profiles, `%%ACTION%% action: heal · source: cure_light_wounds`
+
+- [x] **CB1.9-5 — Damage expression validation** — `_resolve_npc_attack` validates `damage_expr` against `_DICE_EXPR_RE` before calling `_roll_dice`. On mismatch: `damage_total: 0`, no HP mutation, dev-mode log warning, `error` key added to the result dict (surfaces in `action_card` SSE). Valid expressions produce no `error` key. 3 new tests in `test_combat_attacks.py` — invalid bare `d6`, spaced `1d6 + 3`, and valid expr has no error. 49 pytest passing.
+
+- [x] **CB1.9-T — Tests** — `TestEnemyTurnQuery` (system/user split); `TestEnemyTurnQueryAttackProfile` (combatant.attacks); `TestEnemyTurnUser` (4 tests, last_actor continuity); `TestConditionalOutcomeNarration` (6 tests, if_hit/if_miss); `TestActionCardOrdering` (3 tests, action_card before token, required fields, no card for delay); dev/non-dev mode tests for B-C01 fix. 981 pytest + `CombatEventCard.test.tsx` (8 Vitest) all passing. All CB1.9 items complete. 985 pytest passing.
 
 ---
 
@@ -603,12 +653,34 @@ enemy query system; Tier 1.7 is the query/parse side.
   `_resolve_npc_attack` gains a path that reads `bonus` and `damage` from the attack dict
   when available (overriding the caller-supplied values).
 
+- [ ] **CB2-SA6-3 — Range bands / theatre-of-the-mind positioning** — add lightweight
+  `range_band` / `position` information to combatants and/or pairwise target context so combat
+  can reason about distance without a grid. Suggested bands: `melee` (already in the thick of it),
+  `close` (one move action, roughly 20-40 ft, can reach melee this turn), `medium` (two moves or
+  a charge, roughly 50-70 ft), and `long` (multiple turns, roughly 120-160 ft). `_build_enemy_turn_query`
+  should expose approximate target bands instead of exact coordinates; `_execute_action` should
+  update bands for `move_toward`, `move_away`, `withdraw`, and charge-like actions. Attack/spell
+  validation should use bands to reject impossible melee attacks, permit close-range movement into
+  melee, and flag ranged/spell choices that exceed their effective band. Keep this deliberately
+  abstract: no map, no measured squares, just enough state for action economy and targeting.
+
+- [ ] **CB2-SA6-4 — Player action keyword detection and weapon clarification** — add a lightweight
+  intent layer for combat player input that maps natural phrasing onto executable action keywords:
+  `strike`, `hit`, `stab`, `slash` -> `attack`; `shoot`, `fire`, `loose an arrow` -> `ranged_attack`;
+  `cast`, spell names -> `cast`; `withdraw`, `move back`, `retreat` -> movement actions. Resolve the
+  chosen action against the active character's equipped/available weapons and spells. If exactly one
+  valid weapon fits, proceed automatically; if multiple fit (for example sword vs dagger, bow vs
+  thrown weapon), ask a short clarification; if none fit, surface why and suggest a valid action.
+  Tests should cover synonym mapping, equipped-weapon filtering, ambiguous melee/ranged choices,
+  no-valid-weapon fallback, and preserving the original player phrasing for the GM narrative.
+
 - [ ] **CB2-SA6-T — Tests** — `_execute_action` with `action: attack` calls `_resolve_npc_attack`;
   with `action: delay` skips and returns `[]`; unknown action returns `[]` and logs warning;
   `attacks` field populated after SA-2 seeding; `_serialize_combat_state` includes attacks
   and abilities; `state.json` written after `_execute_action`.
 
 #### SA-7 — Conditions with Mechanical Effects
+
 
 Moved from former Tier 1.8. Requires SA-2 (authoritative combatant stats) so that modifiers
 apply to canonical values, not LLM-invented ones. Condition chips (CB1.5-11) are already
@@ -636,6 +708,58 @@ display-only; this tier gives them mechanical teeth.
   condition and combination; Prone AC penalty applies to target AC in attack resolution;
   Staggered attacker cannot full-attack; Nauseated attacker blocked; no conditions returns
   `(0, 0)`.
+
+---
+
+### Tier 2.5 — Action Economy (Movement and Non-Attack Actions)
+
+PF1e has a structured action economy that is currently invisible to the system. The LLM narrates
+movement and non-attack actions in free-form prose, but nothing enforces or tracks what action
+type was spent. This tier adds awareness of the full action menu.
+
+- [ ] **Action type taxonomy** — define the recognised action types in a rule file:
+  Standard, Move, Full-Round, Swift, Immediate, Free, 5-foot step.
+  Include common trigger phrases for each (e.g. *"I draw"* / *"I grab"* → Move;
+  *"I retreat"* / *"I disengage"* → Full-Round Disengage; *"I cast"* → Standard or Full-Round;
+  *"I shout"* → Free; *"I reload"* → Move). This becomes the lookup table referenced in TODO.md
+  **Action trigger-phrase reference**.
+
+- [ ] **`%%ACTION%%` block gains `action_type` field** — currently the enemy-turn `%%ACTION%%`
+  block carries `attack` or `delay`. Extend to carry `action_type: standard|move|full|swift|free`
+  so the backend can validate that a full-round action isn't used on the same turn as a standard.
+
+- [ ] **Movement handling** — `%%ACTION%%` with `action_type: move` and optional `distance: 30`
+  and `destination: "behind the pillar"`. Backend notes the movement in the session log and
+  (optionally) updates a future `position` field on the combatant. No grid needed — destination
+  is narrative only for now.
+
+- [ ] **Swift and immediate actions** — `%%ACTION%%` with `action_type: swift` or `immediate`.
+  Backend tracks whether the swift-action slot has been used this turn (one per turn) and the
+  immediate-action slot (once between turns). Violations produce a GM warning injected into the
+  next per-turn prompt.
+
+- [ ] **Free actions and talking** — `action_type: free` with `description:` field. No resource
+  tracking needed; backend logs it for the session record.
+
+- [ ] **5-foot step** — `action_type: five_foot_step`. Only legal if no other movement occurred
+  this turn; backend validates and logs. Useful for melee positioning.
+
+- [ ] **Action type picker in InputBar** — during a PC's combat turn, show a row of compact
+  action-type buttons above (or beside) the text input: **Standard · Move · Full-Round · Swift · Free**.
+  Selecting one pre-tags the outgoing message so the LLM doesn't have to guess from prose alone.
+  The selected type is injected as a prefix into `sentInput` (e.g. `[Standard action] @Vanx: "I cast ray of frost at the goblin"`).
+  Optionally, selecting Full-Round could grey out the Swift slot for that turn.
+  Buttons are only shown when `combatState` is active and it is a PC's turn (same gate as the
+  initiative-actor speaker fix). Deselects automatically when the turn advances.
+
+- [ ] **Click-to-target enemy in CombatPanel** — clicking a non-active combatant row in the
+  CombatPanel marks them as the current target (`selectedTarget` state in App.tsx). The target
+  name is shown as a small badge near the InputBar ("🎯 Goblin Warrior 2") and is automatically
+  appended to the outgoing message prefix (e.g. `[Standard action] @Vanx: "..." → target: Goblin Warrior 2`).
+  The LLM receives an unambiguous target so it can write the correct `%%ATTACK%%` or narrative
+  block without guessing from prose. Target is cleared when the turn advances or combat ends.
+  Visual: selected row gets a subtle highlight (e.g. `combatant-targeted` CSS class with a red
+  outline or crosshair icon). Clicking the same row again deselects.
 
 ---
 

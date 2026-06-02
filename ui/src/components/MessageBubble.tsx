@@ -69,6 +69,26 @@ function PartyLabel() {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function MessageBubble({ message, isLast, streaming }: Props) {
+  if (message.role === 'combat-event' && message.attackResult) {
+    const r = message.attackResult
+    const weapon = r.attack_type === 'ranged' ? '🏹' : '⚔'
+    const bonusStr = r.bonus >= 0 ? `+${r.bonus}` : String(r.bonus)
+    const hitLabel = r.hit ? `HIT — ${r.damage_total} damage` : 'MISS'
+    return (
+      <div className="combat-event-row">
+        <div className="combat-event-card">
+          <div className="combat-event-attacker">{weapon} {r.attacker} → {r.target}</div>
+          <div className="combat-event-roll">
+            {r.attack_type} · {r.roll} {bonusStr} = {r.total} vs AC {r.ac}
+          </div>
+          <div className={`combat-event-outcome ${r.hit ? 'combat-event-hit' : 'combat-event-miss'}`}>
+            {hitLabel}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (message.role === 'ending') {
     return (
       <div className="ending-card">
@@ -97,10 +117,18 @@ export default function MessageBubble({ message, isLast, streaming }: Props) {
   }
 
   if (message.role === 'gm') {
+    const showThinkingDots = isLast && streaming && message.content.trim() === ''
     return (
       <div className="bubble-row gm">
         <div className="bubble-label">GM</div>
-        <div className="bubble bubble-gm">
+        <div className={`bubble bubble-gm${showThinkingDots ? ' thinking-bubble' : ''}`}>
+          {showThinkingDots && (
+            <>
+              <span className="thinking-dot" style={{ animationDelay: '0ms' }} />
+              <span className="thinking-dot" style={{ animationDelay: '160ms' }} />
+              <span className="thinking-dot" style={{ animationDelay: '320ms' }} />
+            </>
+          )}
           {message.content}
           {isLast && streaming && <span className="cursor">▋</span>}
         </div>
