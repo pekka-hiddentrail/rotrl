@@ -1075,6 +1075,10 @@ class GameSession:
     # "combat_update" so the UI can prompt the player to click Roll Initiatives.
     # Cleared after the initiative_pending SSE is emitted OR after roll_combat_initiatives.
     _await_initiative_roll: bool = False
+    # Set True by stream_resume_combat so that _stream_chat auto-advances to the next
+    # combatant before emitting the final combat_update SSE.  Mirrors the auto-advance
+    # that stream_enemy_turn already does at the end of each enemy turn.
+    _advance_combat_after_stream: bool = False
     # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
     # Cleared to None when round == 0 or all combatants are inactive.
     combat_state: Optional[CombatState] = None
@@ -3093,6 +3097,14 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     if roll_data:
         yield f"data: {json.dumps({'type': 'roll_request', **roll_data})}\n\n"
 
+    # Auto-advance to next combatant after PC attack resolution (stream_resume_combat)
+    if session._advance_combat_after_stream and session.combat_state is not None:
+        session._advance_combat_after_stream = False
+        try:
+            advance_combat_turn(session)
+        except ValueError:
+            _write_session_state(session)
+
     # Combat state — emitted as initiative_pending when waiting for player to roll,
     # otherwise as combat_update (null when no combat so UI can show/hide panel).
     if session._await_initiative_roll:
@@ -3753,6 +3765,9 @@ def stream_resume_combat(session: GameSession) -> Generator[str, None, None]:
     session.attack_results = []
     # Delegate to the main turn streamer — the attack results message is already
     # appended to session.messages, so the LLM sees them as the latest user turn.
+    # Set the flag so _stream_chat auto-advances to the next combatant before emitting
+    # the final combat_update (mirrors stream_enemy_turn's auto-advance).
+    session._advance_combat_after_stream = True
     yield from _stream_chat(session)
 
 

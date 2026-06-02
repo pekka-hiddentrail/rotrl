@@ -63,6 +63,10 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
     `- name: …` row."*
   *(spec: combat-tracker.feature; enemy-turn.feature)*
 
+- [x] **B-C09 — Turn counter does not advance after PC attack resolves** — After a PC completes their attack (rolls to-hit + damage, `stream_resume_combat` narrates the outcome), the initiative tracker stays on the same combatant. The GM must click "Next Turn →" manually to move to the next actor. For enemy turns, `advance_combat_turn` already fires automatically at the end of `stream_enemy_turn`; the same behaviour is missing from the PC path.
+  **Fix:** At the end of `stream_resume_combat`, call `advance_combat_turn(session)` before emitting the final `combat_update` SSE, so the next combatant is highlighted without a manual click.
+  *(api/session_manager.py `stream_resume_combat`; mirrors the enemy-turn fix in `stream_enemy_turn`)*
+
 ---
 
 ### Code Quality
