@@ -915,6 +915,10 @@ body {
   min-width: 64px;
 }
 
+.thinking-bubble .cursor {
+  display: none;
+}
+
 .thinking-dot {
   width: 8px;
   height: 8px;

@@ -147,7 +147,7 @@ The GM response is structured internally into sections that are stripped before 
 | `%%ATTACK%%` | One line per attack this round — `attacker · target · bonus · damage · type`; NPC attacks auto-resolved, PC attacks queued for player dice |
 | `%%ACTION%%` | Focused enemy-turn response — `action`, `target`, `weapon`/`ability`/`movement`, and `reason`; parsed by the backend and stripped from player-facing text |
 
-In **dev mode** all markers are visible in the stream so you can see the raw output.
+In **dev mode** all markers are visible in the stream so you can see the raw output, including `%%EVENT%%` tags. In full mode the stream filter forwards only narrative text and hides control sections such as `%%EVENT%%`.
 
 ### Output files and directories
 
@@ -166,7 +166,7 @@ In **dev mode** all markers are visible in the stream so you can see the raw out
 
 | | Dev mode | Full mode |
 |-|----------|-----------|
-| Stream filter | All tokens visible (markers shown) | Only `%%NARRATIVE%%` streamed |
+| Stream filter | All tokens visible (markers shown, including `%%EVENT%%`) | Only `%%NARRATIVE%%` streamed; control sections such as `%%EVENT%%` are hidden |
 | History sent | last **6** messages | last **10** (Groq) / **30** (Ollama) messages |
 | `patch_last` event | Suppressed (raw text stays in UI) | Sent (strips markers from display) |
 | System prompt | Same full prompt | Same full prompt |
@@ -363,6 +363,8 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_prompt_audit.py` | Verifies `scripts/build_coverage.py` produces `outputs/coverage.json` with the expected `summary.total`, `summary.covered`, `summary.gap` keys and correct row schema |
 
 **Frontend:** 230+ Vitest tests passing across 15 test files (run separately — `cd ui && npm run test`):
+
+Recent streaming regressions are covered explicitly: `test_stream_filter.py` asserts dev mode passes raw `%%EVENT%%` tokens while full mode hides them, `test_event_injection.py` asserts event tags do not leak to player-visible non-dev chat, `ChatWindow.test.tsx` covers empty GM bubbles with three thinking dots, and `App.enemy-turn.test.tsx` covers the enemy-turn pre-token loading state.
 
 | File | Covers |
 |------|--------|

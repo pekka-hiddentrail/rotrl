@@ -68,7 +68,7 @@ And   no %%MARKER%% text is visible to the player
 
 ```gherkin
 Given dev mode is on
-When  the LLM response contains %%NARRATIVE%%, %%ROLL%%, %%DELTAS%% markers
+When  the LLM response contains %%NARRATIVE%%, %%ROLL%%, %%DELTAS%%, or %%EVENT%% markers
 Then  all tokens including the markers are streamed directly to the chat
 And   no patch_last event is emitted
 ```

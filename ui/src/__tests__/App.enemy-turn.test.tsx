@@ -118,6 +118,21 @@ describe('App - enemy turn stream wiring', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Enemy Turn' })).toBeEnabled(), { timeout: 8000 })
   }, 15000)
 
+  it('shows GM thinking dots while an enemy_turn SSE stream waits for its first token', async () => {
+    const user = userEvent.setup()
+    const stalled = makeStalledGen()
+    mockRunEnemyTurn.mockImplementation(() => stalled.gen)
+    await bootIntoCombat(user)
+
+    await user.click(screen.getByRole('button', { name: 'Enemy Turn' }))
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('.bubble-gm.thinking-bubble .thinking-dot')).toHaveLength(3)
+    }, { timeout: 8000 })
+    stalled.release()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enemy Turn' })).toBeEnabled(), { timeout: 8000 })
+  }, 15000)
+
   it('appends token events and updates CombatPanel HP from combat_update events', async () => {
     const user = userEvent.setup()
     const damagedState: CombatState = {

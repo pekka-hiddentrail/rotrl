@@ -1,4 +1,4 @@
-# Combat System Backlog
+﻿# Combat System Backlog
 
 All combat-related work lives here. [TODO.md](TODO.md) links here rather than carrying the full tier tree inline.
 
@@ -293,7 +293,7 @@ interaction model entirely.
 > The per-combatant query gives the LLM only `action`, `target`, and flavor — the backend
 > looks up the numbers. See Tier 2 SA-2/SA-6 for the complementary state and dispatch work.
 
-- ~~[ ] **CB1.7-1 — `_ENEMY_TURN_DIRECTIVE` constant**~~ — *obsolete; superseded by
+- ~~[ ] CB1.7-1 — `_ENEMY_TURN_DIRECTIVE` constant~~ — *obsolete; superseded by
   `_build_enemy_turn_query` (CB1.7-2 below). A broad directive that asks the LLM to write
   %%ATTACK%% blocks for all enemies still gives the LLM authority over attack stats.
   The per-combatant query approach removes that authority entirely.*
@@ -417,19 +417,57 @@ Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn 
 
 ---
 
-### Tier 1.9 — Damage Dealing and Standard Action
+### Tier 1.9 — Enemy Turn: Attack Profile + Action Card
 
-The existing attack flow (Tier 1.5) resolves PC attacks through the dice panel and NPC attacks through `_resolve_npc_attack`. This tier makes damage the canonical source of HP change for all standard combat actions, and ensures the LLM never guesses damage outcomes when a dice result is available.
+This tier has two goals: (1) give the LLM the enemy's attack menu so it picks a real weapon instead of inventing one, while keeping all mechanics on the backend; (2) surface the resolved action as a distinct **action card** in the message flow — not a GM bubble, not a player bubble, but a centered combat-event block the player can read at a glance.
 
-> **Goal:** every HP change in combat traces to a backend-resolved dice roll or an explicit `%%HP%%` delta. The LLM narrates outcomes but never writes numbers that modify HP.
+> **Design principle:** the LLM plays the character, not the statblock. It knows *what* the Goblin Warchanter can do by name (`shortbow`, `bite`, `inspire courage`) — it does not see bonuses or damage dice. The backend owns the numbers. The LLM picks based on narrative intent and tactical context.
 
-- [ ] **CB1.9-1 — Enforce `%%HP%%` as the only LLM-initiated HP path** — after Tier 1.1 the LLM is blocked from writing HP in `%%COMBAT%%` blocks. This item closes the remaining gap: the `%%HP%%` block is the *only* way the LLM may propose an HP change (traps, environmental damage, spells, morale effects). Add a parser guard that logs a warning and discards any HP mutation that arrives outside `%%HP%%` or a backend-resolved attack result.
+#### Enemy turn prompt shape (CB1.9-1)
 
-- [ ] **CB1.9-2 — Standard action damage confirmation** — when the LLM's `%%ACTION%%` specifies `action: attack` and the backend resolves it via `_resolve_npc_attack`, the resulting `damage_total` is authoritative. Emit it as an `attack_result` SSE event (already done in Tier 1.7) and ensure the UI displays the damage value before the HP bar animates. No additional confirmation step — the backend result is final.
+```
+You are the Goblin Warchanter — raid leader, Wave 1.
 
-- [ ] **CB1.9-3 — Damage expression validation** — `_resolve_npc_attack` receives a `damage_expr` string (e.g. `"1d6+2"`). Validate it against `_DAMAGE_EXPR_RE` before calling `_roll_dice`; reject and log malformed expressions rather than crashing. Return `damage_total: 0` with an `error` field on invalid input so the caller can handle gracefully.
+Tactical note: Will not engage melee unless cornered. Priority: stay behind warriors and inspire them. Silencing her ends Wave 1.
 
-- [ ] **CB1.9-T — Tests** — `_resolve_npc_attack`: valid expr rolls and applies damage; malformed expr returns `damage_total: 0` with error; HP change outside `%%HP%%`/attack result is discarded with warning logged; `%%HP%%` positive delta (healing) is accepted (prerequisite: CB1.11-3). `test_combat.py` existing HP clamp tests still pass.
+Available attacks: shortbow, bite
+Available abilities: inspire courage
+
+It is your turn. Write %%NARRATIVE%% from the Warchanter's perspective (1–2 sentences), then %%ACTION%%.
+```
+
+The attack/ability names come from `pending_combatants[name]["attacks"]` (seeded from the event file `## Combatants` table). The tactical note comes from the event file's combatant-specific prose. The backend resolves the chosen weapon against its full stat line — the LLM never sees the numbers.
+
+> **Future:** `%%ACTION%%` on PC turns follows the same pattern once player-side action declaration is designed. Enemy first.
+
+#### Action card (CB1.9-3)
+
+When the backend resolves an enemy attack, emit a new SSE event type `action_card` that the frontend renders as a centered inline block in the chat flow:
+
+```
+┌──────────────────────────────────────┐
+│ ⚔ Goblin Warchanter → Yanyeeku       │
+│ shortbow · rolled 15 +5 = 20 vs AC 12│
+│ HIT — 3 damage                        │
+│ Yanyeeku: 7 → 4 HP                   │
+└──────────────────────────────────────┘
+```
+
+Content and styling are a starting point — see TODO.md GUI Improvements for the polish item.
+
+---
+
+- [ ] **CB1.9-1 — Inject attack profile into `_build_enemy_turn_query`** — when building the enemy turn prompt, look up `session.pending_combatants[name.lower()]` for `attacks` and `abilities` fields. Format them as plain name lists (no bonuses or damage dice — those stay in the backend). Include any single-combatant tactical note extracted from the event file content (look for the combatant's bold name paragraph). Fall back gracefully when no profile is available.
+
+- [ ] **CB1.9-2 — Backend validates chosen weapon against profile** — in `_parse_action_block` or `_execute_action`, when `action: attack` is declared, check that `weapon` matches a known attack name in `pending_combatants`. If no match (LLM hallucinated a weapon), fall back to the first available attack and log a warning. This prevents phantom weapons from reaching `_resolve_npc_attack`.
+
+- [ ] **CB1.9-3 — `action_card` SSE event and frontend action card component** — after `_resolve_npc_attack` resolves an enemy attack, emit `{ type: "action_card", attacker, target, weapon, roll, bonus, total, ac, hit, damage_total, hp_before, hp_after }`. Frontend renders this as a new message type (role: `"action"`) in the chat flow — centered, distinct from GM/player bubbles. Use the mock content above as the initial layout. *(See TODO.md GUI Improvements for the polish/content TODO.)*
+
+- [ ] **CB1.9-4 — Enforce `%%HP%%` as the only LLM-initiated HP path** — the `%%HP%%` block is the *only* way the LLM may propose an HP change outside of structured attack resolution (traps, environmental damage, spells, morale effects). Add a parser guard that logs a warning and discards any HP mutation that arrives outside `%%HP%%` or a backend-resolved `action_card`.
+
+- [ ] **CB1.9-5 — Damage expression validation** — `_resolve_npc_attack` receives a `damage_expr` string from the bestiary/event profile. Validate it against `_DAMAGE_EXPR_RE` before rolling; return `damage_total: 0` with an `error` field on invalid input.
+
+- [ ] **CB1.9-T — Tests** — `_build_enemy_turn_query`: attack names injected from pending_combatants; falls back gracefully when absent; tactical note included when present. `_parse_action_block`: unknown weapon falls back to first known attack. `action_card` SSE: emitted after `_resolve_npc_attack` with correct fields. Frontend: action card renders in chat flow with hit/miss styling. `test_combat.py` existing HP clamp tests still pass.
 
 ---
 
@@ -603,12 +641,34 @@ enemy query system; Tier 1.7 is the query/parse side.
   `_resolve_npc_attack` gains a path that reads `bonus` and `damage` from the attack dict
   when available (overriding the caller-supplied values).
 
+- [ ] **CB2-SA6-3 — Range bands / theatre-of-the-mind positioning** — add lightweight
+  `range_band` / `position` information to combatants and/or pairwise target context so combat
+  can reason about distance without a grid. Suggested bands: `melee` (already in the thick of it),
+  `close` (one move action, roughly 20-40 ft, can reach melee this turn), `medium` (two moves or
+  a charge, roughly 50-70 ft), and `long` (multiple turns, roughly 120-160 ft). `_build_enemy_turn_query`
+  should expose approximate target bands instead of exact coordinates; `_execute_action` should
+  update bands for `move_toward`, `move_away`, `withdraw`, and charge-like actions. Attack/spell
+  validation should use bands to reject impossible melee attacks, permit close-range movement into
+  melee, and flag ranged/spell choices that exceed their effective band. Keep this deliberately
+  abstract: no map, no measured squares, just enough state for action economy and targeting.
+
+- [ ] **CB2-SA6-4 — Player action keyword detection and weapon clarification** — add a lightweight
+  intent layer for combat player input that maps natural phrasing onto executable action keywords:
+  `strike`, `hit`, `stab`, `slash` -> `attack`; `shoot`, `fire`, `loose an arrow` -> `ranged_attack`;
+  `cast`, spell names -> `cast`; `withdraw`, `move back`, `retreat` -> movement actions. Resolve the
+  chosen action against the active character's equipped/available weapons and spells. If exactly one
+  valid weapon fits, proceed automatically; if multiple fit (for example sword vs dagger, bow vs
+  thrown weapon), ask a short clarification; if none fit, surface why and suggest a valid action.
+  Tests should cover synonym mapping, equipped-weapon filtering, ambiguous melee/ranged choices,
+  no-valid-weapon fallback, and preserving the original player phrasing for the GM narrative.
+
 - [ ] **CB2-SA6-T — Tests** — `_execute_action` with `action: attack` calls `_resolve_npc_attack`;
   with `action: delay` skips and returns `[]`; unknown action returns `[]` and logs warning;
   `attacks` field populated after SA-2 seeding; `_serialize_combat_state` includes attacks
   and abilities; `state.json` written after `_execute_action`.
 
 #### SA-7 — Conditions with Mechanical Effects
+
 
 Moved from former Tier 1.8. Requires SA-2 (authoritative combatant stats) so that modifiers
 apply to canonical values, not LLM-invented ones. Condition chips (CB1.5-11) are already

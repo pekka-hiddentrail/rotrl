@@ -344,12 +344,42 @@ And   a subsequent POST /enemy_turn call returns 200 (not 409) once attacks are 
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-016 — _build_enemy_turn_query includes actor's attack names by type (CB1.9-1)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Actor has a known attack profile in pending_combatants
+
+```gherkin
+Given session.pending_combatants["goblin warchanter"]["attacks"] ==
+      {"melee": ["bite"], "ranged": ["shortbow"]}
+When  _build_enemy_turn_query(session, "Goblin Warchanter") is called
+Then  the output contains "Melee attacks: bite"
+And   the output contains "Ranged attacks: shortbow"
+And   the output does NOT contain "+5" or "1d4"  (mechanics stripped — LLM sees names only)
+And   no attack names from other combatants appear in the actor's section
+```
+
+**Scenario:** No profile exists for the actor
+
+```gherkin
+Given session.pending_combatants is empty
+When  _build_enemy_turn_query is called for any combatant
+Then  no "Melee attacks" or "Ranged attacks" line appears in the output
+And   the query is otherwise identical to the profile-absent case
+```
+
+> **Design note:** The LLM sees weapon names only — no bonuses, no damage dice. The backend
+> owns the mechanics and looks them up from `pending_combatants` when resolving the attack.
+> The split into `melee` / `ranged` categories gives the LLM enough tactical context to make
+> a sensible decision (does the target need to be adjacent?).
+
+---
+
 ## Out of Scope
 
 - `_execute_action` full dispatch table (Tier 2 SA-6) — actions beyond `attack` and `delay`
   are logged but not mechanically resolved in Tier 1.7
-- Combatant attack/ability seeding from event files (Tier 2 SA-2) — attacks list is empty in
-  Tier 1.7; `_get_attack_for_enemy` uses defaults (+0 to hit, 1d4 damage)
 - PC `attack_request` during enemy turn — enemy attacks are always auto-resolved server-side
 - Multi-combatant enemy turn loop — CB1.7-3 endpoint resolves one combatant per call;
   the UI calls it per-combatant by advancing with `combat/advance_turn` between enemy actions
@@ -371,6 +401,12 @@ And   a subsequent POST /enemy_turn call returns 200 (not 409) once attacks are 
 - `_get_attack_for_enemy(session, attacker_name, weapon_name) → dict` — returns
   `{"bonus": N, "damage_expr": "NdN+M", "type": "melee|ranged"}` from `combatant.attacks`
   when available; falls back to `{"bonus": 0, "damage_expr": "1d4", "type": "melee"}`.
+- `_extract_attack_names(raw: str) → list[str]` (CB1.9-1) — strips bonus and damage from a
+  single weapon string. `"shortbow +5 (1d4+1)"` → `["shortbow"]`. Splits on comma first for
+  multi-weapon strings.
+- **`pending_combatants[name]["attacks"]` shape (CB1.9-1):** `{"melee": ["bite"], "ranged": ["shortbow"]}`.
+  Parsed by `_parse_event_combatants` from the `melee` and `ranged` columns of the
+  `## Combatants` table. Names only — bonuses and damage dice stripped at parse time.
 - `_build_combat_close_directive(session) → str` — injects the combat snapshot without using
   `_build_combat_system_prompt`. Short directive (~10 lines).
 - `stream_close_combat(session)` — blocking LLM call, streams narrative as tokens, clears

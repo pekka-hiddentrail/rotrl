@@ -1,7 +1,7 @@
 """Combat Tier 1.7 enemy-turn and close-combat tests.
 
 Spec: specs/enemy-turn.feature
-Covers: enemy-turn.feature AC-001 through AC-012
+Covers: enemy-turn.feature AC-001 through AC-012, AC-016
 Covers: combat-tracker.feature AC-016, AC-017, AC-018
 """
 from __future__ import annotations
@@ -19,7 +19,9 @@ from api.session_manager import (
     _build_combat_close_directive,
     _build_enemy_turn_query,
     _ENEMY_TURN_SYSTEM,
+    _extract_attack_names,
     _parse_action_block,
+    _parse_event_combatants,
     get_session,
     stream_close_combat,
     stream_enemy_turn,
@@ -457,3 +459,175 @@ class TestEnemyTurnStaleQueue:
         with patch.object(sm, "_call_blocking", return_value="%%NARRATIVE%%\nThe goblin sneers.\n%%ACTION%%\naction: delay"):
             resp = client.post(f"/api/sessions/{session_id}/enemy_turn")
         assert resp.status_code == 200
+
+
+# ── AC-016 — _extract_attack_names ───────────────────────────────────────────
+
+class TestExtractAttackNames:
+    """Unit tests for _extract_attack_names — strips bonuses/dice, returns name list."""
+
+    def test_single_attack_with_bonus_and_damage(self):
+        assert _extract_attack_names("shortbow +5 (1d4+1)") == ["shortbow"]
+
+    def test_single_bare_name(self):
+        assert _extract_attack_names("bite") == ["bite"]
+
+    def test_empty_string_returns_empty_list(self):
+        assert _extract_attack_names("") == []
+
+    def test_multi_word_weapon_name(self):
+        assert _extract_attack_names("horse chopper +2 (1d8)") == ["horse chopper"]
+
+    def test_strips_damage_dice_only_no_bonus(self):
+        # weapon_name (damage) format — no + present
+        assert _extract_attack_names("bite (1d4)") == ["bite"]
+
+
+# ── AC-016 — _build_enemy_turn_query attack profile injection ─────────────────
+
+class TestEnemyTurnQueryAttackProfile:
+    """AC-016: attack names injected from pending_combatants; mechanics stripped."""
+
+    def _warchanter_session(self) -> GameSession:
+        session = _session()
+        session.combat_state = CombatState(
+            round=2,
+            current_actor="Goblin Warchanter",
+            combatants=[
+                Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
+                Combatant(name="Ani", hp_current=9, hp_max=9, ac=15, initiative=12),
+                Combatant(name="Goblin Warchanter", hp_current=6, hp_max=8, ac=14, initiative=18),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10),
+            ],
+        )
+        session.pending_combatants = {
+            "goblin warchanter": {
+                "name": "Goblin Warchanter",
+                "init_mod": 3,
+                "hp": 8,
+                "ac": 14,
+                "attacks": {
+                    "melee": ["bite"],
+                    "ranged": ["shortbow"],
+                },
+            },
+            "goblin warrior 1": {
+                "name": "Goblin Warrior 1",
+                "init_mod": 2,
+                "hp": 5,
+                "ac": 16,
+                "attacks": {
+                    "melee": ["dogslicer"],
+                    "ranged": ["shortbow"],
+                },
+            },
+        }
+        return session
+
+    def test_melee_attacks_in_query(self):
+        session = self._warchanter_session()
+        query = _build_enemy_turn_query(session, "Goblin Warchanter")
+        assert "Melee attacks: bite" in query
+
+    def test_ranged_attacks_in_query(self):
+        session = self._warchanter_session()
+        query = _build_enemy_turn_query(session, "Goblin Warchanter")
+        assert "Ranged attacks: shortbow" in query
+
+    def test_mechanics_stripped_from_query(self):
+        # Bonuses and damage dice must NOT appear in the attack profile section.
+        # Note: "1d4" legitimately appears in the output format spec template
+        # (e.g. "damage: <damage dice, e.g. 1d4 or 1d6+2>") — so we check only
+        # the lines that contain attack names, not the full query.
+        session = self._warchanter_session()
+        query = _build_enemy_turn_query(session, "Goblin Warchanter")
+        melee_line = next((l for l in query.splitlines() if "Melee attacks:" in l), "")
+        ranged_line = next((l for l in query.splitlines() if "Ranged attacks:" in l), "")
+        assert "+5" not in melee_line and "+5" not in ranged_line
+        assert "1d4" not in melee_line and "1d4" not in ranged_line
+        assert "bite" in melee_line
+        assert "shortbow" in ranged_line
+
+    def test_only_actor_attacks_injected(self):
+        # Other combatants' attacks must not appear in the actor section
+        session = self._warchanter_session()
+        query = _build_enemy_turn_query(session, "Goblin Warchanter")
+        assert "dogslicer" not in query  # Goblin Warrior 1's weapon
+
+    def test_graceful_fallback_empty_pending_combatants(self):
+        session = self._warchanter_session()
+        session.pending_combatants = {}
+        query = _build_enemy_turn_query(session, "Goblin Warchanter")
+        assert "Melee attacks" not in query
+        assert "Ranged attacks" not in query
+        assert "%%ACTION%%" in query  # rest of query still present
+
+    def test_graceful_fallback_no_attacks_key(self):
+        session = self._warchanter_session()
+        # Profile exists but no attacks key
+        session.pending_combatants["goblin warchanter"] = {"init_mod": 3, "hp": 8, "ac": 14}
+        query = _build_enemy_turn_query(session, "Goblin Warchanter")
+        assert "Melee attacks" not in query
+        assert "Ranged attacks" not in query
+
+
+# ── AC-016 — _parse_event_combatants melee/ranged columns ────────────────────
+
+class TestParseEventCombatantsAttackColumns:
+    """Tests for updated _parse_event_combatants that reads melee/ranged columns."""
+
+    _TABLE_MELEE_RANGED = """
+## Combatants
+
+| name | hp | ac | init_mod | melee | ranged |
+|------|----|----|----------|-------|--------|
+| Goblin Warchanter | 8 | 14 | +3 | bite +1 (1d4) | shortbow +5 (1d4+1) |
+| Goblin Warrior 1 | 5 | 16 | +2 | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+"""
+
+    _TABLE_MELEE_ONLY = """
+## Combatants
+
+| name | hp | ac | init_mod | melee |
+|------|----|----|----------|-------|
+| Cave Bear | 30 | 14 | +1 | claw +8 (1d6+5) |
+"""
+
+    _TABLE_OLD_ATTACKS = """
+## Combatants
+
+| name | hp | ac | init_mod | attacks |
+|------|----|----|----------|---------|
+| Goblin Warchanter | 8 | 14 | +3 | shortbow +5 (1d4+1), bite +1 (1d4) |
+"""
+
+    def test_melee_ranged_columns_parsed(self):
+        result = _parse_event_combatants(self._TABLE_MELEE_RANGED)
+        warchanter = result.get("goblin warchanter", {})
+        attacks = warchanter.get("attacks", {})
+        assert attacks.get("melee") == ["bite"]
+        assert attacks.get("ranged") == ["shortbow"]
+
+    def test_warrior_melee_ranged_columns_parsed(self):
+        result = _parse_event_combatants(self._TABLE_MELEE_RANGED)
+        warrior = result.get("goblin warrior 1", {})
+        attacks = warrior.get("attacks", {})
+        assert attacks.get("melee") == ["dogslicer"]
+        assert attacks.get("ranged") == ["shortbow"]
+
+    def test_melee_only_column_ranged_empty(self):
+        result = _parse_event_combatants(self._TABLE_MELEE_ONLY)
+        bear = result.get("cave bear", {})
+        attacks = bear.get("attacks", {})
+        assert attacks.get("melee") == ["claw"]
+        assert attacks.get("ranged", []) == []
+
+    def test_old_attacks_column_falls_back_gracefully(self):
+        # Old format (single 'attacks' column) — should not crash
+        # attacks dict may be absent or empty — just must not raise
+        result = _parse_event_combatants(self._TABLE_OLD_ATTACKS)
+        assert "goblin warchanter" in result
+        warchanter = result["goblin warchanter"]
+        # hp and ac still parsed
+        assert warchanter.get("hp") == 8
+        assert warchanter.get("ac") == 14

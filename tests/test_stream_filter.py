@@ -67,6 +67,17 @@ def test_dev_mode_passes_all_tokens():
     assert result == events
 
 
+def test_dev_mode_passes_event_trigger_tokens():
+    events = [
+        _tok("%%NARRATIVE%%\nGoblins spill into the square.\n"),
+        _tok("%%EVENT%% goblin_attack_starts\n"),
+        _tok("%%DELTAS%%\nnpc: Foo"),
+    ]
+
+    result = _collect(_stream_with_narrative_filter(_gen_from(*events), dev_mode=True))
+    assert result == events
+
+
 def test_dev_mode_passes_non_token_events():
     events = [
         _evt({"type": "done"}),
@@ -133,6 +144,22 @@ def test_non_dev_stops_at_generate_marker():
     ]
     result = _collect(_stream_with_narrative_filter(_gen_from(*events), dev_mode=False))
     assert _content(result) == "A stranger arrives."
+
+
+def test_non_dev_stops_at_event_marker():
+    events = [
+        _tok("%%NARRATIVE%%\n"),
+        _tok("Goblins spill into the square."),
+        _tok("\n%%EVENT%% goblin_attack_starts\n"),
+        _tok("%%DELTAS%%\nnpc: Foo"),
+    ]
+
+    result = _collect(_stream_with_narrative_filter(_gen_from(*events), dev_mode=False))
+    content = _content(result)
+
+    assert content == "Goblins spill into the square."
+    assert "%%EVENT%%" not in content
+    assert "goblin_attack_starts" not in content
 
 
 # ── Non-token events always pass through ─────────────────────────────────────

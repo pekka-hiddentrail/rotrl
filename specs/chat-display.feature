@@ -55,6 +55,13 @@ And   it shows three animated dots staggered at 0ms, 160ms, 320ms intervals
 And   it disappears as soon as the first GM token arrives
 ```
 
+```gherkin
+Given the backend creates an empty GM bubble before streaming
+And   no token has arrived yet
+Then  the empty GM bubble shows the same three animated dots
+And   the dots are replaced by streamed GM text once the first token arrives
+```
+
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->

@@ -122,7 +122,7 @@ And   the map includes the `%%EVENT%%` syntax instruction
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-007 — `%%EVENT%%` section is not shown to the player
+### AC-007 — `%%EVENT%%` line is hidden from player chat in normal mode
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 **Scenario:** LLM writes an event tag in its response
@@ -132,6 +132,14 @@ Given the LLM response contains "%%EVENT%% goblin_attack_starts"
 When  the response is streamed in normal (non-dev) mode
 Then  the event line is not emitted as a token event
 And   the player chat shows only the %%NARRATIVE%% content
+```
+
+```gherkin
+Given dev mode is on
+And   the LLM response contains "%%EVENT%% goblin_attack_starts"
+When  the response is streamed
+Then  the raw event line is visible in chat for debugging
+And   no patch_last event replaces it with cleaned narrative
 ```
 
 ---

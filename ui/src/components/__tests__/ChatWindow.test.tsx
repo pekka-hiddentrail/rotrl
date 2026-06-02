@@ -30,6 +30,14 @@ describe('ChatWindow - AC-002 thinking indicator', () => {
 
     expect(container.querySelector('.thinking-bubble')).not.toBeInTheDocument()
   })
+
+  it('shows three dots in an empty GM bubble while it is streaming', () => {
+    const messages: Message[] = [{ role: 'gm', content: '' }]
+    const { container } = render(<ChatWindow messages={messages} streaming={true} />)
+
+    const dots = container.querySelectorAll('.bubble-gm.thinking-bubble .thinking-dot')
+    expect(dots).toHaveLength(3)
+  })
 })
 
 describe('ChatWindow - AC-003 token bubble and cursor', () => {

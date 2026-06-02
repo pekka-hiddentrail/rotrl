@@ -1173,17 +1173,53 @@ def advance_combat_turn(session: "GameSession") -> dict:
     }
 
 
+def _extract_attack_names(raw: str) -> list:
+    """Strip bonuses and damage dice from a weapon string; return name-only list.
+
+    Each item in the raw string is a comma-separated weapon entry:
+        "shortbow +5 (1d4+1), bite +1 (1d4)"  →  ["shortbow", "bite"]
+        "dogslicer +2 (1d4)"                   →  ["dogslicer"]
+        "bite"                                 →  ["bite"]
+        ""                                     →  []
+
+    Everything from the first '+' or '(' onward is stripped so the LLM
+    sees weapon names only — the backend owns the mechanics.
+    """
+    if not raw or not raw.strip():
+        return []
+    names = []
+    for item in raw.split(','):
+        item = item.strip()
+        if not item:
+            continue
+        # Cut at first '+' or '('
+        for cutoff in ('+', '('):
+            idx = item.find(cutoff)
+            if idx != -1:
+                item = item[:idx]
+        name = item.strip()
+        if name:
+            names.append(name)
+    return names
+
+
 def _parse_event_combatants(content: str) -> dict:
     """Parse the ## Combatants markdown table from event file content.
 
     Returns a dict keyed by lowercase name with at minimum {"init_mod": int}.
     Returns {} if the section is absent or malformed — never raises.
 
-    Expected table format:
+    Preferred table format (melee/ranged columns):
         ## Combatants
-        | name | hp | ac | init_mod | attacks |
-        |------|----|----|----------|---------|
-        | Goblin Warchanter | 8 | 14 | +3 | shortbow +5 (1d4+1) |
+        | name | hp | ac | init_mod | melee | ranged |
+        |------|----|----|----------|-------|--------|
+        | Goblin Warchanter | 8 | 14 | +3 | bite +1 (1d4) | shortbow +5 (1d4+1) |
+
+    The attacks entry in the result dict is a nested dict:
+        {"melee": ["bite"], "ranged": ["shortbow"]}
+
+    Old single 'attacks' column is still accepted for backward compat; the
+    attacks dict will be empty (omitted) in that case.
     """
     import re as _re
     result: dict = {}
@@ -1228,8 +1264,15 @@ def _parse_event_combatants(content: str) -> dict:
                             entry[key] = int(row[key])
                         except ValueError:
                             pass
-                if 'attacks' in row:
-                    entry['attacks'] = row['attacks']
+                # Parse typed attack columns (preferred: melee + ranged)
+                melee_raw  = row.get('melee', '').strip()
+                ranged_raw = row.get('ranged', '').strip()
+                if melee_raw or ranged_raw:
+                    entry['attacks'] = {
+                        'melee':  _extract_attack_names(melee_raw),
+                        'ranged': _extract_attack_names(ranged_raw),
+                    }
+                # Old single 'attacks' column — ignored for names (kept for compat)
                 entry['name'] = name  # preserve original capitalisation
                 result[name.lower()] = entry
             elif header_idx is not None:
@@ -3468,10 +3511,20 @@ def _build_enemy_turn_query(session: "GameSession", name: str) -> str:
     def _lines(rows: list[Combatant], empty: str) -> str:
         return "\n".join(_combatant_line_for_enemy_query(c) for c in rows) if rows else empty
 
+    # Build attack-profile lines from pending_combatants (names only — no mechanics)
+    _profile = session.pending_combatants.get(actor.name.lower(), {})
+    _atk = _profile.get("attacks", {})
+    _melee_names  = _atk.get("melee",  []) if isinstance(_atk, dict) else []
+    _ranged_names = _atk.get("ranged", []) if isinstance(_atk, dict) else []
+    _melee_line  = f"Melee attacks: {', '.join(_melee_names)}"  if _melee_names  else ""
+    _ranged_line = f"Ranged attacks: {', '.join(_ranged_names)}" if _ranged_names else ""
+    _attack_block = "\n".join(line for line in [_melee_line, _ranged_line] if line)
+
     return f"""[ENEMY TURN BRIEFING]
 Round: {session.combat_state.round}
 Actor: {_combatant_line_for_enemy_query(actor, marker='*')}
 Action budget: {_enemy_action_budget(actor)}
+{_attack_block + chr(10) if _attack_block else ""}\
 
 Allies:
 {_lines(allies, "- none")}

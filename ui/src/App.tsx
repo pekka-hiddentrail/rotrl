@@ -556,8 +556,11 @@ export default function App() {
             </div>
           )}
 
-          {(messages.length > 0 || streaming) && (
-            <ChatWindow messages={messages} streaming={streaming} />
+          {(messages.length > 0 || streaming || enemyTurnStreaming || combatClosing) && (
+            <ChatWindow
+              messages={messages}
+              streaming={streaming || enemyTurnStreaming || combatClosing}
+            />
           )}
 
           {isBooted && (

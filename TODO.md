@@ -170,7 +170,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
-> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 next (damage/standard action); then 1.11 (death/dying/healing).
+> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 next (enemy attack profile + action card); then 1.11 (death/dying/healing).
 > See `specs/roll-initiatives.feature` (9 ACs, 18 pytest + 8 Vitest tests).
 
 ---
@@ -260,6 +260,10 @@ Visual and interaction improvements to the UI. These are not blocked by backend 
 - [ ] **Combat panel — highlight when it is a PC's turn vs. enemy's turn** — the current-actor gold glow exists, but a stronger visual difference (e.g. green row tint for PC turns, red tint for enemy turns) would make the flow clearer, especially on a busy screen.
 
 - [ ] **Input bar — show current combatant's name/portrait during combat** — already partially done via `inputActiveSpeaker`, but B-C02 means the `handleSend` prefix still uses `activeCharacter` instead of the initiative actor. Fixing B-C02 is the prerequisite; the visual is already present.
+
+- [ ] **Action card — richer content and polish** — the initial action card layout (CB1.9-3) uses a minimal mock. Follow-up: decide final information hierarchy (weapon flavour name vs. mechanical name, condition effects applied, death/KO indicator when HP hits 0), typography, colour coding (red for hits, grey for misses), and animation (brief slide-in). Requires CB1.9-3 to land first. *(Blocked on: CB1.9-3)*
+
+- [ ] **Combat action overlay toast** — after a resolved enemy attack, flash a brief ephemeral overlay (auto-dismiss ~2 s) like *"Goblin Warchanter hits Yanyeeku with an arrow!"* on top of the chat area. Pure UI — reads from the same `action_card` SSE payload. Gives the combat kinetic feedback before the player reads the narrative. *(Blocked on: CB1.9-3)*
 
 ---
 

@@ -97,10 +97,18 @@ export default function MessageBubble({ message, isLast, streaming }: Props) {
   }
 
   if (message.role === 'gm') {
+    const showThinkingDots = isLast && streaming && message.content.trim() === ''
     return (
       <div className="bubble-row gm">
         <div className="bubble-label">GM</div>
-        <div className="bubble bubble-gm">
+        <div className={`bubble bubble-gm${showThinkingDots ? ' thinking-bubble' : ''}`}>
+          {showThinkingDots && (
+            <>
+              <span className="thinking-dot" style={{ animationDelay: '0ms' }} />
+              <span className="thinking-dot" style={{ animationDelay: '160ms' }} />
+              <span className="thinking-dot" style={{ animationDelay: '320ms' }} />
+            </>
+          )}
           {message.content}
           {isLast && streaming && <span className="cursor">▋</span>}
         </div>
