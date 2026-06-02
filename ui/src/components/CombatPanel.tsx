@@ -55,18 +55,19 @@ export default function CombatPanel({
   const controlsDisabled = Boolean(disabled || enemyTurnStreaming || combatClosing)
   const enemyTurnDisabled = Boolean(controlsDisabled || attackPhase)
   const phase = enemyTurnStreaming ? 'Enemy Turn' : attackPhase ? 'PC Attacks' : null
+  const showRound = combatState.round >= 1  // round < 1 = initiative not yet rolled (pending state)
 
   return (
     <aside className="combat-panel">
       <div className="combat-panel-header">
-        <span className="combat-panel-title">Combat</span>
+        <span className="combat-panel-title">⚔ Combat</span>
         <div className="combat-panel-badges">
           {phase && (
             <span className={`combat-phase-badge ${enemyTurnStreaming ? 'enemy' : 'pc'}`}>
               {phase}
             </span>
           )}
-          <span className="combat-round-badge">Round {combatState.round}</span>
+          {showRound && <span className="combat-round-badge">Round {combatState.round}</span>}
         </div>
       </div>
 
@@ -87,8 +88,8 @@ export default function CombatPanel({
               <div className="combatant-name-row">
                 <span className="combatant-name">{c.name}</span>
                 <span className="combatant-meta">
-                  <span className="combatant-init" title="Initiative">Init {c.initiative}</span>
-                  <span className="combatant-ac" title="Armour Class">AC {c.ac}</span>
+                  <span className="combatant-init" title="Initiative">⚡ Init {c.initiative}</span>
+                  <span className="combatant-ac" title="Armour Class">🛡 AC {c.ac}</span>
                 </span>
               </div>
               <div className="combatant-hp-row">

@@ -24,6 +24,11 @@ const THREE_COMBATANTS: CombatState = {
 // ─── AC-007 — initiative order ────────────────────────────────────────────────
 
 describe('CombatPanel — AC-007 initiative order', () => {
+  it('V0 — header keeps the combat icon label', () => {
+    render(<CombatPanel combatState={THREE_COMBATANTS} onEndCombat={vi.fn()} />)
+    expect(screen.getByText('⚔ Combat')).toBeInTheDocument()
+  })
+
   it('V1 — combatants are listed highest-initiative-first in the DOM', () => {
     render(<CombatPanel combatState={THREE_COMBATANTS} onEndCombat={vi.fn()} />)
     const names = screen.getAllByText(/Shalelu|Thaelion|Goblin 1/).map(el => el.textContent)
@@ -53,6 +58,12 @@ describe('CombatPanel — AC-007 initiative order', () => {
     const goblinRow = rows.find(r => r.textContent?.includes('Goblin 1'))
     expect(goblinRow).toHaveClass('combatant-inactive')
     expect(goblinRow).not.toHaveClass('combatant-current')
+  })
+
+  it('V3.1 — combatant rows show initiative and AC icons', () => {
+    render(<CombatPanel combatState={THREE_COMBATANTS} onEndCombat={vi.fn()} />)
+    expect(screen.getByText('⚡ Init 14')).toBeInTheDocument()
+    expect(screen.getByText('🛡 AC 17')).toBeInTheDocument()
   })
 })
 

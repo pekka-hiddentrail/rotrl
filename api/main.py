@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_resume_combat, stream_turn, write_session_state
+from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -77,7 +77,7 @@ def get_intro(session: int = 1):
 
 @app.post("/api/sessions")
 def post_sessions(req: BootRequest):
-    if req.session_number > 1:
+    if req.session_number > 1 and not req.dev_mode:
         sessions_dir = _REPO_ROOT / "sessions"
         boot = sessions_dir / f"session_{req.session_number:03d}" / "boot.md"
         recap = sessions_dir / f"session_{req.session_number - 1:03d}" / "recap.md"
@@ -242,8 +242,9 @@ def delete_combat(session_id: str):
 def post_advance_combat_turn(session_id: str):
     """Advance the initiative to the next active combatant and write state.json.
 
-    Returns { current_actor: str | null, is_pc: bool }.
-    409 when no combat is active; 404 when session not found.
+    Returns { current_actor, is_pc, position, combatant_count, round, round_incremented }.
+    round_incremented is true when the last combatant in the order wraps back to the first
+    (end of round).  409 when no combat is active; 404 when session not found.
     """
     session = get_session(session_id)
     if not session:
@@ -252,6 +253,23 @@ def post_advance_combat_turn(session_id: str):
         raise HTTPException(status_code=409, detail="No active combat")
     result = advance_combat_turn(session)
     return result
+
+
+@app.post("/api/sessions/{session_id}/combat/roll_initiatives")
+def post_roll_initiatives(session_id: str):
+    """Roll d20 + modifier for every combatant and update initiative order.
+
+    PCs use their initiative modifier from pc_profiles; enemies use +0 until
+    SA-2 event-file seeding is implemented.  Returns the updated combat_state.
+    409 when no combat is active; 404 when session not found.
+    """
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.combat_state is None:
+        raise HTTPException(status_code=409, detail="No active combat")
+    combat_state = roll_combat_initiatives(session)
+    return {"combat_state": combat_state}
 
 
 class ActiveCharacterRequest(BaseModel):

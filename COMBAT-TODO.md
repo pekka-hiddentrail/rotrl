@@ -26,13 +26,18 @@ Items that span multiple combat tiers or require coordination with non-combat la
 - [ ] **Combat action economy rules** — add prompt guidance and backend/test support for PF1e action economy: standard/move/swift/immediate/full-round actions, attacks of opportunity, readied/delayed actions, and limits on how much one combatant can do per turn.
 - [ ] **Combat end conditions** — define when combat should emit `round: 0` and clear the tracker: all enemies dead/fled/surrendered, encounter defused, or GM/player explicitly ends combat. Add tests so victory, surrender, fleeing enemies, and manual End Combat behave consistently.
 - [ ] **Condition duration tracking** — extend combat state to track condition durations and expiry rules, not just condition labels. Include prompt/backend behavior for one-round effects, save-ends effects, prone/standing, bleed, poison, fear states, and other common PF1e combat conditions.
+- [ ] **Flat-footed and touch AC on Combatant** — PF1e distinguishes three AC values: normal AC (vs. standard attacks), flat-footed AC (vs. attacks when denied DEX bonus — at combat start, surprised, flanked), and touch AC (vs. spells/abilities that only require skin contact). The `Combatant` dataclass currently stores only a single `ac` field. Add `ac_touch: int` and `ac_flat_footed: int` to the dataclass; seed them from the event file `## Combatants` table (add columns) and from bestiary entries (SA-4). Update `_resolve_npc_attack` and `resolve_attack_roll` to use the correct AC type based on `attack_type` (touch attacks → `ac_touch`; flat-footed situations → `ac_flat_footed`). Display in CombatPanel as a tooltip or secondary badge on the AC display. Update `state.json` serialisation and `_COMBAT_SPEC_ROUND1` format.
+
 - [ ] **System prompt — strip non-combat context blocks outside active combat** — when `session.combat_state is None`, suppress from the per-turn injection: `_COMBAT_FULL_SPEC`, `_COMBAT_SPEC_ONGOING`, `[CURRENT HP]` block, `_ENEMY_TURN_DIRECTIVE`, and the attack-resolution section of `_COMBAT_SPEC_ONGOING`. Broader review: audit all per-turn injections for appropriate activity-gating; consider a leaner "exploration mode" base prompt variant separate from a "combat mode" variant that activates only when `combat_state is not None`. Potentially large token savings on every non-combat turn.
+- [ ] **Test — combat re-entry after End Combat** — after `DELETE /combat` clears `session.combat_state`, a new `%%COMBAT%%` block on a subsequent turn should re-initialise the panel as if it were round 1. Add a Vitest test in `App.test.tsx`: mock `combat_update: null` (combat clear) → assert CombatPanel hidden → send a new `combat_update` with a full combatant list → assert CombatPanel reappears with the new state. Also add a pytest integration test: `DELETE /combat` → send a turn with a `%%COMBAT%%` block → assert `session.combat_state` is non-None with the new combatants. *(exploratory: Chain D step 13; spec: combat-tracker.feature AC-008)*
+
+- [ ] **Test — `combat_update` SSE carries `conditions: []` when unknown conditions dropped** — the backend silently drops unrecognised condition labels (e.g. `"banana"`) from the combatant. Add a pytest test that sends a `%%COMBAT%%` block with an unknown condition through the full turn pipeline and asserts the emitted `combat_update` SSE event has `conditions: []` for that combatant — not the raw unknown string. Complements the existing `test_unknown_condition_dropped` unit test with an SSE-level assertion. *(exploratory: Chain C step 9–10; spec: combat-tracker.feature AC-012)*
+
 - [x] **Vitest — attack resolution UI** — 15 tests in `DicePanelAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
 - [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DicePanel.tsx `handleDamageRollClick`)*
+- [ ] **Enemy turn auto-advance policy** — decide whether `POST /enemy_turn` should automatically advance initiative after it emits `combat_update`, or whether the GM should click **Next Turn** explicitly. Add tests for whichever policy wins so enemy turns cannot accidentally repeat the same actor forever.
 
 ---
-
-- [ ] **Enemy turn auto-advance policy** — decide whether `POST /enemy_turn` should automatically advance initiative after it emits `combat_update`, or whether the GM should click **Next Turn** explicitly. Add tests for whichever policy wins so enemy turns cannot accidentally repeat the same actor forever.
 
 ## Adventure Combat Content
 
@@ -372,60 +377,59 @@ interaction model entirely.
 
 ---
 
-### Tier 1.8 — Conditions and Death
+### Tier 1.11 — Death, Dying, and Healing
 
-Prerequisite for Tier 2 mechanical depth. Condition chips (CB1.5-11) are display-only; these items give them teeth.
+Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn advancement and narrative accuracy: when a combatant drops to 0 HP or below, the backend derives their status automatically rather than relying on the LLM's `status:` field. Conditions with mechanical effects (attack/AC modifiers) depend on SA-2 authoritative stats and are tracked in Tier 2 SA-7.
 
-- [ ] **CB1.8-1 — Conditions with mechanical effects** — apply PF1e penalties when a combatant has active conditions. `_apply_condition_effects(combatant)` returns AC modifier and attack modifier: Prone (−4 AC, −4 ranged attack, stand = move action), Shaken (−2 attack/saves/checks), Staggered (one standard or move action per round), Entangled (−2 attack and Reflex, no run/charge), Nauseated (move actions only). Modifiers applied in `resolve_attack_roll` and `_resolve_npc_attack` when computing hit/miss.
-- [ ] **CB1.8-2 — Death and dying states** — current status `unconscious` covers 0 HP. PF1e requires graduated states: 0 HP = Disabled (can act, then falls unconscious); negative HP and above −CON = Dying (loses 1 HP/round until stabilised or dead); −CON HP or below = Dead. Backend: on HP update in `_apply_hp_deltas`, derive status automatically from HP and a `constitution` field added to `Combatant`. CombatPanel shows Disabled/Dying/Dead badges distinctly. Dying combatants automatically lose 1 HP per round in `_inject_context` unless stabilised.
-- [ ] **CB1.8-3 — Healing in combat** — `%%HP%%` delta blocks already apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`. LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
+- [ ] **CB1.11-1 — Death and dying states** — current `status` field has `active / unconscious / fled / dead`. PF1e requires graduated states: 0 HP = Disabled (may take one action, then falls unconscious); negative HP above −CON = Dying (loses 1 HP/round unless stabilised); at or below −CON HP = Dead. Add `constitution: int` field to `Combatant` (default 10; seeded from `pc_profiles` for PCs and event/bestiary data for enemies when SA-2 lands). `_apply_hp_deltas` derives status automatically on every HP write: `active → disabled → dying → dead`. CombatPanel shows distinct badges for Disabled / Dying / Dead. Dying combatants automatically lose 1 HP per round at the start of their turn in `advance_combat_turn` unless stabilised.
+
+- [ ] **CB1.11-2 — Turn skip for out-of-action combatants** — `advance_combat_turn` already skips non-`active` combatants. Extend: `disabled` combatants act normally but flag the GM; `dying` combatants are skipped (auto-advance) and lose 1 HP; `dead` combatants are skipped silently. Emit a `combat_update` after each auto-advance so the UI stays in sync without a GM click.
+
+- [ ] **CB1.11-3 — Healing in combat** — `%%HP%%` delta blocks apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`, and re-derives status (e.g. Dying → Disabled if healed above 0). LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
+
+- [ ] **CB1.11-T — Tests** — `_apply_hp_deltas`: 0 HP → Disabled; −1 HP → Dying; −CON HP → Dead; heal from Dying to Disabled re-derives status. `advance_combat_turn`: skips Dying combatant and applies −1 HP; skips Dead combatant unchanged; Disabled combatant appears in turn order. `test_combat.py` existing HP clamp tests still pass.
 
 ---
 
-### Tier 1.9 — Initiative Authority
+### Tier 1.8 — Initiative Authority
 
-Mirrors Tier 1.1 (HP authority): the LLM currently writes final initiative totals in the
-`%%COMBAT%%` block, which means it can hallucinate values, ignore modifiers, or repeat the
-same number for every combatant. Tier 1.9 moves initiative rolls to the backend on round 1
-and treats the LLM's `init:` field as a **modifier** (e.g. `+3`, `−1`) rather than a total.
+> **Bug:** B-C06 — LLM writes arbitrary initiative totals. Fixed. B-C06 marked obsolete in TODO.md.
 
-> **Authority model after Tier 1.9:**
-> - **Round 1:** LLM writes `init: <modifier>` for each combatant. Backend rolls `1d20 +
->   modifier` for every combatant and stores the result. For PCs, the modifier is read from
->   `pc_profiles[*]["combat_stats"]["initiative"]` and the LLM's value is ignored entirely.
-> - **Round 2+:** Backend retains its own initiative values; `init:` columns in subsequent
->   `%%COMBAT%%` lines are silently discarded (same pattern as HP authority from Tier 1.1).
+**Implemented approach:** Auto-roll triggers when `%%COMBAT%%` (round 1) is parsed AND a combat event (`event_type == "combat"`) is active. The LLM's `init:` values are discarded — `roll_combat_initiatives()` rolls `1d20 + modifier` for all combatants. PC modifiers come from `pc_profiles`; enemy modifiers from the event file `## Combatants` table (via `_parse_event_combatants`). No manual button. The `combat_update` SSE carries the sorted server-rolled state. *(spec: roll-initiatives.feature AC-001 through AC-009)*
 
-- [ ] **CB1.9-1 — `_COMBAT_SPEC_ROUND1` format update** — change `init:` field description
-  from "initiative score" to "initiative modifier (e.g. `+3`, `−1`); backend will roll
-  `1d20 + modifier`". Update `_COMBAT_SPEC_ONGOING` to state "omit `init:` — backend owns
-  initiative order from round 1 onward".
+> **Authority model:**
+> - **Round 1 with combat event:** `_process_event_block` seeds `session.pending_combatants` with `init_mod` from the `## Combatants` table. After `_parse_combat_block` sets `session.combat_state`, `roll_combat_initiatives()` fires automatically.
+> - **Round 2+:** `roll_combat_initiatives()` not called; existing values retained.
+> - **PC modifiers:** always from `pc_profiles[name]["combat_stats"]["initiative"]`.
+> - **Enemy modifiers:** from `pending_combatants[name]["init_mod"]`; flat d20 if absent.
 
-- [ ] **CB1.9-2 — Server-side initiative roll on round 1** — in `_parse_combat_block`, when
-  `existing_state is None` (first parse): for each combatant extract the `init:` field as a
-  signed integer modifier; roll `random.randint(1, 20) + modifier`; store the result as
-  `combatant.initiative`. For PCs (name matches `pc_profiles` key), use the modifier from
-  `pc_profiles[name]["combat_stats"]["initiative"]` instead of the LLM-written value.
-  `_parse_combatant_line` updated to return the raw `init:` string; conversion and rolling
-  happen in `_parse_combat_block` where `existing_state` context is available.
+- [x] **CB1.8-1 — `_COMBAT_SPEC_ROUND1` format update** — superseded by auto-roll approach; LLM's `init:` values are always discarded on round 1. The spec still describes `init:` as a modifier to guide the LLM toward writing sensible values, but the backend ignores them entirely.
 
-- [ ] **CB1.9-3 — Initiative preserved on round 2+** — in `_parse_combat_block` when
-  `existing_state is not None`, copy `initiative` from the matching existing combatant by
-  name (same lookup as HP authority). New combatants entering after round 1 still get
-  server-rolled initiative from their `init:` modifier field.
+- [x] **CB1.8-2 — Server-side initiative roll on round 1** — implemented as post-`%%COMBAT%%` hook in `_stream_chat` (both section-based and flat-block paths). Fires when `_is_round1 and _combat_result.round == 1` and any active event has `event_type == "combat"`. `_parse_event_combatants(content)` added; `session.pending_combatants` added to `GameSession`.
 
-- [ ] **CB1.9-4 — `[PARTY ROSTER]` init values updated** — `_build_pc_combat_roster` currently
-  writes the raw initiative modifier string (e.g. `+2`). After CB1.9-2 the roster should
-  still write the modifier (not a pre-rolled value) so the LLM can copy it into `init:` for
-  the backend to roll. No change needed to the roster builder — just confirm the format
-  remains a modifier, not a total.
+- [x] **CB1.8-3 — Initiative preserved on round 2+** — `_is_round1 = (session.combat_state is None)` check ensures hook only fires on the transition from no-combat to combat. Round 2+ blocks don't trigger re-roll.
 
-- [ ] **CB1.9-T — Tests** — `test_combat.py`: round-1 block with `init: +3` stores a value
-  in `[4, 23]` (d20 + 3); PC name in `pc_profiles` uses stored modifier and ignores
-  LLM value; round-2 block preserves existing initiative; new combatant on round 2 gets
-  fresh roll; `init: 0` and `init: −1` edge cases; two combatants with the same modifier
-  get independent rolls (not the same value). `test_inject_context.py`: `_COMBAT_SPEC_ROUND1`
-  no longer describes `init:` as a total.
+- [x] **CB1.8-4 — Party roster init values** — roster already writes modifier strings (e.g. `+2`); no change needed. Enemy modifiers now come from event file table rather than LLM.
+
+- [x] **CB1.8-T — Tests** — `tests/test_roll_initiatives.py` (31 tests): `TestParseEventCombatants` (7), `TestEnemyModifierFromPendingCombatants` (3), `TestAutoRollOnCombatEvent` (3), plus existing AC-001–AC-007 suite. `CombatPanelRollInit.test.tsx`: no-button tests, server-rolled order display, current actor highlight. `App.roll-initiatives.test.tsx`: `initiative_pending` SSE triggers banner, `combat_update` after roll shows CombatPanel. `ui/e2e/initiative-roll.spec.ts` (5 Playwright tests): banner visible before CombatPanel, DicePanel stays right, CombatPanel appears with rolled order, banner disappears, PC HP seeded correctly. 946 pytest + all Vitest + 5 Playwright passing.
+
+- [ ] **CB1.8-5 — `_COMBAT_SPEC_ROUND1` update for `## Combatants` table** — update the combat system prompt to instruct the LLM that `init:` fields are ignored and that the backend seeds HP/AC from the event file table. LLM should omit `init:` or write `+0` as a placeholder. *Depends on the system prompt work in combat-system-prompt.feature.*
+
+---
+
+### Tier 1.9 — Damage Dealing and Standard Action
+
+The existing attack flow (Tier 1.5) resolves PC attacks through the dice panel and NPC attacks through `_resolve_npc_attack`. This tier makes damage the canonical source of HP change for all standard combat actions, and ensures the LLM never guesses damage outcomes when a dice result is available.
+
+> **Goal:** every HP change in combat traces to a backend-resolved dice roll or an explicit `%%HP%%` delta. The LLM narrates outcomes but never writes numbers that modify HP.
+
+- [ ] **CB1.9-1 — Enforce `%%HP%%` as the only LLM-initiated HP path** — after Tier 1.1 the LLM is blocked from writing HP in `%%COMBAT%%` blocks. This item closes the remaining gap: the `%%HP%%` block is the *only* way the LLM may propose an HP change (traps, environmental damage, spells, morale effects). Add a parser guard that logs a warning and discards any HP mutation that arrives outside `%%HP%%` or a backend-resolved attack result.
+
+- [ ] **CB1.9-2 — Standard action damage confirmation** — when the LLM's `%%ACTION%%` specifies `action: attack` and the backend resolves it via `_resolve_npc_attack`, the resulting `damage_total` is authoritative. Emit it as an `attack_result` SSE event (already done in Tier 1.7) and ensure the UI displays the damage value before the HP bar animates. No additional confirmation step — the backend result is final.
+
+- [ ] **CB1.9-3 — Damage expression validation** — `_resolve_npc_attack` receives a `damage_expr` string (e.g. `"1d6+2"`). Validate it against `_DAMAGE_EXPR_RE` before calling `_roll_dice`; reject and log malformed expressions rather than crashing. Return `damage_total: 0` with an `error` field on invalid input so the caller can handle gracefully.
+
+- [ ] **CB1.9-T — Tests** — `_resolve_npc_attack`: valid expr rolls and applies damage; malformed expr returns `damage_total: 0` with error; HP change outside `%%HP%%`/attack result is discarded with warning logged; `%%HP%%` positive delta (healing) is accepted (prerequisite: CB1.11-3). `test_combat.py` existing HP clamp tests still pass.
 
 ---
 
@@ -474,7 +478,7 @@ After this tier:
 > **Relationship to Tiers 1.7–1.10:** Tier 1.7 (enemy turn) shipped the query/parse/UI shell
 > against current `session.combat_state`. SA-1 and SA-2 remain important follow-ups because
 > they will replace Tier 1.7's fallback enemy attack profile with authoritative event/bestiary
-> stats. Tiers 1.8 (conditions) and 1.9 (initiative) are also consumers of this authority model.
+> stats. Tiers 1.8 (initiative) and 1.11 (death/dying) are also consumers of this authority model.
 
 #### SA-1 — Full `state.json` schema
 
@@ -581,7 +585,7 @@ enemy query system; Tier 1.7 is the query/parse side.
 > | `use_ability` | Look up `ability` in `combatant.abilities`; apply effect (e.g. `inspire_courage` buffs allies; logged, mechanical effect in CB1.8) |
 > | `move_toward` / `move_away` | Update `combatant.position` if position tracking is active; otherwise log for narrative purposes only |
 > | `withdraw` | Set `combatant.status = "fled"` at end of turn; no attacks provoked |
-> | `total_defense` | Apply `+4 AC` condition for one round (requires CB1.8 conditions) |
+> | `total_defense` | Apply `+4 AC` condition for one round (requires SA-7 conditions) |
 > | `cast` | Delegate to Tier 4 `%%CAST%%` handler |
 > | `delay` (or unknown) | Skip turn; advance initiative; log warning |
 
@@ -603,6 +607,35 @@ enemy query system; Tier 1.7 is the query/parse side.
   with `action: delay` skips and returns `[]`; unknown action returns `[]` and logs warning;
   `attacks` field populated after SA-2 seeding; `_serialize_combat_state` includes attacks
   and abilities; `state.json` written after `_execute_action`.
+
+#### SA-7 — Conditions with Mechanical Effects
+
+Moved from former Tier 1.8. Requires SA-2 (authoritative combatant stats) so that modifiers
+apply to canonical values, not LLM-invented ones. Condition chips (CB1.5-11) are already
+display-only; this tier gives them mechanical teeth.
+
+- [ ] **CB2-SA7-1 — `_apply_condition_effects(combatant) → (ac_mod, attack_mod)`** — returns
+  AC and attack roll modifiers derived from `combatant.conditions`. PF1e rules:
+  Prone (−4 AC vs melee, −4 ranged attacks; getting up is a move action),
+  Shaken (−2 attacks/saves/skill checks),
+  Staggered (one standard or move action per round — enforced in `_execute_action`),
+  Entangled (−2 attacks and Reflex saves; no run or charge),
+  Nauseated (move actions only — enforced in `_execute_action`).
+
+- [ ] **CB2-SA7-2 — Wire modifiers into attack resolution** — `resolve_attack_roll` and
+  `_resolve_npc_attack` call `_apply_condition_effects` on both attacker and target before
+  computing hit/miss. Attacker's `attack_mod` added to the roll; target's `ac_mod` added to
+  effective AC.
+
+- [ ] **CB2-SA7-3 — Action restriction enforcement in `_execute_action`** — Staggered
+  combatant may only take standard or move (not full-attack); Nauseated may only move.
+  `_execute_action` checks conditions before dispatching; downgrades `full_attack` to
+  `attack` for Staggered; blocks all attacks for Nauseated and returns `[]` with a log line.
+
+- [ ] **CB2-SA7-T — Tests** — `_apply_condition_effects` returns correct modifiers for each
+  condition and combination; Prone AC penalty applies to target AC in attack resolution;
+  Staggered attacker cannot full-attack; Nauseated attacker blocked; no conditions returns
+  `(0, 0)`.
 
 ---
 

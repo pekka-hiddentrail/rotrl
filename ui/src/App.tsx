@@ -14,7 +14,7 @@ import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import { useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, setActiveCharacter as setActiveCharacterApi } from './api'
+import { advanceCombatTurn, bootSession, sendTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi } from './api'
 
 function SplashPortrait({ c }: { c: CharacterData }) {
   const [imgOk, setImgOk] = useState(true)
@@ -61,6 +61,7 @@ export default function App() {
   const [currentCombatantName, setCurrentCombatantName] = useState<string | null>(null)
   const [attackPhase, setAttackPhase] = useState<AttackPhase>(null)
   const [attackLog, setAttackLog] = useState<AttackResult[]>([])
+  const [initiativePending, setInitiativePending] = useState(false)
   const [enemyTurnStreaming, setEnemyTurnStreaming] = useState(false)
   const [combatClosing, setCombatClosing] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -95,6 +96,7 @@ export default function App() {
     setSession(null)
     setStreaming(true)
     setPendingRoll(null)
+    setInitiativePending(false)
     setEnemyTurnStreaming(false)
     setCombatClosing(false)
     setDiceKey(k => k + 1)
@@ -161,8 +163,12 @@ export default function App() {
         if (event.type === 'combat_update') {
           const cs = event.combat_state
           setCombatState(cs)
-          // AC-008: read current_actor from backend (authoritative) rather than computing client-side
           setCurrentCombatantName(cs?.current_actor ?? null)
+          setInitiativePending(false)
+        }
+        if (event.type === 'initiative_pending') {
+          // Combat is seeded but initiatives not yet rolled — prompt the player
+          setInitiativePending(true)
         }
         if (event.type === 'attack_request') setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
@@ -223,6 +229,9 @@ export default function App() {
     try {
       const result = await advanceCombatTurn(session.id)
       setCurrentCombatantName(result.current_actor)
+      if (result.round_incremented) {
+        setCombatState(prev => prev ? { ...prev, round: result.round } : prev)
+      }
     } catch {
       // Fallback: advance client-side if endpoint fails (e.g. offline)
       const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
@@ -230,6 +239,18 @@ export default function App() {
       if (active.length === 0) return
       const idx = active.findIndex(c => c.name === currentCombatantName)
       setCurrentCombatantName(active[(idx + 1) % active.length].name)
+    }
+  }
+
+  const handleRollInitiatives = async () => {
+    if (!session) return
+    try {
+      const result = await rollInitiatives(session.id)
+      setCombatState(result.combat_state)
+      setCurrentCombatantName(result.combat_state.current_actor ?? null)
+      setInitiativePending(false)
+    } catch (e) {
+      setError(String(e))
     }
   }
 
@@ -562,51 +583,55 @@ export default function App() {
           />
         )}
 
-        <DicePanel
-          key={diceKey}
-          sessionId={session?.id ?? null}
-          pendingRoll={pendingRoll}
-          activeSpeaker={diceSpeaker}
-          attackPhase={attackPhase}
-          attackLog={attackLog}
-          onAttackRoll={handleAttackRoll}
-          onDamageRoll={handleDamageRoll}
-          onRoll={async (expr: string, rolls: number[], total: number) => {
-            const speaker = diceSpeaker
-            const speakerName = speaker?.name ?? null
-            const rawTotal = rolls.reduce((a, b) => a + b, 0)
-            const modifier = total - rawTotal
-            let rollMsg: string
-            if (modifier !== 0) {
-              const sign = modifier > 0 ? `+${modifier}` : String(modifier)
-              rollMsg = speakerName
-                ? `${speakerName} rolled a ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
-                : `Rolled ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
-            } else {
-              rollMsg = speakerName ? `${speakerName} rolled a ${rawTotal}.` : `Rolled ${rawTotal}.`
-            }
-            setMessages(prev => [...prev, {
-              role: 'player',
-              content: rollMsg,
-              speaker: speaker
-                ? { name: speaker.name, portrait: speaker.portrait, color: speaker.color, rune: speaker.rune }
-                : null,
-            }])
-            if (!session) return null
-            logRoll(session.id, expr, rolls, total)
-            if (pendingRoll) {
-              try {
-                const result = await resolveRoll(session.id, total)
-                setPendingRoll(null)
-                setMessages(prev => [...prev, { role: 'gm', content: result.outcome }])
-                return { passed: result.passed }
-              } catch {
-                setPendingRoll(null)
+        {isBooted && (
+          <DicePanel
+            key={diceKey}
+            sessionId={session?.id ?? null}
+            pendingRoll={pendingRoll}
+            activeSpeaker={diceSpeaker}
+            attackPhase={attackPhase}
+            attackLog={attackLog}
+            onAttackRoll={handleAttackRoll}
+            onDamageRoll={handleDamageRoll}
+            initiativePending={initiativePending}
+            onRollInitiatives={handleRollInitiatives}
+            onRoll={async (expr: string, rolls: number[], total: number) => {
+              const speaker = diceSpeaker
+              const speakerName = speaker?.name ?? null
+              const rawTotal = rolls.reduce((a, b) => a + b, 0)
+              const modifier = total - rawTotal
+              let rollMsg: string
+              if (modifier !== 0) {
+                const sign = modifier > 0 ? `+${modifier}` : String(modifier)
+                rollMsg = speakerName
+                  ? `${speakerName} rolled a ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
+                  : `Rolled ${rawTotal}. With bonus of ${sign} it is a total of ${total}.`
+              } else {
+                rollMsg = speakerName ? `${speakerName} rolled a ${rawTotal}.` : `Rolled ${rawTotal}.`
               }
-            }
-            return null
-          }}
-        />
+              setMessages(prev => [...prev, {
+                role: 'player',
+                content: rollMsg,
+                speaker: speaker
+                  ? { name: speaker.name, portrait: speaker.portrait, color: speaker.color, rune: speaker.rune }
+                  : null,
+              }])
+              if (!session) return null
+              logRoll(session.id, expr, rolls, total)
+              if (pendingRoll) {
+                try {
+                  const result = await resolveRoll(session.id, total)
+                  setPendingRoll(null)
+                  setMessages(prev => [...prev, { role: 'gm', content: result.outcome }])
+                  return { passed: result.passed }
+                } catch {
+                  setPendingRoll(null)
+                }
+              }
+              return null
+            }}
+          />
+        )}
       </div>
 
       {sheetCharId && characterMap[sheetCharId] && (

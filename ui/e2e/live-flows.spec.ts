@@ -349,6 +349,7 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
   })
 
   // Covers: combat-tracker.feature AC-001, AC-004, AC-005, AC-006, session-state.feature AC-004
+  // Covers: roll-initiatives.feature AC-008 (initiative_pending → banner → roll → CombatPanel)
   test('L10 - spotting goblins produces %%COMBAT%% round 1', async () => {
     await sendTurnAndWait(
       page,
@@ -361,7 +362,20 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     )
 
     await expect(page.locator('.bubble-gm').last()).toContainText(/%%COMBAT%%\s*round:\s*1/, { timeout: 60_000 })
-    await expect(page.locator('.combat-panel')).toBeVisible({ timeout: 15_000 })
+
+    // New flow (roll-initiatives.feature AC-008):
+    // The goblin_attack_starts combat event is active, so the backend emits
+    // "initiative_pending" instead of "combat_update". The CombatPanel stays
+    // hidden until the player clicks "Roll for all combatants" in the DicePanel.
+    await expect(page.locator('.initiative-banner')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('.combat-panel')).not.toBeVisible()
+
+    // Player triggers the initiative roll — DicePanel is still in right column at this point
+    await page.getByRole('button', { name: /Roll for all combatants/i }).click()
+
+    // After rolling, CombatPanel appears and DicePanel shifts left
+    await expect(page.locator('.combat-panel')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('.initiative-banner')).not.toBeVisible()
     await expect(page.locator('.combat-round-badge')).toContainText(/Round\s+1/)
     await expect(page.locator('.combatant-name').filter({ hasText: /goblin/i }).first()).toBeVisible()
 
