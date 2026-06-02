@@ -782,3 +782,61 @@ class TestConditionalOutcomeNarration:
         assert "if_miss" in token_text
         assert "The blade bites" in token_text
         assert "Vanx sidesteps" in token_text
+
+
+# ── CB1.9-3 — action_card SSE ordering ────────────────────────────────────────
+
+class TestActionCardOrdering:
+    """action_card is emitted BEFORE the narrative token (CB1.9-3)."""
+
+    _RESPONSE = (
+        "%%NARRATIVE%%\nThe goblin charges!\n\n"
+        "%%ACTION%%\naction: attack\ntarget: Vanx\nweapon: dogslicer\n"
+        "if_hit: A hit!\nif_miss: A miss!"
+    )
+
+    def test_action_card_emitted_before_token(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: self._RESPONSE)
+        # Force a miss (high AC)
+        for c in session.combat_state.combatants:
+            if c.name == "Vanx":
+                c.ac = 999
+
+        events = _events(list(stream_enemy_turn(session)))
+        types = [e["type"] for e in events]
+
+        card_idx  = next((i for i, e in enumerate(events) if e["type"] == "action_card"), None)
+        token_idx = next((i for i, e in enumerate(events) if e["type"] == "token"), None)
+
+        assert card_idx is not None, "action_card event not found"
+        assert token_idx is not None, "token event not found"
+        assert card_idx < token_idx, "action_card must come before token"
+
+    def test_action_card_has_required_fields(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: self._RESPONSE)
+
+        events = _events(list(stream_enemy_turn(session)))
+        card = next((e for e in events if e["type"] == "action_card"), None)
+
+        assert card is not None
+        for field in ("attacker", "target", "roll", "bonus", "total", "ac", "hit", "damage_total", "attack_type"):
+            assert field in card, f"action_card missing field: {field}"
+
+    def test_no_action_card_when_action_is_delay(self, monkeypatch):
+        session = _session()
+        session.dev_mode = False
+        session.combat_state = _combat()
+        monkeypatch.setattr(
+            sm, "_call_blocking",
+            lambda *_: "%%NARRATIVE%%\nThe goblin waits.\n\n%%ACTION%%\naction: delay",
+        )
+
+        events = _events(list(stream_enemy_turn(session)))
+        card = next((e for e in events if e["type"] == "action_card"), None)
+        assert card is None, "No action_card should be emitted for delay action"

@@ -15,6 +15,7 @@ export type SseEvent =
   | { type: 'initiative_pending'; combat_state: CombatState }
   | { type: 'attack_request'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
   | { type: 'attack_result'; attacker: string; target: string; roll: number; bonus: number; total: number; ac: number; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean }
+  | { type: 'action_card';  attacker: string; target: string; roll: number; bonus: number; total: number; ac: number; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean }
 
 export async function* bootSession(
   sessionNumber: number,

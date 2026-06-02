@@ -3748,6 +3748,11 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
     if outcome:
         full_narrative = f"{narrative}\n\n{outcome}" if narrative else outcome
 
+    # Action card — emitted BEFORE narrative so the player sees the mechanical
+    # outcome first (centered combat-event card in the chat), then reads the flavor.
+    if result is not None:
+        yield f"data: {json.dumps({'type': 'action_card', **result})}\n\n"
+
     # Dev mode: stream full raw response (all %%MARKERS%% visible) with the resolved
     # outcome injected before %%ACTION%% so the developer can see which branch was chosen.
     if session.dev_mode:

@@ -332,6 +332,16 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'gm', content: '' }])
     try {
       for await (const event of runEnemyTurn(session.id)) {
+        if (event.type === 'action_card') {
+          // Inject action card BEFORE the narrative (empty GM bubble placeholder above)
+          setMessages(prev => {
+            const withoutEmpty = prev.slice(0, -1)  // remove the empty gm placeholder
+            return [...withoutEmpty,
+              { role: 'combat-event' as const, content: '', attackResult: { ...event } },
+              { role: 'gm' as const, content: '' },  // new empty placeholder for narrative
+            ]
+          })
+        }
         if (event.type === 'token') appendToken(event.content)
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
         if (event.type === 'combat_update') {

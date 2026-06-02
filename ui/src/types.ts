@@ -1,4 +1,4 @@
-export type Role = 'gm' | 'player' | 'intro' | 'ending'
+export type Role = 'gm' | 'player' | 'intro' | 'ending' | 'combat-event'
 
 export interface MessageSpeaker {
   name: string
@@ -53,6 +53,7 @@ export interface Message {
   role: Role
   content: string
   speaker?: MessageSpeaker | null
+  attackResult?: AttackResult   // set when role === 'combat-event'
 }
 
 export interface SessionInfo {

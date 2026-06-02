@@ -409,6 +409,31 @@ Then  the full raw LLM response is streamed (both if_hit and if_miss visible for
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-018 — action_card SSE emitted before narrative; renders as centered card (CB1.9-3)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Backend emits action_card before narrative token
+
+```gherkin
+Given stream_enemy_turn resolves an attack
+When  the SSE stream is produced
+Then  the "action_card" event is emitted before the first "token" event
+And   the action_card carries: attacker, target, roll, bonus, total, ac, hit, damage_total, attack_type
+And   if no attack occurs (action: delay), no action_card is emitted
+
+Given the frontend receives an action_card event
+Then  a message with role "combat-event" is prepended before the GM narrative bubble
+And   MessageBubble renders it as a centered .combat-event-card block
+And   HIT cards show damage total with .combat-event-hit styling
+And   MISS cards show "MISS" with .combat-event-miss styling
+```
+
+> **UX note:** The action card acts as a combat log header — player sees the mechanical outcome
+> (HIT — 3 damage) before reading the narrative flavor text. This mirrors tabletop GM practice.
+
+---
+
 ## Out of Scope
 
 - `_execute_action` full dispatch table (Tier 2 SA-6) — actions beyond `attack` and `delay`
@@ -452,7 +477,9 @@ Then  the full raw LLM response is streamed (both if_hit and if_miss visible for
   `_build_combat_system_prompt`. Short directive (~10 lines).
 - `stream_close_combat(session)` — blocking LLM call, streams narrative as tokens, clears
   combat state, writes state.json. Fallback: clear combat state silently on error.
-- Tests: `tests/test_enemy_turn.py`; Vitest: `CombatPanelEnemyTurn.test.tsx`
+- **SSE emission order in `stream_enemy_turn`** (CB1.9-3): `action_card` → `token` (narrative+outcome) → `attack_result` → `combat_update` → `done`. The action card arrives before narrative so the player sees the mechanical result first.
+- **`action_card` SSE** — carries same fields as `attack_result` (`attacker`, `target`, `roll`, `bonus`, `total`, `ac`, `hit`, `damage_total`, `attack_type`, `is_pc`). Frontend creates a `Message` with `role: 'combat-event'` and `attackResult` set; `MessageBubble.tsx` renders it as a centered `.combat-event-card`.
+- Tests: `tests/test_enemy_turn.py` (53 tests including `TestActionCardOrdering`); Vitest: `CombatPanelEnemyTurn.test.tsx`, `CombatEventCard.test.tsx` (8 tests)
 - **B-C07 fix (2026-05-31):** `stream_resume_combat` clears `session.attack_queue` defensively
   before the LLM call. When the LLM writes `%%ATTACK%%` blocks inside the resume narration, PC
   attacks were added to the backend queue but the frontend's `doResumeCombat` had no

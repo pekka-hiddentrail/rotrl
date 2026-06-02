@@ -459,13 +459,13 @@ Content and styling are a starting point — see TODO.md GUI Improvements for th
 
 - [ ] **CB1.9-2 — Backend validates chosen weapon against profile** — in `_parse_action_block` or `_execute_action`, when `action: attack` is declared, check that `weapon` matches a known attack name in `pending_combatants`. If no match (LLM hallucinated a weapon), fall back to the first available attack and log a warning. This prevents phantom weapons from reaching `_resolve_npc_attack`.
 
-- [ ] **CB1.9-3 — `action_card` SSE event and frontend action card component** — after `_resolve_npc_attack` resolves an enemy attack, emit `{ type: "action_card", attacker, target, weapon, roll, bonus, total, ac, hit, damage_total, hp_before, hp_after }`. Frontend renders this as a new message type (role: `"action"`) in the chat flow — centered, distinct from GM/player bubbles. Use the mock content above as the initial layout. *(See TODO.md GUI Improvements for the polish/content TODO.)*
+- [x] **CB1.9-3 — `action_card` SSE event and frontend action card component** — after `_resolve_npc_attack` resolves an enemy attack, emit `{ type: "action_card", attacker, target, weapon, roll, bonus, total, ac, hit, damage_total, hp_before, hp_after }`. Frontend renders this as a new message type (role: `"action"`) in the chat flow — centered, distinct from GM/player bubbles. Use the mock content above as the initial layout. *(See TODO.md GUI Improvements for the polish/content TODO.)*
 
 - [ ] **CB1.9-4 — Enforce `%%HP%%` as the only LLM-initiated HP path** — the `%%HP%%` block is the *only* way the LLM may propose an HP change outside of structured attack resolution (traps, environmental damage, spells, morale effects). Add a parser guard that logs a warning and discards any HP mutation that arrives outside `%%HP%%` or a backend-resolved `action_card`.
 
 - [ ] **CB1.9-5 — Damage expression validation** — `_resolve_npc_attack` receives a `damage_expr` string from the bestiary/event profile. Validate it against `_DAMAGE_EXPR_RE` before rolling; return `damage_total: 0` with an `error` field on invalid input.
 
-- [x] **CB1.9-T (partial) — Tests** — `TestEnemyTurnQuery` updated (system/user split); `TestEnemyTurnQueryAttackProfile` uses `combatant.attacks`; `TestEnemyTurnUser` (4 tests) covers `last_actor` / round fallback; `TestConditionalOutcomeNarration` (6 tests) covers if_hit/if_miss parsing and narrative injection; dev/non-dev mode tests for B-C01 fix. 978 pytest passing. Remaining: CB1.9-2 weapon validation, CB1.9-3 action_card SSE.
+- [x] **CB1.9-T — Tests** — `TestEnemyTurnQuery` (system/user split); `TestEnemyTurnQueryAttackProfile` (combatant.attacks); `TestEnemyTurnUser` (4 tests, last_actor continuity); `TestConditionalOutcomeNarration` (6 tests, if_hit/if_miss); `TestActionCardOrdering` (3 tests, action_card before token, required fields, no card for delay); dev/non-dev mode tests for B-C01 fix. 981 pytest + `CombatEventCard.test.tsx` (8 Vitest) all passing. Remaining: CB1.9-2 weapon validation.
 
 ---
 
@@ -694,6 +694,58 @@ display-only; this tier gives them mechanical teeth.
   condition and combination; Prone AC penalty applies to target AC in attack resolution;
   Staggered attacker cannot full-attack; Nauseated attacker blocked; no conditions returns
   `(0, 0)`.
+
+---
+
+### Tier 2.5 — Action Economy (Movement and Non-Attack Actions)
+
+PF1e has a structured action economy that is currently invisible to the system. The LLM narrates
+movement and non-attack actions in free-form prose, but nothing enforces or tracks what action
+type was spent. This tier adds awareness of the full action menu.
+
+- [ ] **Action type taxonomy** — define the recognised action types in a rule file:
+  Standard, Move, Full-Round, Swift, Immediate, Free, 5-foot step.
+  Include common trigger phrases for each (e.g. *"I draw"* / *"I grab"* → Move;
+  *"I retreat"* / *"I disengage"* → Full-Round Disengage; *"I cast"* → Standard or Full-Round;
+  *"I shout"* → Free; *"I reload"* → Move). This becomes the lookup table referenced in TODO.md
+  **Action trigger-phrase reference**.
+
+- [ ] **`%%ACTION%%` block gains `action_type` field** — currently the enemy-turn `%%ACTION%%`
+  block carries `attack` or `delay`. Extend to carry `action_type: standard|move|full|swift|free`
+  so the backend can validate that a full-round action isn't used on the same turn as a standard.
+
+- [ ] **Movement handling** — `%%ACTION%%` with `action_type: move` and optional `distance: 30`
+  and `destination: "behind the pillar"`. Backend notes the movement in the session log and
+  (optionally) updates a future `position` field on the combatant. No grid needed — destination
+  is narrative only for now.
+
+- [ ] **Swift and immediate actions** — `%%ACTION%%` with `action_type: swift` or `immediate`.
+  Backend tracks whether the swift-action slot has been used this turn (one per turn) and the
+  immediate-action slot (once between turns). Violations produce a GM warning injected into the
+  next per-turn prompt.
+
+- [ ] **Free actions and talking** — `action_type: free` with `description:` field. No resource
+  tracking needed; backend logs it for the session record.
+
+- [ ] **5-foot step** — `action_type: five_foot_step`. Only legal if no other movement occurred
+  this turn; backend validates and logs. Useful for melee positioning.
+
+- [ ] **Action type picker in InputBar** — during a PC's combat turn, show a row of compact
+  action-type buttons above (or beside) the text input: **Standard · Move · Full-Round · Swift · Free**.
+  Selecting one pre-tags the outgoing message so the LLM doesn't have to guess from prose alone.
+  The selected type is injected as a prefix into `sentInput` (e.g. `[Standard action] @Vanx: "I cast ray of frost at the goblin"`).
+  Optionally, selecting Full-Round could grey out the Swift slot for that turn.
+  Buttons are only shown when `combatState` is active and it is a PC's turn (same gate as the
+  initiative-actor speaker fix). Deselects automatically when the turn advances.
+
+- [ ] **Click-to-target enemy in CombatPanel** — clicking a non-active combatant row in the
+  CombatPanel marks them as the current target (`selectedTarget` state in App.tsx). The target
+  name is shown as a small badge near the InputBar ("🎯 Goblin Warrior 2") and is automatically
+  appended to the outgoing message prefix (e.g. `[Standard action] @Vanx: "..." → target: Goblin Warrior 2`).
+  The LLM receives an unambiguous target so it can write the correct `%%ATTACK%%` or narrative
+  block without guessing from prose. Target is cleared when the turn advances or combat ends.
+  Visual: selected row gets a subtle highlight (e.g. `combatant-targeted` CSS class with a red
+  outline or crosshair icon). Clicking the same row again deselects.
 
 ---
 

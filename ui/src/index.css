@@ -413,6 +413,50 @@ body {
   align-self: stretch;
 }
 
+/* ── Combat event card ───────────────────── */
+
+.combat-event-row {
+  align-self: center;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.combat-event-card {
+  background: #12121e;
+  border: 1px solid #3a3a5c;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: monospace;
+  font-size: 13px;
+  text-align: center;
+  min-width: 240px;
+  max-width: 440px;
+}
+
+.combat-event-attacker {
+  color: #c0a060;
+  font-weight: bold;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.combat-event-roll {
+  color: #707090;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.combat-event-outcome {
+  font-weight: bold;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+}
+
+.combat-event-hit  { color: #e06060; }
+.combat-event-miss { color: #506070; }
+
 /* ── Error bar ───────────────────────────── */
 
 .error-bar {
