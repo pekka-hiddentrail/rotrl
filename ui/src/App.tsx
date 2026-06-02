@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Message, SessionInfo, CombatState, AttackPhase, AttackResult, ActiveSpeaker } from './types'
 import type { CharacterData } from './data/characters'
 import Header from './components/Header'
@@ -43,6 +43,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
+  // Combat speaker override: set when player manually clicks a sidebar character
+  // mid-combat. Takes priority over currentCombatantName until the next turn advances.
+  const [combatSpeakerOverride, setCombatSpeakerOverride] = useState<string | null>(null)
   const [sheetCharId, setSheetCharId] = useState<string | null>(null)
   const [lastInput, setLastInput] = useState('')
   const [intent, setIntent] = useState<{
@@ -79,6 +82,13 @@ export default function App() {
     setAttackLog(prev => { const next = fn(prev); attackLogRef.current = next; return next })
   }
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
+
+  // Clear the manual combat speaker override whenever the initiative actor changes.
+  // This ensures the override only lasts for the turn it was set on.
+  useEffect(() => {
+    setCombatSpeakerOverride(null)
+  }, [currentCombatantName])
+
 
   const appendToken = useCallback((token: string) => {
     setMessages(prev => {
@@ -491,6 +501,11 @@ export default function App() {
   }
 
   const handleCharacterSelect = (id: string) => {
+    // If combat is active, clicking a sidebar character sets a manual override
+    // that takes priority over the initiative actor until the next turn advances.
+    if (combatState) {
+      setCombatSpeakerOverride(prev => prev === id ? null : id)
+    }
     setActiveCharacter(prev => {
       const next = prev === id ? null : id
       if (session) {
@@ -511,6 +526,11 @@ export default function App() {
   // PC turn → normal character speaker data; enemy turn → isEnemy:true with red color.
   const inputActiveSpeaker: ActiveSpeaker | null = (() => {
     if (combatState && currentCombatantName) {
+      // Manual override: player clicked a sidebar character mid-combat
+      if (combatSpeakerOverride && characterMap[combatSpeakerOverride]) {
+        const overrideData = characterMap[combatSpeakerOverride]
+        return { name: overrideData.name, rune: overrideData.rune, color: overrideData.color, isEnemy: false }
+      }
       const pcData = Object.values(characterMap).find(
         c => c.name.toLowerCase() === currentCombatantName.toLowerCase()
       )
