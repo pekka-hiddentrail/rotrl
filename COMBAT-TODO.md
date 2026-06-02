@@ -35,7 +35,7 @@ Items that span multiple combat tiers or require coordination with non-combat la
 
 - [x] **Vitest — attack resolution UI** — 15 tests in `DicePanelAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
 - [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DicePanel.tsx `handleDamageRollClick`)*
-- [ ] **Enemy turn auto-advance policy** — decide whether `POST /enemy_turn` should automatically advance initiative after it emits `combat_update`, or whether the GM should click **Next Turn** explicitly. Add tests for whichever policy wins so enemy turns cannot accidentally repeat the same actor forever.
+- [x] **Enemy turn auto-advance policy** — implemented: `advance_combat_turn(session)` fires automatically at the end of both `stream_enemy_turn` (enemy turns) and `stream_resume_combat` (PC attack resolution). `GameSession.last_actor` tracks the outgoing actor; `_build_enemy_turn_user` uses it to give the LLM narrative continuity between turns (e.g. "Goblin Warchanter just acted. Now it is Goblin Warrior 1's turn."). B-C09 fixed simultaneously.
 
 ---
 
@@ -423,20 +423,18 @@ This tier has two goals: (1) give the LLM the enemy's attack menu so it picks a 
 
 > **Design principle:** the LLM plays the character, not the statblock. It knows *what* the Goblin Warchanter can do by name (`shortbow`, `bite`, `inspire courage`) — it does not see bonuses or damage dice. The backend owns the numbers. The LLM picks based on narrative intent and tactical context.
 
-#### Enemy turn prompt shape (CB1.9-1)
+#### Enemy turn — as implemented (CB1.9-1 complete)
 
-```
-You are the Goblin Warchanter — raid leader, Wave 1.
+**System message** (`_build_enemy_turn_system`): `_ENEMY_TURN_SYSTEM` identity header + full `[ENEMY TURN BRIEFING]` (actor, Equipped/Available weapons from `combatant.attacks`, allies status-only, PCs with HP, action budget, format spec including `if_hit`/`if_miss`).
 
-Tactical note: Will not engage melee unless cornered. Priority: stay behind warriors and inspire them. Silencing her ends Wave 1.
+**User message** (`_build_enemy_turn_user`): `"{last_actor} just acted. Now it is {actor.name}'s turn."` or `"Round N begins."` — gives the LLM narrative continuity between turns. `session.last_actor` updated by `advance_combat_turn` before changing `current_actor`.
 
-Available attacks: shortbow, bite
-Available abilities: inspire courage
+**`%%ACTION%%` format includes:**
+- `if_hit: <one sentence if hit>` / `if_miss: <one sentence if miss>` — backend picks the matching branch and appends it to `%%NARRATIVE%%` text before streaming to the player. Dev mode shows `[HIT]`/`[MISS]` annotation inline.
 
-It is your turn. Write %%NARRATIVE%% from the Warchanter's perspective (1–2 sentences), then %%ACTION%%.
-```
+**Auto-advance:** `advance_combat_turn(session)` fires at end of both `stream_enemy_turn` and `stream_resume_combat` (PC attack resolution). B-C09 fixed.
 
-The attack/ability names come from `pending_combatants[name]["attacks"]` (seeded from the event file `## Combatants` table). The tactical note comes from the event file's combatant-specific prose. The backend resolves the chosen weapon against its full stat line — the LLM never sees the numbers.
+**API log:** `_call_blocking` now writes to `outputs/api_log/` — enemy turns visible in API Logs panel.
 
 > **Future:** `%%ACTION%%` on PC turns follows the same pattern once player-side action declaration is designed. Enemy first.
 
@@ -457,7 +455,7 @@ Content and styling are a starting point — see TODO.md GUI Improvements for th
 
 ---
 
-- [x] **CB1.9-1 — Inject attack profile into `_build_enemy_turn_query`** — when building the enemy turn prompt, look up `session.pending_combatants[name.lower()]` for `attacks` and `abilities` fields. Format them as plain name lists (no bonuses or damage dice — those stay in the backend). Include any single-combatant tactical note extracted from the event file content (look for the combatant's bold name paragraph). Fall back gracefully when no profile is available.
+- [x] **CB1.9-1 — Enemy turn prompt: attack profile, system/user split, if_hit/if_miss, auto-advance, api log** — `Combatant.attacks` dict seeded from event file melee/ranged columns; persists past initiative roll. `_build_enemy_turn_system` puts full briefing in the system message; `_build_enemy_turn_user` is the short turn trigger with `last_actor` continuity. `%%ACTION%%` format adds `if_hit`/`if_miss`; backend picks the matching branch and injects it into the narrative before streaming. `advance_combat_turn` fires automatically after enemy turns (and PC attack resolution — B-C09). `_call_blocking` logs to api_log (B-C01 dev-mode fix included). 978 pytest passing.
 
 - [ ] **CB1.9-2 — Backend validates chosen weapon against profile** — in `_parse_action_block` or `_execute_action`, when `action: attack` is declared, check that `weapon` matches a known attack name in `pending_combatants`. If no match (LLM hallucinated a weapon), fall back to the first available attack and log a warning. This prevents phantom weapons from reaching `_resolve_npc_attack`.
 
@@ -467,7 +465,7 @@ Content and styling are a starting point — see TODO.md GUI Improvements for th
 
 - [ ] **CB1.9-5 — Damage expression validation** — `_resolve_npc_attack` receives a `damage_expr` string from the bestiary/event profile. Validate it against `_DAMAGE_EXPR_RE` before rolling; return `damage_total: 0` with an `error` field on invalid input.
 
-- [ ] **CB1.9-T — Tests** — `_build_enemy_turn_query`: attack names injected from pending_combatants; falls back gracefully when absent; tactical note included when present. `_parse_action_block`: unknown weapon falls back to first known attack. `action_card` SSE: emitted after `_resolve_npc_attack` with correct fields. Frontend: action card renders in chat flow with hit/miss styling. `test_combat.py` existing HP clamp tests still pass.
+- [x] **CB1.9-T (partial) — Tests** — `TestEnemyTurnQuery` updated (system/user split); `TestEnemyTurnQueryAttackProfile` uses `combatant.attacks`; `TestEnemyTurnUser` (4 tests) covers `last_actor` / round fallback; `TestConditionalOutcomeNarration` (6 tests) covers if_hit/if_miss parsing and narrative injection; dev/non-dev mode tests for B-C01 fix. 978 pytest passing. Remaining: CB1.9-2 weapon validation, CB1.9-3 action_card SSE.
 
 ---
 

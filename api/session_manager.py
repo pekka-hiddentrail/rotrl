@@ -3520,8 +3520,8 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
 
 _ENEMY_TURN_SYSTEM = """You are the Game Master for a Pathfinder 1E campaign: Rise of the Runelords.
 Write vivid but brief action narration, then exactly one %%ACTION%% block.
-Do not roll dice, choose AC, alter HP, update initiative, or write %%COMBAT%%.
-The backend resolves mechanics after your action choice."""
+Write ONLY %%NARRATIVE%% then %%ACTION%%. Do NOT write %%COMBAT%%, %%ATTACK%%, %%HP%%, %%ROLL%%, %%GENERATE%%, %%DELTAS%%, or %%EVENT%%.
+Do not roll dice, choose AC, alter HP, or update initiative. The backend resolves mechanics after your action choice."""
 
 
 def _combatant_line_for_enemy_query(c: Combatant, marker: str = "-") -> str:
@@ -3722,6 +3722,15 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
 
     narrative = _extract_narrative(response)
     action    = _parse_action_block(response)
+
+    # B-C04: warn when the LLM wrote unexpected sections (%%COMBAT%%, %%ATTACK%%, etc.)
+    _unexpected_sections = _SECTION_MARKER_RE.findall(response)
+    _allowed = {"NARRATIVE", "ACTION"}
+    _bad = [s for s in _unexpected_sections if s not in _allowed]
+    if _bad:
+        _log(session, f"\n> *[Enemy turn warning: LLM wrote unexpected sections {_bad} — ignored]*\n")
+        if session.dev_mode:
+            yield f"data: {json.dumps({'type': 'token', 'content': f'[DEV WARNING: unexpected sections {_bad} in enemy turn response — only %%NARRATIVE%% and %%ACTION%% are processed]'})}\n\n"
 
     # Resolve the attack before building the visible message so we know hit/miss
     result: Optional[dict] = None

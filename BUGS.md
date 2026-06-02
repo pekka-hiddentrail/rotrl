@@ -13,25 +13,6 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
 
 ### Combat
 
-- [x] **B-C01 — Enemy turn dev mode: raw LLM output not visible** — In dev mode the enemy turn
-  response shows only the flavor sentence; `%%NARRATIVE%%`, `%%ACTION%%`, and any other sections
-  the LLM wrote are stripped before reaching the UI. `stream_enemy_turn` uses a blocking call
-  and manually yields only the narrative portion as a `token` event, bypassing the dev-mode
-  passthrough that `_stream_with_narrative_filter` normally provides.
-  **Fix:** Add a dev mode path in `stream_enemy_turn` that yields the full raw response text
-  before parsing, so developers can see exactly what the LLM returned.
-  *(spec: enemy-turn.feature AC-007; api/session_manager.py `stream_enemy_turn`)*
-
-- [x] **B-C02 — Speaker prefix uses session activeCharacter, not combat initiative speaker** —
-  When it is a PC's turn (e.g. Yanyeeku is current initiative actor) and the player types
-  "I attack with firebolt", the message is sent and displayed as generic `player` input instead
-  of being prefixed `@Yanyeeku: "..."`. `handleSend` in `App.tsx` reads from `activeCharacter`
-  (player-selected character) for the prefix, not from `inputActiveSpeaker` (the
-  combat-initiative-driven speaker).
-  **Fix:** When combat is active and `currentCombatantName` matches a PC in `characterMap`,
-  `handleSend` uses that PC as the speaker — covers both the UI bubble and the `@Name: "..."` prefix sent to the LLM.
-  *(spec: combat-active-character.feature AC-008; ui/src/App.tsx `handleSend`)*
-
 - [ ] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the LLM
   writes HP, PCs should start at their `hp_max` from `_build_pc_combat_roster`. The roster reads
   `pc_profiles[*]["combat_stats"]["hp_max"]`. If this is 0, the JSON files are either missing
@@ -41,7 +22,7 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
   files has non-zero `hp_max` for each PC in `pc_profiles`.
   *(spec: combat-hp.feature; api/session_manager.py `_build_pc_profiles`)*
 
-- [ ] **B-C04 — Enemy turn LLM outputs unrecognized `%%` sections** — The LLM returns sections
+- [x] **B-C04 — Enemy turn LLM outputs unrecognized `%%` sections** — The LLM returns sections
   like `%%COMBAT%%` and `%%ATTACK%%` inside the enemy turn response even though
   `_ENEMY_TURN_SYSTEM` asks for only `%%NARRATIVE%%` + `%%ACTION%%`. The LLM has learned the
   combat section pattern from regular turns and defaults to it.
@@ -51,7 +32,7 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
   response when unexpected sections are detected (complements B-C01).
   *(spec: enemy-turn.feature AC-006; api/session_manager.py `_ENEMY_TURN_SYSTEM`)*
 
-- [ ] **B-C05 — Combatants grouped instead of individual (e.g. "Goblin Warriors (4)")** — The
+- [x] **B-C05 — Combatants grouped instead of individual (e.g. "Goblin Warriors (4)")** — The
   CombatPanel shows a single row `Goblin Warriors (4)` instead of four separate rows `Goblin 1`
   through `Goblin 4`. The LLM uses group notation because `goblin_attack_starts.md` describes
   them as "Goblin warriors (4–6)" in prose.
@@ -82,6 +63,8 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
 
 ## Resolved
 
+- [x] **B-C01 — Enemy turn dev mode: raw LLM output not visible** — **Fixed:** `stream_enemy_turn` dev_mode path streams full raw response with `[HIT]`/`[MISS]` outcome annotation injected before `%%ACTION%%`. *(api/session_manager.py `stream_enemy_turn`; fixed June 2026)*
+- [x] **B-C02 — Speaker prefix uses session activeCharacter, not combat initiative speaker** — **Fixed:** `handleSend` in `App.tsx` uses `currentCombatantName` (initiative actor) as speaker when combat is active and the actor is a PC. *(ui/src/App.tsx `handleSend`; fixed June 2026)*
 - [x] **B-R01 — Combatants not sorted by initiative in `roll_initiatives` response** — After
   rolling, `_serialize_combat_state` returned `state.combatants` in insertion order. Spec AC-007
   requires the list sorted descending by initiative.

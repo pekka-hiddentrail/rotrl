@@ -17,7 +17,7 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## Bugs
 
-> All known bugs live in **[BUGS.md](BUGS.md)**. Open items: B-C01, B-C02, B-C03b, B-C04, B-C05, B-Q01.
+> All known bugs live in **[BUGS.md](BUGS.md)**. Open items: B-C02, B-C03b, B-C04, B-C05, B-Q01.
 
 ---
 
@@ -170,7 +170,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
-> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 next (enemy attack profile + action card); then 1.11 (death/dying/healing).
+> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 in progress (CB1.9-1 done: attack profile, system/user split, if_hit/if_miss, auto-advance, api log); CB1.9-2 next. Then 1.11.
 > See `specs/roll-initiatives.feature` (9 ACs, 18 pytest + 8 Vitest tests).
 
 ---
