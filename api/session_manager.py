@@ -445,9 +445,10 @@ def _parse_combat_block(
         for c in combatants:
             existing = existing_by_name.get(c.name.lower())
             if existing is not None:
-                # Keep backend HP; update status and other fields from LLM.
+                # Keep backend HP and attack profile; update status/conditions from LLM.
                 c.hp_current = existing.hp_current
                 c.hp_max = existing.hp_max
+                c.attacks = existing.attacks  # preserve seeded attack profile
                 # Guard: LLM may speculatively mark a combatant dead/unconscious
                 # before damage is actually applied (HP is owned by the backend in
                 # round 2+).  If the backend HP is still positive the combatant is
@@ -1004,6 +1005,7 @@ class Combatant:
     initiative: int
     status: str = "active"  # "active" | "unconscious" | "fled" | "dead"
     conditions: list = field(default_factory=list)  # list[str] — PF1e condition names
+    attacks: dict = field(default_factory=dict)     # {"melee": [...], "ranged": [...]} seeded from event file
 
     def __post_init__(self) -> None:
         self.hp_current = max(0, min(self.hp_current, self.hp_max))
@@ -1329,10 +1331,12 @@ def _seed_round1_combatants(session: "GameSession", combat_state: "CombatState")
         # Replace ALL non-PC combatants with authoritative entries from the event file
         for _key, data in session.pending_combatants.items():
             name = data.get("name", _key.title())
-            hp   = data.get("hp", 5)
-            ac   = data.get("ac", 13)
+            hp      = data.get("hp", 5)
+            ac      = data.get("ac", 13)
+            attacks = data.get("attacks", {})
             seeded.append(Combatant(
                 name=name, hp_current=hp, hp_max=hp, ac=ac, initiative=0,
+                attacks=attacks,
             ))
         _log(session,
              f"\n> *[Round-1 seed: replaced enemy list with {len(session.pending_combatants)} "
@@ -3395,58 +3399,104 @@ def _call_blocking(session: GameSession, system: str, user: str) -> str:
 
     Used for enemy turns, combat-close narration, and end-of-session recap generation.
     Sends only the given system + user message pair (no session history).
+    Writes to outputs/api_log/ so the call is visible in the API Logs panel.
     """
+    import time as _time
     messages = [
         {"role": "system", "content": system},
         {"role": "user",   "content": user},
     ]
-    if session.provider == "groq":
-        api_key = os.environ.get("GROQ_API_KEY", "")
-        if not api_key:
-            raise RuntimeError("GROQ_API_KEY environment variable is not set.")
-        payload = {
-            "model": session.model,
-            "messages": messages,
-            "stream": False,
-            "temperature": 0.5,
-            "max_tokens": 2048,
-        }
-        resp = _groq_post(api_key, payload, stream=False)
-        return (resp.json()["choices"][0]["message"] or {}).get("content", "").strip()
-    elif session.provider == "anthropic":
-        if _anthropic is None:
-            raise RuntimeError("anthropic package is not installed. Run: pip install anthropic")
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set.")
-        _claude4 = bool(re.search(r'claude-\w+-4', session.model))
-        _create_kwargs: dict = {"temperature": 0.5} if not _claude4 else {}
-        client = _anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model=session.model,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            max_tokens=2048,
-            **_create_kwargs,
-        )
-        return (msg.content[0].text if msg.content else "").strip()
-    else:
-        resp = _requests.post(
-            f"{session.host}/api/chat",
-            json={
+    _t0 = _time.monotonic()
+    _response_text = ""
+    _usage: Optional[dict] = None
+    _status = "ok"
+    _error: Optional[str] = None
+    _raw_request: dict = {}
+
+    try:
+        if session.provider == "groq":
+            api_key = os.environ.get("GROQ_API_KEY", "")
+            if not api_key:
+                raise RuntimeError("GROQ_API_KEY environment variable is not set.")
+            _raw_request = {
                 "model": session.model,
                 "messages": messages,
                 "stream": False,
-                "options": {
-                    "temperature": 0.5,
-                    "num_ctx": 4096,
-                    "num_gpu": session.num_gpu,
-                },
-            },
-            timeout=300,
-        )
-        resp.raise_for_status()
-        return (resp.json().get("message") or {}).get("content", "").strip()
+                "temperature": 0.5,
+                "max_tokens": 2048,
+            }
+            resp = _groq_post(api_key, _raw_request, stream=False)
+            _body = resp.json()
+            _response_text = (_body["choices"][0]["message"] or {}).get("content", "").strip()
+            _usage_raw = _body.get("usage", {})
+            if _usage_raw:
+                _usage = {
+                    "prompt_tokens":     _usage_raw.get("prompt_tokens", 0),
+                    "completion_tokens": _usage_raw.get("completion_tokens", 0),
+                    "total_tokens":      _usage_raw.get("total_tokens", 0),
+                }
+
+        elif session.provider == "anthropic":
+            if _anthropic is None:
+                raise RuntimeError("anthropic package is not installed.")
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if not api_key:
+                raise RuntimeError("ANTHROPIC_API_KEY environment variable is not set.")
+            _claude4 = bool(re.search(r'claude-\w+-4', session.model))
+            _create_kwargs: dict = {"temperature": 0.5} if not _claude4 else {}
+            _raw_request = {
+                "model": session.model,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+                "max_tokens": 2048,
+                **_create_kwargs,
+            }
+            client = _anthropic.Anthropic(api_key=api_key)
+            msg = client.messages.create(**_raw_request)
+            _response_text = (msg.content[0].text if msg.content else "").strip()
+            if hasattr(msg, "usage") and msg.usage:
+                _usage = {
+                    "prompt_tokens":     getattr(msg.usage, "input_tokens", 0),
+                    "completion_tokens": getattr(msg.usage, "output_tokens", 0),
+                    "total_tokens":      getattr(msg.usage, "input_tokens", 0) + getattr(msg.usage, "output_tokens", 0),
+                }
+
+        else:
+            _raw_request = {
+                "model": session.model,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.5, "num_ctx": 4096, "num_gpu": session.num_gpu},
+            }
+            resp = _requests.post(f"{session.host}/api/chat", json=_raw_request, timeout=300)
+            resp.raise_for_status()
+            _response_text = (resp.json().get("message") or {}).get("content", "").strip()
+
+    except Exception as _exc:
+        _status = "error"
+        _error = str(_exc)
+        raise
+    finally:
+        _duration_ms = int((_time.monotonic() - _t0) * 1000)
+        _section_ok = bool(_HAS_SECTION_MARKERS_RE.search(_response_text)) if _response_text else None
+        try:
+            write_api_log(
+                provider=session.provider,
+                session_id=session.id,
+                session_number=session.session_number,
+                turn=len(session.messages),
+                raw_request=_raw_request,
+                response_text=_response_text,
+                duration_ms=_duration_ms,
+                section_format_ok=_section_ok,
+                status=_status,
+                error=_error,
+                usage=_usage,
+            )
+        except Exception:
+            pass  # logging failure must never break the turn
+
+    return _response_text
 
 
 _ENEMY_TURN_SYSTEM = """You run one enemy turn in Pathfinder 1E.
@@ -3456,8 +3506,8 @@ The backend resolves mechanics after your action choice."""
 
 
 def _combatant_line_for_enemy_query(c: Combatant, marker: str = "-") -> str:
-    cond = f" conditions: {', '.join(c.conditions)}" if c.conditions else ""
-    return f"{marker} {c.name}: hp {c.hp_current}/{c.hp_max}, status {c.status}{cond}"
+    cond = f", conditions: {', '.join(c.conditions)}" if c.conditions else ""
+    return f"{marker} {c.name}: hp {c.hp_current}/{c.hp_max}, {c.status}{cond}"
 
 
 def _enemy_action_budget(c: Combatant) -> str:
@@ -3505,52 +3555,68 @@ def _build_enemy_turn_query(session: "GameSession", name: str) -> str:
         raise ValueError(f"Combatant not found: {name}")
 
     enemies = [c for c in session.combat_state.combatants if not _is_pc_attacker(c.name, session)]
-    pcs = [c for c in session.combat_state.combatants if _is_pc_attacker(c.name, session)]
-    allies = [c for c in enemies if c.name.lower() != actor.name.lower()]
+    pcs     = [c for c in session.combat_state.combatants if _is_pc_attacker(c.name, session)]
+    allies  = [c for c in enemies if c.name.lower() != actor.name.lower()]
 
-    def _lines(rows: list[Combatant], empty: str) -> str:
-        return "\n".join(_combatant_line_for_enemy_query(c) for c in rows) if rows else empty
+    # ── Weapon lines (equipped = primary; available = secondary) ─────────────
+    _atk    = actor.attacks if isinstance(actor.attacks, dict) else {}
+    _melee  = _atk.get("melee",  [])
+    _ranged = _atk.get("ranged", [])
+    if _melee:
+        _equipped  = _melee[0]
+        _available = _ranged[0] if _ranged else None
+    elif _ranged:
+        _equipped  = _ranged[0]
+        _available = None
+    else:
+        _equipped  = None
+        _available = None
+    _equipped_line  = f"Equipped weapon: {_equipped}" if _equipped else "Equipped weapon: (unarmed)"
+    _available_line = f"Available weapon: {_available}" if _available else "Available weapon: (none)"
 
-    # Build attack-profile lines from pending_combatants (names only — no mechanics)
-    _profile = session.pending_combatants.get(actor.name.lower(), {})
-    _atk = _profile.get("attacks", {})
-    _melee_names  = _atk.get("melee",  []) if isinstance(_atk, dict) else []
-    _ranged_names = _atk.get("ranged", []) if isinstance(_atk, dict) else []
-    _melee_line  = f"Melee attacks: {', '.join(_melee_names)}"  if _melee_names  else ""
-    _ranged_line = f"Ranged attacks: {', '.join(_ranged_names)}" if _ranged_names else ""
-    _attack_block = "\n".join(line for line in [_melee_line, _ranged_line] if line)
+    # ── Tactic note (future: seeded from event file per-combatant prose) ─────
+    _tactic = actor.tactic if hasattr(actor, "tactic") and actor.tactic else "(none)"
+
+    # ── Ally and PC lines ─────────────────────────────────────────────────────
+    def _ally_line(c: Combatant) -> str:
+        cond = f", conditions: {', '.join(c.conditions)}" if c.conditions else ""
+        return f"- {c.name}: {c.status}{cond}"
+
+    def _pc_line(c: Combatant) -> str:
+        cond = f", conditions: {', '.join(c.conditions)}" if c.conditions else ""
+        return f"- {c.name}: hp {c.hp_current}/{c.hp_max}, {c.status}{cond}"
+
+    _actor_cond   = f", conditions: {', '.join(actor.conditions)}" if actor.conditions else ""
+    _allies_block = "\n".join(_ally_line(c) for c in allies) if allies else "- (none)"
+    _pcs_block    = "\n".join(_pc_line(c)   for c in pcs)    if pcs    else "- (none)"
 
     return f"""[ENEMY TURN BRIEFING]
 Round: {session.combat_state.round}
-Actor: {_combatant_line_for_enemy_query(actor, marker='*')}
+Actor: {actor.name}, {actor.status}{_actor_cond}
 Action budget: {_enemy_action_budget(actor)}
-{_attack_block + chr(10) if _attack_block else ""}\
+{_equipped_line}
+{_available_line}
+Tactic: {_tactic}
 
 Allies:
-{_lines(allies, "- none")}
+{_allies_block}
 
 Player characters:
-{_lines(pcs, "- none")}
+{_pcs_block}
 
-Enemy names:
-{", ".join(c.name for c in enemies) if enemies else "none"}
+Choose one tactical action for {actor.name}.
+Standard: one standard action (attack/ability) + one move action.
+Full-round: full attack (all iterative attacks) or charge.
 
-Choose one tactical action for {actor.name}. Do not mention hidden target numbers.
-
-Output format:
 %%NARRATIVE%%
-<1 short paragraph describing what the enemy visibly attempts>
+<1–2 sentences describing what {actor.name} visibly attempts>
 
 %%ACTION%%
 action: attack|use_ability|move|delay
-target: <target name, if any>
-weapon: <weapon/name, if attack>
-bonus: <to-hit bonus, e.g. +2 or +4, if attack>
-damage: <damage dice, e.g. 1d4 or 1d6+2, if attack>
+target: <target name, if attacking or moving toward>
+weapon: <weapon name, if attack — must match Equipped or Available weapon>
 ability: <ability name, if use_ability>
-movement: <movement description, if move>
-reason: <brief tactical reason>
-%%END%%"""
+movement: <destination or direction, if move>"""
 
 
 def _extract_narrative(text: str) -> str:
@@ -3617,7 +3683,11 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
         result = _resolve_npc_attack(attack, session)
         yield f"data: {json.dumps({'type': 'attack_result', **result})}\n\n"
 
-    _write_session_state(session)
+    # Advance to the next combatant automatically — no manual "Next Turn" click needed
+    try:
+        advance_combat_turn(session)
+    except ValueError:
+        _write_session_state(session)  # fallback if advance fails
     yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

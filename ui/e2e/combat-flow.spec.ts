@@ -158,7 +158,7 @@ test('CT-E2E-001b — HP bar colour shifts on combat_update with reduced HP', as
   // Turn 2: Shalelu drops to 8/24 = 33 % → red bar; Goblin 1 → KO status badge
   await page.getByRole('textbox').fill('round 2')
   await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByText('Round 2')).toBeVisible()
+  await expect(page.locator('.combat-round-badge', { hasText: 'Round 2' })).toBeVisible()
 
   await expect(shaleluBar).toHaveCSS('background-color', 'rgb(176, 64, 64)')   // #b04040
 
@@ -168,17 +168,21 @@ test('CT-E2E-001b — HP bar colour shifts on combat_update with reduced HP', as
 })
 
 // Covers: AC-008, AC-006
-test('CT-E2E-001c — End Combat clears panel and fires DELETE /combat', async ({ page }) => {
+test('CT-E2E-001c — End Combat clears panel via close_combat stream', async ({ page }) => {
+  // The UI uses POST /close_combat (SSE stream) not DELETE /combat directly.
   await page.route('**/api/sessions/sess-e2e/turn', route =>
     fulfillSse(route, { type: 'combat_update', combat_state: ROUND_1_STATE }),
   )
 
-  let deleteWasCalled = false
-  await page.route('**/api/sessions/sess-e2e/combat', async route => {
-    if (route.request().method() === 'DELETE') {
-      deleteWasCalled = true
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{"combat_state":null}' })
-    }
+  let closeCombatCalled = false
+  await page.route('**/api/sessions/sess-e2e/close_combat', async route => {
+    closeCombatCalled = true
+    await fulfillSse(
+      route,
+      { type: 'token', content: 'The goblins flee.' },
+      { type: 'combat_update', combat_state: null },
+      { type: 'done' },
+    )
   })
 
   await boot(page)
@@ -189,12 +193,12 @@ test('CT-E2E-001c — End Combat clears panel and fires DELETE /combat', async (
 
   await page.getByRole('button', { name: 'End Combat' }).click()
 
-  // Panel disappears
-  await expect(page.locator('.combat-panel')).not.toBeVisible()
+  // Panel disappears after combat_update: null
+  await expect(page.locator('.combat-panel')).not.toBeVisible({ timeout: 5_000 })
 
   // Layout reverts — no combat-active class
   await expect(page.locator('.main-content')).not.toHaveClass(/combat-active/)
 
-  // DELETE was called
-  expect(deleteWasCalled).toBe(true)
+  // close_combat endpoint was called
+  expect(closeCombatCalled).toBe(true)
 })

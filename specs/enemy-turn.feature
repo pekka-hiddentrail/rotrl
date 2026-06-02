@@ -95,13 +95,14 @@ Given session.combat_state has:
   - Yanyeeku: 4/7 HP, active — PC
 
 When  _build_enemy_turn_query(session, "Goblin Warchanter") is called
-Then  the output contains "Goblin Warchanter"
-And   the output contains "6/8" (acting combatant HP)
-And   the output contains "Goblin 1" (ally listed)
-And   the output contains "Thaelion" (enemy PC listed)
-And   the output contains "Yanyeeku" (enemy PC listed)
-And   the output contains "standard" or "Standard action" (available action budget)
+Then  the output contains "Actor: Goblin Warchanter, active"
+And   the output contains "Equipped weapon" or "Available weapon" lines
+And   allies are listed by name and status only (no HP — enemies don't track each other's HP)
+And   PCs are listed with HP ("Thaelion: hp 18/22") so the enemy knows who is wounded
+And   the output contains "Standard:" and "Full-round:" action instructions
 And   the output contains the %%ACTION%% format specification
+And   the output does NOT contain "bonus:" or "damage:" fields (backend owns mechanics)
+And   the output does NOT contain "%%END%%" or "reason:" fields
 ```
 
 ---

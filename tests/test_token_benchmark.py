@@ -236,12 +236,17 @@ def test_token_counts_combat_turns(benchmark_client):
 
         event_types = {e.get("type") for e in evts}
 
+        # Find the most recent regular-turn api log (not an enemy-turn blocking call).
+        # Both events indicate combat started: "combat_update" (post-roll) or
+        # "initiative_pending" (pre-roll, waiting for player to click Roll Initiatives).
         log_data = _latest_api_log_for_session(session_id)
         assert log_data, f"No API log found for turn {benchmark_turn} ({scenario})"
 
         row = _extract_token_row(log_data, run_ts, benchmark_turn)
-        row["scenario"]        = scenario
-        row["combat_started"]  = int("combat_update"   in event_types)
+        row["scenario"]         = scenario
+        row["combat_started"]   = int(
+            "combat_update" in event_types or "initiative_pending" in event_types
+        )
         row["attack_requested"] = int("attack_request" in event_types)
         row["roll_requested"]   = int("roll_request"   in event_types)
 
@@ -275,9 +280,9 @@ def test_token_counts_combat_turns(benchmark_client):
     ))
     if not rows[-1]["combat_started"]:
         print(
-            "\n[combat-benchmark] WARNING: combat_update was NOT in the turn-2 SSE stream."
-            " The LLM may not have emitted a %%COMBAT%% block — token costs for"
-            " turns 3-4 will reflect a non-combat context."
+            "\n[combat-benchmark] WARNING: neither combat_update nor initiative_pending"
+            " was in the turn-2 SSE stream. The LLM may not have emitted a %%COMBAT%%"
+            " block — token costs for turns 3-4 will reflect a non-combat context."
         )
 
     # ── Turn 3: first strike ──────────────────────────────────────────────────

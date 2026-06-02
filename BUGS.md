@@ -22,15 +22,14 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
   before parsing, so developers can see exactly what the LLM returned.
   *(spec: enemy-turn.feature AC-007; api/session_manager.py `stream_enemy_turn`)*
 
-- [ ] **B-C02 — Speaker prefix uses session activeCharacter, not combat initiative speaker** —
+- [x] **B-C02 — Speaker prefix uses session activeCharacter, not combat initiative speaker** —
   When it is a PC's turn (e.g. Yanyeeku is current initiative actor) and the player types
   "I attack with firebolt", the message is sent and displayed as generic `player` input instead
   of being prefixed `@Yanyeeku: "..."`. `handleSend` in `App.tsx` reads from `activeCharacter`
   (player-selected character) for the prefix, not from `inputActiveSpeaker` (the
   combat-initiative-driven speaker).
-  **Fix:** When combat is active and `inputActiveSpeaker` is set and not an enemy, `handleSend`
-  should use `inputActiveSpeaker.name` as the speaker prefix — same logic as when a player
-  manually selects a character.
+  **Fix:** When combat is active and `currentCombatantName` matches a PC in `characterMap`,
+  `handleSend` uses that PC as the speaker — covers both the UI bubble and the `@Name: "..."` prefix sent to the LLM.
   *(spec: combat-active-character.feature AC-008; ui/src/App.tsx `handleSend`)*
 
 - [ ] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the LLM

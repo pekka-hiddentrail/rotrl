@@ -175,15 +175,19 @@ class TestEnemyTurnQuery:
         session.combat_state = _combat()
         query = _build_enemy_turn_query(session, "Goblin Warrior 1")
 
-        assert "Actor: * Goblin Warrior 1: hp 5/5, status active" in query
-        assert "Goblin Warrior 2: hp 5/5" in query
+        assert "Actor: Goblin Warrior 1, active" in query
+        # Allies: status only, no HP
+        assert "Goblin Warrior 2: active" in query
+        assert "hp 5/5" not in query.split("Player characters")[0]  # allies have no HP
+        # PCs: HP shown
         assert "Vanx: hp 10/10" in query
         assert "Ani: hp 9/9" in query
         assert "Normal turn" in query
         assert "%%ACTION%%" in query
         assert "action: attack|use_ability|move|delay" in query
-        assert "bonus:" in query
-        assert "damage:" in query
+        # bonus and damage removed — backend owns mechanics
+        assert "bonus:" not in query
+        assert "damage:" not in query
 
     def test_enemy_turn_query_adjusts_action_budget_for_restrictive_conditions(self):
         session = _session()
@@ -490,63 +494,43 @@ class TestEnemyTurnQueryAttackProfile:
 
     def _warchanter_session(self) -> GameSession:
         session = _session()
+        warchanter_attacks = {"melee": ["bite"], "ranged": ["shortbow"]}
+        warrior_attacks    = {"melee": ["dogslicer"], "ranged": ["shortbow"]}
         session.combat_state = CombatState(
             round=2,
             current_actor="Goblin Warchanter",
             combatants=[
                 Combatant(name="Vanx", hp_current=10, hp_max=10, ac=18, initiative=14),
                 Combatant(name="Ani", hp_current=9, hp_max=9, ac=15, initiative=12),
-                Combatant(name="Goblin Warchanter", hp_current=6, hp_max=8, ac=14, initiative=18),
-                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10),
+                Combatant(name="Goblin Warchanter", hp_current=6, hp_max=8, ac=14, initiative=18,
+                          attacks=warchanter_attacks),
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=10,
+                          attacks=warrior_attacks),
             ],
         )
-        session.pending_combatants = {
-            "goblin warchanter": {
-                "name": "Goblin Warchanter",
-                "init_mod": 3,
-                "hp": 8,
-                "ac": 14,
-                "attacks": {
-                    "melee": ["bite"],
-                    "ranged": ["shortbow"],
-                },
-            },
-            "goblin warrior 1": {
-                "name": "Goblin Warrior 1",
-                "init_mod": 2,
-                "hp": 5,
-                "ac": 16,
-                "attacks": {
-                    "melee": ["dogslicer"],
-                    "ranged": ["shortbow"],
-                },
-            },
-        }
         return session
 
     def test_melee_attacks_in_query(self):
+        # Warchanter has melee=["bite"], ranged=["shortbow"]
+        # melee is primary → Equipped weapon: bite
         session = self._warchanter_session()
         query = _build_enemy_turn_query(session, "Goblin Warchanter")
-        assert "Melee attacks: bite" in query
+        assert "Equipped weapon: bite" in query
 
     def test_ranged_attacks_in_query(self):
         session = self._warchanter_session()
         query = _build_enemy_turn_query(session, "Goblin Warchanter")
-        assert "Ranged attacks: shortbow" in query
+        assert "Available weapon: shortbow" in query
 
     def test_mechanics_stripped_from_query(self):
-        # Bonuses and damage dice must NOT appear in the attack profile section.
-        # Note: "1d4" legitimately appears in the output format spec template
-        # (e.g. "damage: <damage dice, e.g. 1d4 or 1d6+2>") — so we check only
-        # the lines that contain attack names, not the full query.
         session = self._warchanter_session()
         query = _build_enemy_turn_query(session, "Goblin Warchanter")
-        melee_line = next((l for l in query.splitlines() if "Melee attacks:" in l), "")
-        ranged_line = next((l for l in query.splitlines() if "Ranged attacks:" in l), "")
-        assert "+5" not in melee_line and "+5" not in ranged_line
-        assert "1d4" not in melee_line and "1d4" not in ranged_line
-        assert "bite" in melee_line
-        assert "shortbow" in ranged_line
+        equipped_line  = next((l for l in query.splitlines() if "Equipped weapon:" in l), "")
+        available_line = next((l for l in query.splitlines() if "Available weapon:" in l), "")
+        assert "+5" not in equipped_line and "+5" not in available_line
+        assert "1d4" not in equipped_line and "1d4" not in available_line
+        assert "bite"     in equipped_line
+        assert "shortbow" in available_line
 
     def test_only_actor_attacks_injected(self):
         # Other combatants' attacks must not appear in the actor section
@@ -554,18 +538,23 @@ class TestEnemyTurnQueryAttackProfile:
         query = _build_enemy_turn_query(session, "Goblin Warchanter")
         assert "dogslicer" not in query  # Goblin Warrior 1's weapon
 
-    def test_graceful_fallback_empty_pending_combatants(self):
+    def test_graceful_fallback_no_attacks_on_combatant(self):
         session = self._warchanter_session()
-        session.pending_combatants = {}
+        # Remove attacks from the warchanter combatant
+        for c in session.combat_state.combatants:
+            if c.name == "Goblin Warchanter":
+                c.attacks = {}
         query = _build_enemy_turn_query(session, "Goblin Warchanter")
         assert "Melee attacks" not in query
         assert "Ranged attacks" not in query
         assert "%%ACTION%%" in query  # rest of query still present
 
-    def test_graceful_fallback_no_attacks_key(self):
+    def test_graceful_fallback_attacks_not_dict(self):
         session = self._warchanter_session()
-        # Profile exists but no attacks key
-        session.pending_combatants["goblin warchanter"] = {"init_mod": 3, "hp": 8, "ac": 14}
+        # Corrupted attacks field
+        for c in session.combat_state.combatants:
+            if c.name == "Goblin Warchanter":
+                c.attacks = None  # type: ignore
         query = _build_enemy_turn_query(session, "Goblin Warchanter")
         assert "Melee attacks" not in query
         assert "Ranged attacks" not in query

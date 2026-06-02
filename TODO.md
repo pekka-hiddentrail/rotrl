@@ -177,7 +177,17 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Nice-to-Have
 
-- [ ] **Redesign dice panel** — panel is too large relative to its usage; decide on visibility model and condense the layout
+- [ ] **Action trigger-phrase reference** — build a lookup table (or inline reference in the input bar tooltip) that maps natural-language phrases to their Pathfinder action type, so the player knows what they're spending before they type. Examples:
+  - *"I grab my X"* / *"I draw my sword"* → **Move action** (draw/retrieve item not in hand)
+  - *"I retreat"* / *"I back away"* / *"I disengage"* → **Full-round action — Disengage** (avoids AoO)
+  - *"I shoot at"* / *"I fire my"* → **Standard action — Ranged attack** (equipped ranged weapon)
+  - *"I swing at"* / *"I hit"* / *"I strike"* → **Standard action — Melee attack**
+  - *"I run"* / *"I sprint"* → **Full-round action — Run** (×4 speed, loses DEX to AC)
+  - *"I charge"* → **Full-round action — Charge** (+2 attack, −2 AC until next turn)
+  - *"I cast"* → **Standard action — Cast spell** (possibly full-round for some spells)
+  - *"I shout"* / *"I call out"* → **Free action** (brief communication)
+  - *"I reload"* → **Move action** (most crossbows/firearms)
+  - The reference could appear as a small collapsible cheat-sheet near the input bar, or as a tooltip on a "?" icon. Backend-side, detected phrases could also pre-fill the `%%ROLL%%` type or add a hint to the per-turn prompt so the GM narrates the correct action economy.
 - [ ] Dice panel should always show why the roll is made. As in "X tries to spot..."
 - [ ] Dice panel option A — always visible but collapsed to a thin strip, expands on click
 - [ ] Dice panel option B — show only when a `roll_request` event is active, hide otherwise

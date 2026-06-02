@@ -130,7 +130,12 @@ export default function App() {
 
   const handleSend = async (input: string) => {
     if (!session) return
-    const speaker = activeCharacter ? characterMap[activeCharacter] : null
+    // During combat, the current initiative actor is the speaker (if they're a PC).
+    // Falls back to the manually selected activeCharacter outside combat.
+    const combatPc = (combatState && currentCombatantName)
+      ? Object.values(characterMap).find(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()) ?? null
+      : null
+    const speaker = combatPc ?? (activeCharacter ? characterMap[activeCharacter] : null)
     const sentInput = speaker ? `@${speaker.name}: "${input}"` : input
     setError(null)
     setLastInput(input)

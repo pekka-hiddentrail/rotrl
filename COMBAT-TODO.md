@@ -457,7 +457,7 @@ Content and styling are a starting point — see TODO.md GUI Improvements for th
 
 ---
 
-- [ ] **CB1.9-1 — Inject attack profile into `_build_enemy_turn_query`** — when building the enemy turn prompt, look up `session.pending_combatants[name.lower()]` for `attacks` and `abilities` fields. Format them as plain name lists (no bonuses or damage dice — those stay in the backend). Include any single-combatant tactical note extracted from the event file content (look for the combatant's bold name paragraph). Fall back gracefully when no profile is available.
+- [x] **CB1.9-1 — Inject attack profile into `_build_enemy_turn_query`** — when building the enemy turn prompt, look up `session.pending_combatants[name.lower()]` for `attacks` and `abilities` fields. Format them as plain name lists (no bonuses or damage dice — those stay in the backend). Include any single-combatant tactical note extracted from the event file content (look for the combatant's bold name paragraph). Fall back gracefully when no profile is available.
 
 - [ ] **CB1.9-2 — Backend validates chosen weapon against profile** — in `_parse_action_block` or `_execute_action`, when `action: attack` is declared, check that `weapon` matches a known attack name in `pending_combatants`. If no match (LLM hallucinated a weapon), fall back to the first available attack and log a warning. This prevents phantom weapons from reaching `_resolve_npc_attack`.
 
