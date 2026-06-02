@@ -97,6 +97,19 @@ export async function rollInitiatives(sessionId: string): Promise<{ combat_state
 }
 
 
+export async function* pcTurn(sessionId: string, input: string): AsyncGenerator<SseEvent> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/pc_turn`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+  })
+  if (!res.ok) {
+    const detail = await res.text()
+    throw new Error(`PC turn failed (${res.status}): ${detail}`)
+  }
+  yield* parseSseStream(res)
+}
+
 export async function* runEnemyTurn(sessionId: string): AsyncGenerator<SseEvent> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/enemy_turn`, { method: 'POST' })
   if (!res.ok) throw new Error(`Enemy turn failed (${res.status})`)

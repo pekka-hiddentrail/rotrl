@@ -11,9 +11,15 @@ Consolidated bug tracker. All open bugs are listed here regardless of area. Fixe
 
 ## Open
 
+### Infrastructure
+
+- [ ] **B-I01 — `state.json` file lock crashes SSE stream on Windows** — `_write_session_state` calls `path.write_text(...)` without error handling. On Windows, if the file is open in another process (VS Code editor, Explorer preview, etc.) a `PermissionError` propagates through `stream_resume_combat` → `_stream_pc_turn_narration` → `advance_combat_turn` and kills the entire SSE response mid-stream.
+  **Immediate fix (shipped):** wrapped `write_text` in `try/except PermissionError`; logs a warning and continues — `state.json` is a convenience snapshot, not the live source of truth.
+  **Root cause:** `state.json` sits in the workspace and VS Code opens it in the editor, holding a read lock that blocks writes on Windows. Consider writing to a temp file and atomically renaming (`path.with_suffix('.tmp')` → `path.rename()`) which sidesteps the lock entirely.
+
 ### Combat
 
-- [ ] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the LLM
+- [x] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the LLM
   writes HP, PCs should start at their `hp_max` from `_build_pc_combat_roster`. The roster reads
   `pc_profiles[*]["combat_stats"]["hp_max"]`. If this is 0, the JSON files are either missing
   the `hp.max` field or the field path in `_build_pc_profiles` doesn't match.

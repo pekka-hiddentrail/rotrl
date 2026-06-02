@@ -1034,11 +1034,26 @@ body {
 
 /* ── Input bar ───────────────────────────── */
 
+.combat-weapons-hint {
+  position: absolute;
+  bottom: 4px;
+  left: 24px;
+  font-size: 11px;
+  color: #806040;
+  font-family: monospace;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 120px);
+}
+
 .input-bar {
   display: flex;
   gap: 8px;
   padding: 12px 24px 16px;
   background: var(--surface);
+  position: relative;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }

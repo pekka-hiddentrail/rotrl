@@ -50,9 +50,10 @@ interface Props {
   onSend: (input: string) => void
   disabled: boolean
   activeSpeaker?: ActiveSpeaker | null
+  combatWeapons?: string[]  // shown as a hint strip when it's a PC's combat turn
 }
 
-export default function InputBar({ onSend, disabled, activeSpeaker = null }: Props) {
+export default function InputBar({ onSend, disabled, activeSpeaker = null, combatWeapons }: Props) {
   const [value, setValue] = useState('')
 
   const submit = () => {
@@ -112,6 +113,11 @@ export default function InputBar({ onSend, disabled, activeSpeaker = null }: Pro
       >
         {disabled ? '…' : 'Send'}
       </button>
+      {combatWeapons && combatWeapons.length > 0 && (
+        <div className="combat-weapons-hint" title="Available weapons for intent extraction">
+          ⚔ {combatWeapons.join(' · ')}
+        </div>
+      )}
     </div>
   )
 }

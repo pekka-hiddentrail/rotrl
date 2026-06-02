@@ -170,7 +170,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
-> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tier 1.9 in progress (CB1.9-1 done: attack profile, system/user split, if_hit/if_miss, auto-advance, api log); CB1.9-2 next. Then 1.11.
+> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tiers 1.9 and 1.10.5 complete. Tier 1.11 next (death/dying/healing). Tier 2 (server-authoritative state) follows.
 > See `specs/roll-initiatives.feature` (9 ACs, 18 pytest + 8 Vitest tests).
 
 ---
@@ -188,6 +188,10 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
   - *"I shout"* / *"I call out"* → **Free action** (brief communication)
   - *"I reload"* → **Move action** (most crossbows/firearms)
   - The reference could appear as a small collapsible cheat-sheet near the input bar, or as a tooltip on a "?" icon. Backend-side, detected phrases could also pre-fill the `%%ROLL%%` type or add a hint to the per-turn prompt so the GM narrates the correct action economy.
+- [ ] **Combat appearance injection** — inject a short visual description of each combatant into `_inject_context` so the LLM can write richer `%%NARRATIVE%%` (hit reactions, wounds, stances). Two sources:
+  - *Enemies*: `appearance` field from the event file `## Combatants` table (e.g. "wiry goblin with a jagged dogslicer and burn-scarred arms"). Appended to the `[INITIATIVE ORDER]` block or a new `[COMBATANT APPEARANCES]` section.
+  - *PCs*: `appearance` field from `player_XX.json` combat stats (already in the profile; just not forwarded to the combat prompt). Currently `[PC COMBAT STATS]` injects only mechanics — add a one-line appearance sentence per PC.
+  - Keep the injection brief (one sentence per combatant, skipped if the field is absent) to avoid token bloat.
 - [ ] Dice panel should always show why the roll is made. As in "X tries to spot..."
 - [ ] Dice panel option A — always visible but collapsed to a thin strip, expands on click
 - [ ] Dice panel option B — show only when a `roll_request` event is active, hide otherwise
@@ -205,6 +209,22 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ## Code Quality / Refactoring
 
+- [ ] **Split `session_manager.py` — 4 300+ lines is unworkable** — the file has grown to cover six distinct concerns that should live in separate modules. Suggested split:
+
+  | New module | Responsibility | Approx lines today |
+  |---|---|---|
+  | `api/session_manager.py` | `GameSession` dataclass, `create_session`, `get_session`, `save_session`; thin public API only | ~200 |
+  | `api/combat/state.py` | `CombatState`, `Combatant`, `PendingAttack`, `ActiveEvent`; `_parse_combat_block`, `_serialize_combat_state`, `_seed_round1_combatants`, `advance_combat_turn`, `roll_combat_initiatives` | ~500 |
+  | `api/combat/attack.py` | `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `_roll_dice`, `_parse_attack_line/block`, `_parse_action_block`, `_apply_hp_deltas` | ~300 |
+  | `api/context/injector.py` | `_inject_context`, `_build_combat_system_prompt`, `_build_slim_system_prompt`, all `_COMBAT_SPEC_*` constants, `_inject_npc_context`, `_inject_skill_context`, `_inject_location_context` | ~700 |
+  | `api/streaming.py` | `_stream_chat`, `stream_turn`, `stream_boot`, `stream_enemy_turn`, `stream_close_combat`, `stream_end_session`, `stream_resume_combat`; all SSE yielding and response-section parsing | ~1 200 |
+  | `api/persistence.py` | `_write_session_state`, `_log`, `_write_npc_delta`, NPC boot cleanup, `_build_pc_profiles` | ~300 |
+
+  **Migration strategy**: move modules one at a time with a re-export shim in the old location so `api/main.py` and all tests keep working without mass-changes. Start with `api/combat/attack.py` (most self-contained; already well-tested). Each move is its own PR.
+
+  **Do not attempt this mid-feature** — pick a clean point between tiers (e.g. after Tier 2 SA-1 ships).
+
+- [ ] **Remove dead `%%HP%%` code and tests (CB1.9-4 housekeeping)** — now that `%%HP%%` is stripped from all prompts and both stream paths discard it, the following are dead code: `_HP_BLOCK_RE`, `_HP_DELTA_LINE_RE`, `_parse_hp_deltas()` (only callers were the two stream processors), plus the `TestHpDeltaIntegration` class in `test_combat_hp.py` and the two `test_no_hp_marker` tests in `test_combat_prompt.py` (they now test absence, which will stay true forever but add no value). `_apply_hp_deltas()` and its callers in `_resolve_npc_attack` / `resolve_damage_roll` are still live — keep those. Safe to do in one commit; no behavioral change.
 - [ ] **Add comment at `_is_pc_attacker` call in `roll_combat_initiatives`** — function is named for attack resolution but reused for PC detection during initiative; a one-line comment prevents future confusion. *(api/session_manager.py)*
 - [ ] **Fix inline `import('./types')` in `api.ts` `rollInitiatives` return type** — see **[BUGS.md](BUGS.md) B-Q01**.
 - [ ] **Document `round < 1` sentinel in `CombatPanel.tsx`** — `showRound = combatState.round >= 1` hides the round badge when round is -1 (initiative not yet rolled); add an inline comment explaining the convention.
