@@ -262,7 +262,8 @@ rotrl/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET`  | `/api/health` | Liveness check — returns `{"status": "ok"}` |
-| `GET`  | `/api/characters` | Return all player characters as a JSON array (reads `ui/public/data/`) |
+| `GET`  | `/api/characters` | Return lightweight player character summaries for sidebar/splash UI |
+| `GET`  | `/api/characters/{id}` | Return one full character sheet on demand |
 | `GET`  | `/api/intro` | Player-facing intro card for a session (intro.md → recap.md fallback) |
 | `POST` | `/api/sessions` | Create session, build system prompt; streams `done` SSE event |
 | `GET`  | `/api/sessions/{id}` | Session info (model, message count) |
@@ -346,7 +347,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_recap_header.py` | Recap header normalization edge cases |
 | `test_log_parser.py` | Log turn parsing |
 | `test_npc_generator.py` | `generate_base_md`, NPC stub creation |
-| `test_character_data.py` | Character JSON field validation (`/api/characters` endpoint, index file, HP/level/abilities/saves/wealth/weapons/spells per character) |
+| `test_character_data.py` | Character JSON field validation, summary `/api/characters` endpoint, detail `/api/characters/{id}` endpoint, index file, HP/level/abilities/saves/wealth/weapons/spells per character |
 | `test_intro.py` | Intro file resolution and fallback |
 | `test_event_injection.py` | `EventIndex` loading, `%%EVENT%%` parsing, TTL expiry, duplicate guard, event map, SSE `active_events`, double-write regression, `EventEntry.event_type` metadata (AC-009) |
 | `test_location_lookup.py` | `LocationIndex` loading, alias detection, `<!-- REFERENCE -->` boundary, profile injection, scene re-injection, session-generated location stubs |
@@ -379,7 +380,7 @@ Recent streaming regressions are covered explicitly: `test_stream_filter.py` ass
 | `IntentBar.test.tsx` | 52-char truncation, NPC/skill/location tags, null tags, detecting state, missing-context diagnostic |
 | `CharacterSheet.test.tsx` | Modal close behavior, sheet sections, AC/save/spell tooltips, spell grouping |
 | `CharacterSidebarHealth.test.tsx` | Portrait/title display and HP bar thresholds |
-| `characters.test.tsx` | `useCharacters` API load success, HTTP failure, fetch rejection |
+| `characters.test.tsx` | `useCharacters` summary load success, HTTP failure, fetch rejection, lazy full-sheet fetch and cache reuse |
 | `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display, quick-roll from banner (AC-012) |
 | `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
 | `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |

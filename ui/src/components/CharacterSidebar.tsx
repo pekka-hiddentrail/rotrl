@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import type { CharacterData } from '../data/characters'
+import type { CharacterSummary } from '../data/characters'
 
 function Portrait({ src, rune, color, name, size }: {
   src: string; rune: string; color: string; name: string; size: number
@@ -77,7 +77,7 @@ function Portrait({ src, rune, color, name, size }: {
 }
 
 interface Props {
-  characters: CharacterData[]
+  characters: CharacterSummary[]
   loading: boolean
   activeSpeakerId: string | null
   onSetActive: (id: string) => void

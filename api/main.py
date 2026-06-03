@@ -327,27 +327,58 @@ def get_api_log(filename: str):
     return JSONResponse(_json.loads(path.read_text(encoding="utf-8")))
 
 
-@app.get("/api/characters")
-def get_characters():
-    """Return all character data from ui/public/data/ as a list."""
-    data_dir = (_REPO_ROOT / "ui" / "public" / "data").resolve()
+def _character_data_dir():
+    return (_REPO_ROOT / "ui" / "public" / "data").resolve()
+
+
+def _read_character_ids(data_dir):
     index_path = data_dir / "characters.json"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="characters.json not found")
     import json as _json
     ids: list[str] = _json.loads(index_path.read_text(encoding="utf-8"))
-    characters = []
     for cid in ids:
         if not isinstance(cid, str):
             raise HTTPException(status_code=400, detail="Invalid character ID")
-        path = (data_dir / f"{cid}.json").resolve()
-        if not path.is_relative_to(data_dir):
-            raise HTTPException(status_code=400, detail="Invalid character ID")
-        if not path.exists():
-            raise HTTPException(status_code=404, detail=f"{cid}.json not found")
-        characters.append(_json.loads(path.read_text(encoding="utf-8")))
-    return characters
+    return ids
 
+
+def _read_character_file(data_dir, cid: str):
+    if not isinstance(cid, str):
+        raise HTTPException(status_code=400, detail="Invalid character ID")
+    path = (data_dir / f"{cid}.json").resolve()
+    if not path.is_relative_to(data_dir):
+        raise HTTPException(status_code=400, detail="Invalid character ID")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"{cid}.json not found")
+    import json as _json
+    return _json.loads(path.read_text(encoding="utf-8"))
+
+
+def _character_summary(char: dict) -> dict:
+    keys = (
+        "id", "portrait", "color", "rune", "name", "player", "race",
+        "subrace", "class", "archetype", "level", "hp",
+    )
+    return {k: char[k] for k in keys if k in char}
+
+
+@app.get("/api/characters")
+def get_characters():
+    """Return lightweight character summaries for sidebar/splash UI."""
+    data_dir = _character_data_dir()
+    ids = _read_character_ids(data_dir)
+    return [_character_summary(_read_character_file(data_dir, cid)) for cid in ids]
+
+
+@app.get("/api/characters/{character_id}")
+def get_character(character_id: str):
+    """Return one full character sheet from ui/public/data/."""
+    data_dir = _character_data_dir()
+    ids = _read_character_ids(data_dir)
+    if character_id not in ids:
+        raise HTTPException(status_code=404, detail=f"{character_id}.json not found")
+    return _read_character_file(data_dir, character_id)
 
 @app.get("/api/npcs/session")
 def get_session_npcs():

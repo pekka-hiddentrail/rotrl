@@ -13,7 +13,7 @@
 > I want to see my character's stats in a sidebar and open a full character sheet,
 > so that I can reference HP, skills, and spells during play without leaving the game.
 
-Character data is loaded from static JSON files served by Vite. The sidebar shows compact portraits; clicking opens a full modal sheet.
+Character summaries are loaded on startup for the sidebar and splash screen. Full character sheets are loaded on demand when a player opens a sheet or selects a character as active for dice mechanics.
 
 ---
 
@@ -36,7 +36,9 @@ Character data is loaded from static JSON files served by Vite. The sidebar show
 Given character JSON files exist in ui/public/data/
 When  the UI loads
 Then  GET /api/characters is fetched (served by the FastAPI backend)
-And   the response is a JSON array containing all character data objects
+And   the response is a JSON array containing lightweight character summaries
+And   summaries include only sidebar/splash fields: identity, portrait, colour, rune, class, level, and HP
+And   summaries do not include full-sheet fields such as skills, spells, feats, weapons, or inventory
 And   all characters appear in the sidebar once loaded
 And   if the fetch fails an error bar shows "Character data: <reason>"
 ```
@@ -88,7 +90,8 @@ Then  the HP bar is red (< 25%)
 ```gherkin
 Given the sidebar shows a character portrait
 When  the player clicks the portrait
-Then  the CharacterSheet modal opens for that character
+Then  GET /api/characters/<id> is fetched for that character if it is not already cached
+And   the CharacterSheet modal opens for that character once the full sheet is loaded
 And   the modal shows: portrait, identity block, vitals row, ability scores, saves, feats, skills, weapons
 And   clicking outside the modal or a close button dismisses it
 ```
@@ -146,6 +149,7 @@ And   the active character is unchanged
 When  the player picks "Set Active"
 Then  that character becomes the active character
 And   the CharacterSheet modal does not open
+And   the full sheet is fetched if needed so dice skill bonuses can use the character's skills
 ```
 
 ---
@@ -249,6 +253,26 @@ And   the menu is positioned using data-placement="right" for test and accessibi
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-013 — Full character sheets are lazy-loaded and cached
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Character summaries are shown before full sheets are loaded
+
+```gherkin
+Given the UI has loaded character summaries from GET /api/characters
+Then  no GET /api/characters/<id> request has been made yet
+
+When  the player opens Yanyeeku's sheet
+Then  GET /api/characters/yanyeeku is fetched
+And   the full sheet is cached
+
+When  the player closes and reopens Yanyeeku's sheet
+Then  no second GET /api/characters/yanyeeku request is made
+```
+
+---
+
 ## Out of Scope
 
 - Character sheet editing (read-only, data managed in JSON files)
@@ -265,6 +289,7 @@ And   the menu is positioned using data-placement="right" for test and accessibi
 - `useCharacters` hook returns `{ characters, characterMap, loading, error }`
 - Character JSON files live in `ui/public/data/` and are read by the FastAPI backend at `GET /api/characters`. Each request reads the files fresh — edits to JSON reflect on next page load without a frontend rebuild.
 - `race` holds the base race name only (e.g. `"Aasimar"`). Sub-race detail goes in `subrace` (e.g. `"Peri-Blooded (Emberkin)"`).
+- Current loading model: `GET /api/characters` returns lightweight summaries for sidebar/splash UI; `loadCharacterSheet(id)` fetches and caches one full sheet from `GET /api/characters/{id}`.
 - AC-007 through AC-011 implemented in: `App.tsx` (`activeSpeaker` = `activeCharacter` state, `sheetCharId` new state for sheet modal), `CharacterSidebar.tsx` (two-action menu + halo ring), `InputBar.tsx` (speaker badge)
 - Speaker tag format: `@<Name>: "<message>"` — prefix prepended in `handleSend` before adding to chat and before sending to backend; `lastInput` retains the raw (unprefixed) text for IntentBar display
 - `activeSpeakerId` prop on CharacterSidebar drives halo; `sheetCharId` drives the CharacterSheet modal — the two are independent states
