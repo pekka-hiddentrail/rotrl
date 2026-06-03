@@ -1,8 +1,8 @@
 """Tests for Combat Tier 1.1 — HP Authority Shift.
 
 Covers: backend HP preservation, new-combatant initialisation, HP context
-injection, %%HP%% delta block parsing and application, player-stream stripping,
-and _get_combatant_ac (shared combat-state lookup utility).
+injection, backend HP delta application, player-stream stripping, and
+_get_combatant_ac (shared combat-state lookup utility).
 Spec: specs/combat-hp.feature
 """
 from __future__ import annotations
@@ -15,7 +15,6 @@ from api.session_manager import (
     Combatant,
     CombatState,
     _parse_combat_block,
-    _parse_hp_deltas,
     _apply_hp_deltas,
     _inject_context,
     _get_combatant_ac,
@@ -203,61 +202,10 @@ class TestHpInheritance:
         assert result.combatants[0].hp_current == 10
 
 
-# ── _parse_hp_deltas ──────────────────────────────────────────────────────────
-
-class TestParseHpDeltas:
-    """Unit tests for the %%HP%% block parser."""
-
-    def test_single_negative_delta(self):
-        text = "- name: Shalelu · delta: -8\n"
-        deltas = _parse_hp_deltas(text)
-        assert deltas == [("Shalelu", -8)]
-
-    def test_single_positive_delta_with_plus(self):
-        text = "- name: Thaelion · delta: +6\n"
-        deltas = _parse_hp_deltas(text)
-        assert deltas == [("Thaelion", 6)]
-
-    def test_positive_delta_without_plus(self):
-        text = "- name: Goblin 1 · delta: 3\n"
-        deltas = _parse_hp_deltas(text)
-        assert deltas == [("Goblin 1", 3)]
-
-    def test_multiple_deltas(self):
-        text = (
-            "- name: Shalelu · delta: -8\n"
-            "- name: Thaelion · delta: +6\n"
-            "- name: Goblin 1 · delta: -50\n"
-        )
-        deltas = _parse_hp_deltas(text)
-        assert deltas == [("Shalelu", -8), ("Thaelion", 6), ("Goblin 1", -50)]
-
-    def test_empty_text_returns_empty_list(self):
-        assert _parse_hp_deltas("") == []
-        assert _parse_hp_deltas(None) == []  # type: ignore[arg-type]
-
-    def test_malformed_line_skipped(self):
-        text = (
-            "- name: Shalelu · delta: -8\n"
-            "this is not a valid line\n"
-            "- name: Thaelion · delta: +3\n"
-        )
-        deltas = _parse_hp_deltas(text)
-        assert deltas == [("Shalelu", -8), ("Thaelion", 3)]
-
-    def test_missing_delta_field_skipped(self):
-        text = "- name: Shalelu · ac: 17\n"
-        assert _parse_hp_deltas(text) == []
-
-    def test_non_integer_delta_skipped(self):
-        text = "- name: Shalelu · delta: lots\n"
-        assert _parse_hp_deltas(text) == []
-
-
 # ── _apply_hp_deltas ──────────────────────────────────────────────────────────
 
 class TestApplyHpDeltas:
-    """Unit tests for applying %%HP%% deltas to a CombatState."""
+    """Unit tests for applying backend HP deltas to a CombatState."""
 
     def test_ac005_damage_applied(self):
         """AC-005: negative delta reduces hp_current."""
@@ -374,44 +322,10 @@ class TestHpBlockStrippedFromStream:
         assert "The trap fires" in token_content
 
 
-# ── SSE integration — HP deltas update combat_state ───────────────────────────
+# ── SSE integration — backend HP authority ────────────────────────────────────
 
-class TestHpDeltaIntegration:
-    """%%HP%% block in a full turn response updates session.combat_state HP."""
-
-    def test_hp_delta_discarded_via_turn(self, booted_session):
-        """CB1.9-4: %%HP%% block in LLM response is now silently discarded."""
-        import api.session_manager as sm
-        client, session_id = booted_session
-        session = sm.get_session(session_id)
-
-        # Establish combat state
-        session.combat_state = _state(1,
-            _combatant("Shalelu", 22, 24),
-            _combatant("Goblin 1", 5, 5),
-        )
-
-        response_text = (
-            "%%NARRATIVE%%\n\nThe trap fires!\n\n"
-            "%%DELTAS%%\n[]\n\n"
-            "%%HP%%\n"
-            "- name: Shalelu · delta: -8\n"
-            "- name: Goblin 1 · delta: -50\n"
-            "%%COMBAT%%\n"
-            "round: 2\n"
-            "combatants:\n"
-            "  - name: Shalelu · ac: 17 · init: 14 · status: active\n"
-            "  - name: Goblin 1 · ac: 13 · init: 10 · status: unconscious\n"
-        )
-        mock_resp = make_stream_response([response_text])
-        with patch("api.session_manager._requests.post", return_value=mock_resp):
-            client.post(f"/api/sessions/{session_id}/turn", json={"input": "We walk in."})
-
-        shalelu = next(c for c in session.combat_state.combatants if c.name == "Shalelu")
-        goblin = next(c for c in session.combat_state.combatants if c.name == "Goblin 1")
-        # %%HP%% discarded — HP unchanged from what was set before the turn
-        assert shalelu.hp_current == 22
-        assert goblin.hp_current == 5
+class TestHpAuthorityIntegration:
+    """Full-turn integration checks for backend-owned HP values."""
 
     def test_hp_preserved_across_round_update(self, booted_session):
         """Round 2 %%COMBAT%% block does not overwrite backend HP values."""
@@ -456,11 +370,11 @@ class TestGetCombatantAc:
         ])
         assert _get_combatant_ac("shalelu", state) == 17
 
-    def test_not_found_returns_10(self):
+    def test_not_found_returns_first_active_ac(self):
         state = CombatState(round=1, combatants=[
             Combatant(name="Shalelu", hp_current=18, hp_max=24, ac=17, initiative=14),
         ])
-        assert _get_combatant_ac("Ghost", state) == 10
+        assert _get_combatant_ac("Ghost", state) == 17
 
     def test_none_state_returns_10(self):
         assert _get_combatant_ac("Anyone", None) == 10

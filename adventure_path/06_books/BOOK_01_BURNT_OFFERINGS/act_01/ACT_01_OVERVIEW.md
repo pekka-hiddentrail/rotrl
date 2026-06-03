@@ -45,14 +45,14 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 ## SCENE INDEX
 
-| Scene ID | Name                        | Entry Preconditions | Exit Conditions          |
-| -------- | --------------------------- | ------------------- | ------------------------ |
-| S1       | Welcoming Ceremonies        | Act start           | Swallowtails released    |
-| S2       | Festival Social Phase       | S1 complete         | Cathedral alarm          |
-| S3       | Cathedral Alarm             | S2 complete         | Goblin attack begins     |
-| S4       | Goblin Assault — Square     | Town state = CRISIS | Initial goblins defeated |
-| S5       | Escalation — Fire & Cavalry | S4 complete         | No active goblin threats |
-| S6       | Aftermath & Brief Social    | S5 complete         | Town stabilized          |
+| Scene ID | Name                        | Entry Preconditions | Exit Conditions          | Event file |
+| -------- | --------------------------- | ------------------- | ------------------------ | ---------- |
+| S1       | Welcoming Ceremonies        | Act start           | Festival declared open   | `welcoming_speeches` |
+| S2       | Festival Social Phase       | S1 complete         | Sun sets                 | `festival_social_phase` |
+| S3       | Cathedral Alarm             | S2 complete         | Goblin attack begins     | `cathedral_alarm` |
+| S4       | Goblin Assault — Square     | Town state = CRISIS | First wave defeated      | `goblin_attack_starts` → `first_wave_repelled` |
+| S5       | Escalation — Fire & Cavalry | S4 complete         | No active goblin threats | `fire_phase_begins` → `second_wave_repelled` → `goblin_cavalry_attack_begins` |
+| S6       | Aftermath & Brief Social    | S5 complete         | Town stabilized          | `attack_repelled` |
 
 
 ## SCENE DEFINITIONS
@@ -88,10 +88,9 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 * Festival Square
 
-**ALLOWED ENCOUNTERS:**
+**EVENT FILE:**
 
-* EC-SOCIAL-01 Welcoming Speeches
-* EC-SOCIAL-05 Release of Swallowtails
+* `welcoming_speeches` (02_events)
 
 **ESCALATION RULES:**
 
@@ -139,11 +138,9 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 * Festival Square
 * Adjacent streets
 
-**ALLOWED ENCOUNTERS:**
+**EVENT FILE:**
 
-* EC-SOCIAL-02 Festival Games & Food
-* EC-SOCIAL-03 Casual NPC Interaction
-* EC-SOCIAL-04 Aldern Foxglove Brief Social
+* `festival_social_phase` (02_events)
 
 **ESCALATION RULES:**
 
@@ -187,9 +184,9 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 * Sandpoint Cathedral (interior and steps)
 
-**ALLOWED ENCOUNTERS:**
+**EVENT FILE:**
 
-* EC-EVT-02 Cathedral Consecration & Alarm
+* `cathedral_alarm` (02_events)
 
 **ESCALATION RULES:**
 
@@ -235,10 +232,9 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 
 * Festival Square
 
-**ALLOWED ENCOUNTERS:**
+**EVENT FILES:**
 
-* EC-COMBAT-01 Goblins in the Square
-* EC-SUPPORT-01 Civilian Rescue
+* `goblin_attack_starts` → `first_wave_repelled` (02_events)
 
 **ESCALATION RULES:**
 
@@ -254,35 +250,34 @@ Scenes define context only. All uncertainty resolution occurs via encounters.
 * Damage markers created
 
 
-## ENCOUNTER REFERENCES
+## EVENT REFERENCES
 
-### SOCIAL ENCOUNTERS
+All events are in `adventure_path/02_events/`. See `INDEX.md` in that folder for the full chain.
 
-| Encounter ID | Name                           | Scope      | Resolution Outputs                                       |
-| ------------ | ------------------------------ | ---------- | -------------------------------------------------------- |
-| EC-SOCIAL-01 | Welcoming Speeches             | Public     | PCs publicly visible; civic authority established        |
-| EC-SOCIAL-02 | Festival Games & Food          | Public     | NPC goodwill flags; minor rewards possible               |
-| EC-SOCIAL-03 | Casual NPC Interaction         | Individual | Relationship flags set                                   |
-| EC-SOCIAL-04 | Aldern Foxglove Brief Social   | Individual | Aldern familiarity flag; obsession seed (no explanation) |
-| EC-SOCIAL-05 | Release of Swallowtails        | Public     | Festival climax completed                                |
-| EC-SOCIAL-06 | Cathedral Consecration & Alarm | Town       | Town state NORMAL → CRISIS                               |
+### Festival (pre-combat)
 
+| Event file | Type | Resolution Outputs |
+| ---------- | ---- | ------------------ |
+| `welcoming_speeches` | social | PCs publicly present; NPC attitudes baseline |
+| `festival_social_phase` | social | NPC goodwill flags; Aldern familiarity flag; Ameiko contact |
+| `cathedral_alarm` | narrative | Town state NORMAL → CRISIS; early Perception check available |
 
-### COMBAT ENCOUNTERS
+### Goblin Raid
 
-| Encounter ID | Name                  | Scope | Resolution Outputs                                    |
-| ------------ | --------------------- | ----- | ----------------------------------------------------- |
-| EC-COMBAT-01 | Goblins in the Square | Local | Initial goblin threat reduced; civilian danger active |
-| EC-COMBAT-02 | Goblin Pyros          | Local | Fire hazards created; escalating property damage      |
-| EC-COMBAT-03 | Goblin Cavalry        | Local | Final hostile wave resolved                           |
+| Event file | Type | Resolution Outputs |
+| ---------- | ---- | ------------------ |
+| `goblin_attack_starts` | combat | First wave resolved; civilian rescue outcome; CIVILIAN_DEATHS flag |
+| `first_wave_repelled` | social | Healing window; Zantus interaction |
+| `fire_phase_begins` | combat | Second wave resolved; fire damage to square |
+| `second_wave_repelled` | social | Hemlock arrival; Aldern visible at Well |
+| `goblin_cavalry_attack_begins` | combat | Final wave resolved; Aldern rescue outcome |
+| `attack_repelled` | aftermath | ALDERN_GRATITUDE, HEMLOCK_RESPECT, RUSTY_DRAGON_ROOMS flags; level 2 milestone |
 
-### SUPPORT ENCOUNTERS
+### Conditional Events (still in encounters/)
 
-| Encounter ID  | Name                           | Scope       | Resolution Outputs               |
-| ------------- | ------------------------------ | ----------- | -------------------------------- |
-| EC-SUPPORT-01 | Civilian Rescue                | Local       | Casualties prevented or incurred |
-| EC-SUPPORT-02 | Goblin Capture & Interrogation | Conditional | Limited factual information only |
-| EC-SUPPORT-03 | Aid the Wounded                | Town        | Injury and death ledger updated  |
+| File | Trigger | Notes |
+| ---- | ------- | ----- |
+| `EC-INF-01` | Goblin captured alive | Interrogation scene; Thistletop hint gated behind DC 20 |
 
 
 ## INFORMATION DISCLOSURE RULES

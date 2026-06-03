@@ -492,6 +492,39 @@ body {
   opacity: 1;
 }
 
+.attention-bar {
+  background: #2a2000;
+  color: #c9a84c;
+  padding: 8px 24px;
+  font-size: 13px;
+  font-family: monospace;
+  border-bottom: 1px solid #4a3800;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attention-bar-message {
+  flex: 1;
+}
+
+.attention-bar-close {
+  background: none;
+  border: none;
+  color: #c9a84c;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.attention-bar-close:hover {
+  opacity: 1;
+}
+
 /* ── Main content layout ─────────────────── */
 
 .main-content {
@@ -2831,30 +2864,19 @@ body {
   white-space: nowrap;
 }
 
-/* ── Tier 1.5 — Attack banners & condition chips ─────────────────────────── */
-
-.attack-banner { border-color: #b04040; }
-.attack-banner--damage { border-color: #c9a84c; }
-.attack-damage-roll-btn { margin-top: 6px; width: 100%; }
-
-.attack-history-row .attack-label { color: #b04040; font-size: 0.72rem; }
-
-.combatant-conditions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
+.combatant-zone-row {
+  margin-top: 3px;
 }
 
-.condition-chip {
-  font-size: 0.65rem;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: #2a1a1a;
-  color: #c9a84c;
-  border: 1px solid #6a3a2a;
-  cursor: default;
+.zone-badge {
+  font-size: 0.62rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #101a28;
+  color: #6090c0;
+  border: 1px solid #203050;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ─── Feature Coverage Matrix ─────────────────────────────────────────────── */

@@ -41,6 +41,7 @@ export default function App() {
   const [devMode, setDevMode] = useState(false)
   const [provider, setProvider] = useState<'ollama' | 'groq' | 'anthropic'>('groq')
   const [error, setError] = useState<string | null>(null)
+  const [attention, setAttention] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null)
   // Combat speaker override: set when player manually clicks a sidebar character
@@ -151,6 +152,7 @@ export default function App() {
     const speaker = combatPc ?? (activeCharacter ? characterMap[activeCharacter] : null)
     const sentInput = speaker ? `@${speaker.name}: "${input}"` : input
     setError(null)
+    setAttention(null)
     setLastInput(input)
     setIntent(null)
     setMessages(prev => [
@@ -205,6 +207,7 @@ export default function App() {
         if (event.type === 'damage_request') setAttackPhaseSync({ phase: 'spell_damage', caster: event.caster, target: event.target, damage_expr: event.damage_expr, spell_name: event.spell_name })
         if (event.type === 'heal_request')   setAttackPhaseSync({ phase: 'spell_heal',   caster: event.caster, target: event.target, damage_expr: event.damage_expr, spell_name: event.spell_name })
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
+        if (event.type === 'attention') { setAttention(event.message); setStreaming(false); return }
         if (event.type === 'error') throw new Error(event.message)
       }
       // Auto-resume if NPC attacks resolved but no PC attacks queued
@@ -629,6 +632,12 @@ export default function App() {
         <div className="error-bar">
           <span className="error-bar-message">{error}</span>
           <button className="error-bar-close" onClick={() => setError(null)} title="Dismiss">✕</button>
+        </div>
+      )}
+      {attention && (
+        <div className="attention-bar">
+          <span className="attention-bar-message">{attention}</span>
+          <button className="attention-bar-close" onClick={() => setAttention(null)} title="Dismiss">✕</button>
         </div>
       )}
       {charsError && <div className="error-bar">Character data: {charsError}</div>}

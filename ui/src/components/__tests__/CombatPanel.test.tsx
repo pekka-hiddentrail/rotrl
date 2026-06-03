@@ -239,3 +239,58 @@ describe('CombatPanel — AC-015 dead combatant name styling', () => {
     expect(goblinRow).not.toHaveClass('combatant-current')
   })
 })
+
+
+// ─── ZC-005/006 — Zone badge display ─────────────────────────────────────────
+
+describe('CombatPanel — zone badge (ZC-005/006)', () => {
+  it('ZC-005 — renders zone badge when zone is set and not "default"', () => {
+    const state: CombatState = {
+      round: 1,
+      combatants: [
+        { name: 'Goblin Warrior 1', hp_current: 5, hp_max: 5, ac: 16, initiative: 8, status: 'active', zone: 'Cathedral Stairs' },
+      ],
+    }
+    const { container } = render(<CombatPanel combatState={state} onEndCombat={vi.fn()} />)
+    const badge = container.querySelector('.zone-badge')
+    expect(badge).not.toBeNull()
+    expect(badge?.textContent).toContain('Cathedral Stairs')
+  })
+
+  it('ZC-006 — omits zone badge when zone is "default"', () => {
+    const state: CombatState = {
+      round: 1,
+      combatants: [
+        { name: 'Goblin Warrior 1', hp_current: 5, hp_max: 5, ac: 16, initiative: 8, status: 'active', zone: 'default' },
+      ],
+    }
+    const { container } = render(<CombatPanel combatState={state} onEndCombat={vi.fn()} />)
+    expect(container.querySelector('.zone-badge')).toBeNull()
+  })
+
+  it('ZC-006b — omits zone badge when zone is absent', () => {
+    const state: CombatState = {
+      round: 1,
+      combatants: [
+        { name: 'Goblin Warrior 1', hp_current: 5, hp_max: 5, ac: 16, initiative: 8, status: 'active' },
+      ],
+    }
+    const { container } = render(<CombatPanel combatState={state} onEndCombat={vi.fn()} />)
+    expect(container.querySelector('.zone-badge')).toBeNull()
+  })
+
+  it('ZC-005b — badge is below the HP bar row', () => {
+    const state: CombatState = {
+      round: 1,
+      combatants: [
+        { name: 'Goblin Warrior 1', hp_current: 5, hp_max: 5, ac: 16, initiative: 8, status: 'active', zone: 'Well' },
+      ],
+    }
+    const { container } = render(<CombatPanel combatState={state} onEndCombat={vi.fn()} />)
+    const row = container.querySelector('.combatant-row')!
+    const hpRow = row.querySelector('.combatant-hp-row')!
+    const zoneRow = row.querySelector('.combatant-zone-row')!
+    // Zone row must come after HP row in DOM order
+    expect(hpRow.compareDocumentPosition(zoneRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
