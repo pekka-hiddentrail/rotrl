@@ -40,8 +40,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [roll-initiatives.feature](roll-initiatives.feature) | Backend \| Frontend | `@combat` `@initiative` `@session` `@layout` | 9 | `roll_combat_initiatives()`, `_parse_event_combatants()`, `pending_combatants` seeding, auto-roll hook on round-1 `%%COMBAT%%` with combat event, `POST /combat/roll_initiatives` (debug), `tests/test_roll_initiatives.py`, `CombatPanelRollInit.test.tsx` |
 
 | [pc-combat-turn.feature](pc-combat-turn.feature) | Backend \| Frontend | `@combat` `@pc` `@action` `@turn` `@streaming` `@parsing` | 10 | `_extract_pc_combat_intent`, `stream_pc_turn`, `_stream_pc_turn_narration`, `_PC_TURN_SYSTEM`, `_build_pc_turn_system`, `POST /pc_turn`, `session._pending_pc_narration`, `pc_profiles.weapons`, App.tsx routing, `pcTurn()` in api.ts |
+| [magic-spell-system.feature](magic-spell-system.feature) | Backend \| Frontend | `@magic` `@spell` `@combat` `@pc` `@action` `@streaming` | 14 | `_build_pc_profiles` spell parsing, `_extract_pc_combat_intent` spell detection, `stream_pc_turn` `cast` branch, `PendingAttack.is_spell`, `damage_request` SSE, `AttackPhase` `spell_damage`, `DicePanel.tsx` spell banner, `MessageBubble.tsx` spell card |
 
-**Total: 296 acceptance criteria across 31 feature files**
+**Total: 310 acceptance criteria across 32 feature files**
 
 ---
 

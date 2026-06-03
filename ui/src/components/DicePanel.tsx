@@ -222,6 +222,17 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
             disabled={pending.length === 0}
           >Roll Damage</button>
         </div>
+      ) : attackPhase?.phase === 'spell_damage' ? (
+        <div className="roll-request-banner attack-banner attack-banner--damage">
+          <div className="roll-request-skill">✦ {attackPhase.spell_name}: {attackPhase.caster} → {attackPhase.target}</div>
+          <div className="roll-request-dc">Roll damage: {attackPhase.damage_expr}</div>
+          <div className="roll-request-hint">pick dice above, then Roll</div>
+          <button
+            className="btn btn-roll attack-damage-roll-btn"
+            onClick={handleDamageRollClick}
+            disabled={pending.length === 0}
+          >Roll Damage</button>
+        </div>
       ) : pendingRoll ? (
         <div className="roll-request-banner">
           <button

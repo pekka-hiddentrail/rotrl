@@ -202,6 +202,7 @@ export default function App() {
           setInitiativePending(true)
         }
         if (event.type === 'attack_request') setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
+        if (event.type === 'damage_request') setAttackPhaseSync({ phase: 'spell_damage', caster: event.caster, target: event.target, damage_expr: event.damage_expr, spell_name: event.spell_name })
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
         if (event.type === 'error') throw new Error(event.message)
       }
@@ -324,8 +325,12 @@ export default function App() {
   }
 
   const handleDamageRoll = async (rolls: number[], total: number) => {
-    if (!session || !attackPhaseRef.current || attackPhaseRef.current.phase !== 'damage') return
-    const { attacker, target, attack_type } = attackPhaseRef.current
+    const phase = attackPhaseRef.current
+    if (!session || !phase) return
+    if (phase.phase !== 'damage' && phase.phase !== 'spell_damage') return
+    const attacker = phase.phase === 'spell_damage' ? phase.caster : phase.attacker
+    const target   = phase.target
+    const attack_type = phase.phase === 'spell_damage' ? 'spell' : phase.attack_type
     try {
       const result = await resolveDamageRoll(session.id, rolls, total)
       const resultEntry: AttackResult = {
@@ -661,11 +666,12 @@ export default function App() {
           {isBooted && (
             <InputBar
               onSend={handleSend}
+              onEnemyTurn={handleEnemyTurn}
               disabled={streaming || ending || enemyTurnStreaming || combatClosing}
               activeSpeaker={inputActiveSpeaker}
               combatWeapons={(() => {
                 if (!combatState || !currentCombatantName) return undefined
-                const pc = Object.values(characterMap).find(
+                const pc = Object.values(fullCharacterMap).find(
                   c => c.name.toLowerCase() === currentCombatantName.toLowerCase()
                 )
                 if (!pc || !pc.weapons?.length) return undefined

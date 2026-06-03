@@ -20,21 +20,24 @@ export interface Combatant {
 export interface AttackResult {
   attacker: string
   target: string
-  roll: number
+  roll: number | null
   bonus: number
-  total: number
-  ac: number
+  total: number | null
+  ac: number | null
   hit: boolean
   damage_rolls: number[]
   damage_total: number
   attack_type: string
   is_pc: boolean
+  is_spell?: boolean
+  spell_name?: string | null
 }
 
 export type AttackPhase =
   | null
   | { phase: 'to_hit'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
   | { phase: 'damage'; attacker: string; target: string; damage_expr: string; hit_total: number; attack_type: string }
+  | { phase: 'spell_damage'; caster: string; target: string; damage_expr: string; spell_name: string }
 
 export interface CombatState {
   round: number

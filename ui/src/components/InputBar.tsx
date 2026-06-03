@@ -48,15 +48,19 @@ function SkullIcon() {
 
 interface Props {
   onSend: (input: string) => void
+  onEnemyTurn?: () => void
   disabled: boolean
   activeSpeaker?: ActiveSpeaker | null
   combatWeapons?: string[]  // shown as a hint strip when it's a PC's combat turn
 }
 
-export default function InputBar({ onSend, disabled, activeSpeaker = null, combatWeapons }: Props) {
+export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker = null, combatWeapons }: Props) {
   const [value, setValue] = useState('')
 
+  const isEnemy = activeSpeaker?.isEnemy ?? false
+
   const submit = () => {
+    if (isEnemy) return  // enemy turn: Enter does nothing; use the Enemy Turn button
     const trimmed = value.trim()
     if (!trimmed || disabled) return
     onSend(trimmed)
@@ -70,7 +74,6 @@ export default function InputBar({ onSend, disabled, activeSpeaker = null, comba
     }
   }
 
-  const isEnemy = activeSpeaker?.isEnemy ?? false
   const placeholder = isEnemy
     ? enemyTaunt(activeSpeaker?.name ?? '')
     : 'What do you do?  (Enter to send · Shift+Enter for newline)'
@@ -106,13 +109,23 @@ export default function InputBar({ onSend, disabled, activeSpeaker = null, comba
           autoFocus
         />
       </div>
-      <button
-        onClick={submit}
-        disabled={disabled || !value.trim()}
-        className="btn btn-send"
-      >
-        {disabled ? '…' : 'Send'}
-      </button>
+      {isEnemy && onEnemyTurn ? (
+        <button
+          onClick={onEnemyTurn}
+          disabled={disabled}
+          className="btn btn-send btn-enemy-turn"
+        >
+          {disabled ? '…' : 'Enemy Turn'}
+        </button>
+      ) : (
+        <button
+          onClick={submit}
+          disabled={disabled || !value.trim()}
+          className="btn btn-send"
+        >
+          {disabled ? '…' : 'Send'}
+        </button>
+      )}
       {combatWeapons && combatWeapons.length > 0 && (
         <div className="combat-weapons-hint" title="Available weapons for intent extraction">
           ⚔ {combatWeapons.join(' · ')}

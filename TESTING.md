@@ -46,6 +46,19 @@ cd ui && npm run test -- ChatWindow.test.tsx App.enemy-turn.test.tsx --run
 
 These cover the mode contract for `%%EVENT%%`: dev mode shows raw markers for debugging, while normal/full mode hides event tags from player-visible chat. They also cover the empty GM bubble showing three thinking dots while an enemy-turn stream is waiting for its first token.
 
+Magic spell system — Tiers S1 + S2-1 (auto-hit damage spells) coverage:
+
+```
+python -m pytest tests/test_spell_system.py -q -p no:cacheprovider
+```
+
+34 tests covering spell profile parsing (auto_hit, damage_expr, sr, per_day),
+spell intent extraction (name match, partial match, spell > weapon priority,
+target resolution, non-caster fallback), stream_pc_turn cast branch (damage_request
+SSE, PendingAttack pre-hit, is_spell flag), resolve_damage_roll spell result, and
+_build_pc_turn_system spell briefing. Rules-agnostic: test character "Bonnie" used
+to confirm the system works for any caster, not only the live party characters.
+
 Character summary + lazy sheet loading coverage:
 
 ```

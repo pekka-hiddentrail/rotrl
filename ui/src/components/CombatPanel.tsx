@@ -86,7 +86,7 @@ export default function CombatPanel({
               ].filter(Boolean).join(' ')}
             >
               <div className="combatant-name-row">
-                <span className="combatant-name">{c.name}</span>
+                <span className="combatant-name" title={c.name}>{c.name}</span>
                 <span className="combatant-meta">
                   <span className="combatant-init" title="Initiative">⚡ Init {c.initiative}</span>
                   <span className="combatant-ac" title="Armour Class">🛡 AC {c.ac}</span>

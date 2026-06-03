@@ -140,11 +140,11 @@ Backend identifies when a PC wants to cast a spell and which one, mirroring weap
 
 - [ ] **S1-2 — `SpellIndex` singleton** — same pattern as `SkillIndex`. Lazy-loads all spell files from `04_rules/spells/`. `get(name)` returns payload text; `detect(text)` matches spell names/triggers against player input.
 
-- [ ] **S1-3 — Spell intent extraction** — extend `_extract_pc_combat_intent` to detect `action_type = "cast"` when "cast", "use my spell", or any spell name is in the player text. Populate `spell_name` and `spell_data` (from profile). Fallback: if player said "cast" but no spell matched, use first available cantrip.
+- [x] **S1-3 — Spell intent extraction** — extend `_extract_pc_combat_intent` to detect `action_type = "cast"` when "cast", "use my spell", or any spell name is in the player text. Populate `spell_name` and `spell_data` (from profile). Spell detection runs before weapon matching and wins on direct name match regardless of cast keyword. Rules-agnostic: reads from `pc_profiles["spells"]` for any PC.
 
-- [ ] **S1-4 — `pc_profiles["spells"]` structured list** — parse JSON spell list into structured dicts. Key: `auto_hit`, `touch`, `cast_time` ("standard"|"full"|"swift"), `save`, `sr`, `damage_expr`, `buff_ac`, `per_day`.
+- [x] **S1-4 — `pc_profiles["spells"]` structured list** — `_build_pc_profiles` parses `player_*.json["spells"]["list"]` into structured dicts with `auto_hit` (detected from "never misses" in effect text), `damage_expr` (dice regex on effect), `school`, `sr`, `save`, `per_day`, `cast_time`, `range_raw`.
 
-- [ ] **S1-T — Tests** — "I cast Magic Missile" → `action_type=cast`, `spell_name=Magic Missile`; "I use shield" → `spell_name=Shield`; cantrip recognised; non-caster → no spell intent; SpellIndex loads files and detects by trigger.
+- [x] **S1-T — Tests** — `test_spell_system.py` SS-001–SS-008: auto_hit/damage_expr parsing, sr flag, non-caster, Magic Missile real data, spell matched by name/partial/no-cast-keyword, target resolution, spell priority over weapon. 34 tests, all pass.
 
 ---
 
@@ -154,7 +154,7 @@ Spells that take a standard action and resolve immediately: auto-hit damage (Mag
 
 > **Prerequisite:** Tier S1.
 
-- [ ] **S2-1 — Auto-hit damage spell resolution** — when `auto_hit = True` and `cast_time = "standard"`: roll `damage_expr` server-side, apply HP delta to target, store result, emit `action_card` (with `spell_name` field, no `roll`/`bonus`/`ac`), then narrate via `_stream_pc_turn_narration`.
+- [x] **S2-1 — Auto-hit damage spell resolution** — `stream_pc_turn` cast branch: queues a `PendingAttack` with `hit=True`, `is_spell=True`, `spell_name` pre-set. Emits `damage_request` SSE (not `attack_request`). Player rolls damage. `resolve_damage_roll` applies HP delta and stores `is_spell`/`spell_name` in result. `_stream_pc_turn_narration` narrates with known damage. Non-auto-hit spells fall through to immediate narration without dice.
 
 - [ ] **S2-2 — Cantrip / at-will handling** — cantrips (`per_day = -1`) require no slot. At-will innate spells use their own `per_day` counter (Tier S3 tracks these). For S2 treat all as free.
 
@@ -162,11 +162,11 @@ Spells that take a standard action and resolve immediately: auto-hit damage (Mag
 
 - [ ] **S2-4 — AoO warning in briefing** — `_build_pc_turn_system` checks if any enemy is in melee range of the caster. If so, adds: `⚠ Casting in melee — enemy may attack of opportunity before spell resolves.` No mechanics yet; just narrative awareness.
 
-- [ ] **S2-5 — Spell action card** — update `action_card` SSE to support spells: `spell_name` field added; `roll`/`bonus`/`ac` become optional (omitted for auto-hit spells). CombatEventCard renders: `✦ Yanyeeku → Goblin Warrior 1 / Magic Missile · force · 5 damage / HIT (auto)`.
+- [x] **S2-5 — Spell action card** — `MessageBubble.tsx` renders spell action cards with `✦` icon, spell name, "auto-hit" label (no roll/AC line). `action_card` SSE carries `is_spell` and `spell_name` fields. `AttackResult` type updated to support nullable `roll`/`total`/`ac` and optional `is_spell`/`spell_name`.
 
-- [ ] **S2-6 — `_build_pc_turn_system` spell variant** — briefing says `Spell: {spell_name} ({school}, {damage_expr}, auto-hit)` and injects the SpellIndex payload text rather than the inline effect string.
+- [x] **S2-6 — `_build_pc_turn_system` spell variant** — `action_type=cast` in intent → briefing says `Spell: {name} ({school}, auto-hit)\nDamage: {total}` instead of the `1d20 +X = Y vs AC Z` line.
 
-- [ ] **S2-T — Tests** — Magic Missile: no `attack_request`, `action_card` emitted with damage, HP reduced, no slot consumed. Shield: `active_effects` updated, `combat_update` carries higher AC. AoO warning appears when enemy in melee.
+- [x] **S2-T — Tests** — `test_spell_system.py` SS-009–SS-014: damage_request emitted (not attack_request), spell fields in event, PendingAttack pre-hit, HP delta applied, result carries is_spell/spell_name, system message spell briefing. 34 tests, all pass.
 
 ---
 

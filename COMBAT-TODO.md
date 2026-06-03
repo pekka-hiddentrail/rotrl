@@ -546,8 +546,32 @@ Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn 
 
 ---
 
-### Tier 1.12 - Miscallenious
-- [ ] Attacks of opportunity 
+### Tier 1.12 — Miscellaneous
+
+- [ ] **CB1.12-1 — Total Party Kill (TPK) detection** — after every HP delta is applied (in `_apply_hp_deltas` or immediately after `advance_combat_turn`), check whether all PC combatants are `unconscious` or `dead`. If so:
+  1. Emit a `tpk` SSE event so the frontend can react immediately.
+  2. Auto-clear combat state (`session.combat_state = None`) and write `state.json`.
+  3. Call a new `_stream_tpk_ending(session)` generator that: (a) has the LLM narrate the party's fall in a short, sombre paragraph (`%%NARRATIVE%%` only, no mechanics); (b) streams a styled "session end" card to the frontend with a "Thanks for playing" message and options to restart or quit.
+  4. The frontend receives `tpk` → shows a full-screen modal overlay (dark, with a skull motif or thematic image) with the narrated text and two buttons: **"Play Again"** (boots a new session) and **"End Session"** (clears state, returns to pre-boot splash). Modal is dismissible only via those buttons — no accidental click-away.
+
+  **Detection logic:** `_all_pcs_down(session) -> bool` — returns True when every combatant whose name appears in `session.pc_profiles` has `status` in `("unconscious", "dead")`. Called from `advance_combat_turn` and from `_apply_hp_deltas` after any PC takes damage.
+
+  **Why:** A wiped party currently leaves combat in a broken state — the turn tracker still advances, enemies keep attacking downed PCs, and there is no way for the player to gracefully end the session. This makes the game feel broken rather than dramatic.
+
+- [ ] **CB1.12-2 — Combat victory system prompt** — `stream_close_combat` currently calls the LLM with the bare one-liner `"You close a Pathfinder combat scene briefly."` as its system prompt. The LLM has no campaign identity, no party context, no knowledge of what just happened, and no transition guidance. Replace with a proper `_build_combat_close_system(session)` function that includes:
+
+  - Full GM identity: campaign name, session number, tone (gritty low-fantasy, no heroic cheese).
+  - Combat outcome snapshot: enemies defeated/fled/status, PCs standing with current HP, round count, location.
+  - Transition directive: signal that combat is over and the scene returns to exploration/social mode — describe the immediate aftermath (silence after the fighting, bodies, smells, sounds), not the next encounter.
+  - What to write: `%%NARRATIVE%%` only — 2–4 sentences of visceral aftermath. May include one interactive element (a door ajar, a dropped key, a fleeing goblin) to hook the next scene.
+  - What NOT to write: `%%COMBAT%%`, `%%ATTACK%%`, `%%ACTION%%`, `%%HP%%`, `%%ROLL%%`, `%%DELTAS%%`, `%%EVENT%%`, new combatants, mechanical outcomes, HP numbers.
+  - Loot hint (optional): if the event file defines `## Loot` for the encounter, inject it so the LLM can seed one visible item naturally into the description without listing everything.
+
+  This is the narrative bridge back to the main game loop. A good close makes the fight feel consequential; the current bare prompt produces generic filler.
+
+  **Note:** The user-message half (`_build_combat_close_directive`) already provides the combatant snapshot — keep it, just fix the system message half.
+
+- [ ] **CB1.12-3 — Attacks of opportunity** — triggered when a combatant moves out of a zone while in melee (same zone as an enemy). See MOVEMENT-TODO.md Future section for full design.
 
 ### Tier 2 — Server-Authoritative State
 
