@@ -38,6 +38,7 @@ export interface AttackResult {
   damage_rolls: number[]
   damage_total: number
   attack_type: string
+  action_type?: string
   is_pc: boolean
   is_spell?: boolean
   spell_name?: string | null
@@ -55,6 +56,7 @@ export interface CombatState {
   round: number
   combatants: Combatant[]
   current_actor?: string | null  // name of whoever is acting this turn (AC-001)
+  zones?: string[]               // unique non-default zone names currently occupied
 }
 
 export interface ActiveSpeaker {

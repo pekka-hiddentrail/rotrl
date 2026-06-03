@@ -71,6 +71,7 @@ export default function App() {
   const [initiativePending, setInitiativePending] = useState(false)
   const [enemyTurnStreaming, setEnemyTurnStreaming] = useState(false)
   const [combatClosing, setCombatClosing] = useState(false)
+  const [selectedTarget, setSelectedTarget] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
   const [showBenchmarks, setShowBenchmarks] = useState(false)
@@ -142,7 +143,7 @@ export default function App() {
     }
   }
 
-  const handleSend = async (input: string) => {
+  const handleSend = async (input: string, actionTypeHints: string[] = []) => {
     if (!session) return
     // During combat, the current initiative actor is the speaker (if they're a PC).
     // Falls back to the manually selected activeCharacter outside combat.
@@ -159,7 +160,7 @@ export default function App() {
       ...prev,
       {
         role: 'player',
-        content: input,
+        content: selectedTarget ? `${input}\n→ Target: ${selectedTarget}` : input,
         speaker: speaker
           ? { name: speaker.name, portrait: speaker.portrait, color: speaker.color, rune: speaker.rune }
           : null,
@@ -177,8 +178,9 @@ export default function App() {
       )
     )
     const turnStream = isPcCombatTurn
-      ? pcTurn(session.id, sentInput)
+      ? pcTurn(session.id, sentInput, actionTypeHints, selectedTarget ?? undefined)
       : sendTurn(session.id, sentInput)
+    setSelectedTarget(null)
 
     try {
       for await (const event of turnStream) {
@@ -198,6 +200,7 @@ export default function App() {
           setCombatState(cs)
           setCurrentCombatantName(cs?.current_actor ?? null)
           setInitiativePending(false)
+          setSelectedTarget(null)
         }
         if (event.type === 'initiative_pending') {
           // Combat is seeded but initiatives not yet rolled — prompt the player
@@ -241,6 +244,7 @@ export default function App() {
           const cs = event.combat_state
           setCombatState(cs)
           setCurrentCombatantName(cs?.current_actor ?? null)
+          setSelectedTarget(null)
         }
         // If the LLM writes %%ATTACK%% blocks during the resume narration, the backend
         // queues PC attacks and emits attack_request events.  Without handling them here,
@@ -393,6 +397,7 @@ export default function App() {
           const cs = event.combat_state
           setCombatState(cs)
           setCurrentCombatantName(cs?.current_actor ?? null)
+          setSelectedTarget(null)
         }
         if (event.type === 'error') throw new Error(event.message)
       }
@@ -419,6 +424,7 @@ export default function App() {
           const cs = event.combat_state
           setCombatState(cs)
           setCurrentCombatantName(cs?.current_actor ?? null)
+          setSelectedTarget(null)
           if (!cs) {
             setAttackPhaseSync(null)
             setAttackLogSync(() => [])
@@ -674,20 +680,30 @@ export default function App() {
           )}
 
           {isBooted && (
-            <InputBar
-              onSend={handleSend}
-              onEnemyTurn={handleEnemyTurn}
-              disabled={streaming || ending || enemyTurnStreaming || combatClosing}
-              activeSpeaker={inputActiveSpeaker}
-              combatWeapons={(() => {
-                if (!combatState || !currentCombatantName) return undefined
-                const pc = Object.values(fullCharacterMap).find(
-                  c => c.name.toLowerCase() === currentCombatantName.toLowerCase()
-                )
-                if (!pc || !pc.weapons?.length) return undefined
-                return pc.weapons.map((w: { name: string }) => w.name)
-              })()}
-            />
+            <>
+              {selectedTarget && (
+                <div className="target-badge">
+                  🎯 <span>{selectedTarget}</span>
+                  <button className="target-badge-clear" onClick={() => setSelectedTarget(null)} title="Clear target">✕</button>
+                </div>
+              )}
+              <InputBar
+                onSend={handleSend}
+                onEnemyTurn={handleEnemyTurn}
+                disabled={streaming || ending || enemyTurnStreaming || combatClosing}
+                activeSpeaker={inputActiveSpeaker}
+                inPcCombatTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
+                combatWeapons={(() => {
+                  if (!combatState || !currentCombatantName) return undefined
+                  const pc = Object.values(fullCharacterMap).find(
+                    c => c.name.toLowerCase() === currentCombatantName.toLowerCase()
+                  )
+                  if (!pc || !pc.weapons?.length) return undefined
+                  return pc.weapons.map((w: { name: string }) => w.name)
+                })()}
+                availableZones={combatState?.zones ?? []}
+              />
+            </>
           )}
         </div>
 
@@ -702,6 +718,9 @@ export default function App() {
             onAdvanceTurn={handleAdvanceTurn}
             onEnemyTurn={handleEnemyTurn}
             onEndCombat={handleEndCombat}
+            inPcTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
+            selectedTarget={selectedTarget}
+            onSelectTarget={setSelectedTarget}
           />
         )}
 

@@ -30,13 +30,14 @@ vi.mock('../data/characters', () => ({
   useCharacters: vi.fn(),
 }))
 
-import { bootSession, sendTurn, pcTurn } from '../api'
+import { bootSession, sendTurn, pcTurn, runEnemyTurn } from '../api'
 import { useCharacters } from '../data/characters'
 
-const mockBoot     = vi.mocked(bootSession)
-const mockSend     = vi.mocked(sendTurn)
-const mockPcTurn   = vi.mocked(pcTurn)
-const mockUseChars = vi.mocked(useCharacters)
+const mockBoot          = vi.mocked(bootSession)
+const mockSend          = vi.mocked(sendTurn)
+const mockPcTurn        = vi.mocked(pcTurn)
+const mockRunEnemyTurn  = vi.mocked(runEnemyTurn)
+const mockUseChars      = vi.mocked(useCharacters)
 
 const AniCharacter = {
   id: 'ani', name: 'Ani', portrait: '/p/ani.png', color: '#f0a0a0', rune: 'A',
@@ -116,7 +117,7 @@ describe('App — PC combat turn routing (AC-010)', () => {
     await user.type(screen.getByRole('textbox'), 'I swing at the goblin')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    await waitFor(() => expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.stringContaining('I swing')))
+    await waitFor(() => expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.stringContaining('I swing'), [], undefined))
   })
 
   it('routes to /turn when no combat is active', async () => {
@@ -159,29 +160,119 @@ describe('App — PC combat turn routing (AC-010)', () => {
     await waitFor(() => expect(mockPcTurn).toHaveBeenCalled())
     // Attack phase should be set (dice tray becomes active)
     // We verify pcTurn was called with the right args
-    expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.any(String))
+    expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.any(String), [], undefined)
   })
 
-  it('routes to /turn when enemy is current actor', async () => {
-    const user = userEvent.setup()
-    await bootAndSendCombat(user, ENEMY_COMBAT)
+  // ── click-to-target AC-004 — target_hint forwarded in POST body ──────────────
 
-    // Combat active but enemy (Goblin Warrior 1) is current — should use sendTurn
+  it('passes selectedTarget as target_hint to pcTurn when an enemy is clicked', async () => {
+    const user = userEvent.setup()
+    mockPcTurn.mockImplementation(() => makeGen({ type: 'done' as const }))
+    await bootAndSendCombat(user, PC_COMBAT)
+
+    // Establish PC's turn via combat_update
+    mockSend.mockImplementation(() => makeGen(
+      { type: 'combat_update' as const, combat_state: PC_COMBAT },
+      { type: 'done' as const },
+    ))
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), 'setup')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(2))
+
+    // Click on the Goblin Warrior 1 row to select it as a target
+    mockPcTurn.mockImplementation(() => makeGen({ type: 'done' as const }))
+    const gw1Row = await waitFor(() => {
+      const el = screen.getByText('Goblin Warrior 1').closest('.combatant-row') as HTMLElement
+      if (!el) throw new Error('combatant row not found')
+      return el
+    })
+    await user.click(gw1Row)
+
+    // Target badge should appear
+    await waitFor(() => expect(screen.getByText('Goblin Warrior 1', { selector: '.target-badge span, .target-badge *' })).toBeInTheDocument())
+
+    // Now submit — pcTurn must be called with 'Goblin Warrior 1' as target_hint
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), 'I strike!')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(mockPcTurn).toHaveBeenCalledWith(
+      'sess-pc',
+      expect.stringContaining('I strike'),
+      expect.any(Array),
+      'Goblin Warrior 1',
+    ))
+  })
+
+  // ── click-to-target AC-008 — target clears after submit ────────────────────
+
+  it('clears selectedTarget after the player submits (no stale target on next action)', async () => {
+    const user = userEvent.setup()
+    mockPcTurn.mockImplementation(() => makeGen({ type: 'done' as const }))
+    await bootAndSendCombat(user, PC_COMBAT)
+
+    mockSend.mockImplementation(() => makeGen(
+      { type: 'combat_update' as const, combat_state: PC_COMBAT },
+      { type: 'done' as const },
+    ))
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), 'setup2')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(2))
+
+    // Click enemy row to select target
+    mockPcTurn.mockImplementation(() => makeGen({ type: 'done' as const }))
+    const gw1Row = await waitFor(() => {
+      const el = screen.getByText('Goblin Warrior 1').closest('.combatant-row') as HTMLElement
+      if (!el) throw new Error('combatant row not found')
+      return el
+    })
+    await user.click(gw1Row)
+
+    // Submit the turn
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), 'I attack!')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(mockPcTurn).toHaveBeenCalled())
+
+    // After submit, target badge must be gone
+    await waitFor(() =>
+      expect(screen.queryByText('Goblin Warrior 1', { selector: '.target-badge span, .target-badge *' })).not.toBeInTheDocument()
+    )
+  })
+
+  it('shows Enemy Turn button (not Send) when enemy is current actor', async () => {
+    const user = userEvent.setup()
+    // Boot with combat_update (not initiative_pending) so enemy becomes current actor immediately
+    mockBoot.mockImplementation(() => makeGen({ type: 'done' as const, session_id: 'sess-pc' }))
     mockSend.mockImplementation(() => makeGen(
       { type: 'combat_update' as const, combat_state: ENEMY_COMBAT },
       { type: 'done' as const },
     ))
-    await user.clear(screen.getByRole('textbox'))
-    await user.type(screen.getByRole('textbox'), 'enemy combat setup')
-    await user.click(screen.getByRole('button', { name: 'Send' }))
-    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(2))
-
-    mockSend.mockImplementation(() => makeGen({ type: 'done' as const }))
-    await user.clear(screen.getByRole('textbox'))
-    await user.type(screen.getByRole('textbox'), 'I observe')
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Boot Session' }))
+    await waitFor(() => screen.getByRole('button', { name: 'Send' }))
+    await user.type(screen.getByPlaceholderText(/What do you do/i), 'goblins appear')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    await waitFor(() => expect(mockSend).toHaveBeenCalledTimes(3))
+    // After the combat_update, the enemy is current actor: InputBar switches to Enemy Turn
+    // (CombatPanel also has an "Enemy Turn" button; just verify at least one exists and
+    //  the Send button is no longer shown)
+    await waitFor(() => {
+      const btns = screen.getAllByRole('button', { name: 'Enemy Turn' })
+      expect(btns.length).toBeGreaterThanOrEqual(1)
+      // Wait for streaming to clear
+      expect(btns.some(b => !b.hasAttribute('disabled'))).toBe(true)
+    })
+
+    // The Send button is gone; only Enemy Turn is shown
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument()
+
+    // Clicking Enemy Turn must NOT invoke pcTurn
+    const enemyTurnBtns = screen.getAllByRole('button', { name: 'Enemy Turn' })
+    await user.click(enemyTurnBtns[0])
     expect(mockPcTurn).not.toHaveBeenCalled()
+    expect(mockRunEnemyTurn).toHaveBeenCalledTimes(1)
   })
 })

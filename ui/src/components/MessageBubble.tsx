@@ -71,6 +71,7 @@ function PartyLabel() {
 export default function MessageBubble({ message, isLast, streaming }: Props) {
   if (message.role === 'combat-event' && message.attackResult) {
     const r = message.attackResult
+    const actionTypeLabel = r.action_type ? `${r.action_type} · ` : ''
     if (r.is_heal && r.spell_name) {
       return (
         <div className="combat-event-row">
@@ -105,7 +106,7 @@ export default function MessageBubble({ message, isLast, streaming }: Props) {
         <div className="combat-event-card">
           <div className="combat-event-attacker">{weapon} {r.attacker} → {r.target}</div>
           <div className="combat-event-roll">
-            {r.attack_type} · {r.roll} {bonusStr} = {r.total} vs AC {r.ac}
+            {actionTypeLabel}{r.attack_type} · {r.roll} {bonusStr} = {r.total} vs AC {r.ac}
           </div>
           <div className={`combat-event-outcome ${r.hit ? 'combat-event-hit' : 'combat-event-miss'}`}>
             {hitLabel}
@@ -175,4 +176,3 @@ export default function MessageBubble({ message, isLast, streaming }: Props) {
     </div>
   )
 }
-

@@ -11,6 +11,9 @@ interface Props {
   onAdvanceTurn?: () => void
   onEnemyTurn?: () => void
   onEndCombat: () => void
+  inPcTurn?: boolean
+  selectedTarget?: string | null
+  onSelectTarget?: (name: string | null) => void
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -49,6 +52,9 @@ export default function CombatPanel({
   onAdvanceTurn,
   onEnemyTurn,
   onEndCombat,
+  inPcTurn,
+  selectedTarget,
+  onSelectTarget,
 }: Props) {
   const sorted = [...combatState.combatants].sort((a, b) => b.initiative - a.initiative)
   const effectiveCurrent = currentCombatantName ?? sorted.find(c => c.status === 'active')?.name ?? null
@@ -75,6 +81,8 @@ export default function CombatPanel({
         {sorted.map(c => {
           const isActive = c.status === 'active'
           const isCurrent = isActive && c.name === effectiveCurrent
+          const isTargeted = selectedTarget === c.name && c.status !== 'dead'
+          const isTargetable = Boolean(inPcTurn) && isActive && c.status !== 'dead' && c.name !== effectiveCurrent
           return (
             <div
               key={c.name}
@@ -83,7 +91,11 @@ export default function CombatPanel({
                 isCurrent        ? 'combatant-current'  : '',
                 !isActive        ? 'combatant-inactive' : '',
                 c.status === 'dead' ? 'combatant-dead'  : '',
+                isTargeted       ? 'combatant-targeted' : '',
+                isTargetable     ? 'combatant-targetable' : '',
               ].filter(Boolean).join(' ')}
+              onClick={isTargetable ? () => onSelectTarget?.(isTargeted ? null : c.name) : undefined}
+              style={isTargetable ? { cursor: 'pointer' } : undefined}
             >
               <div className="combatant-name-row">
                 <span className="combatant-name" title={c.name}>{c.name}</span>

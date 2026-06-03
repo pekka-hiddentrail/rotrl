@@ -24,7 +24,7 @@ describe('InputBar — baseline behaviour', () => {
     await user.type(screen.getByRole('textbox'), 'Hello world')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     expect(onSend).toHaveBeenCalledOnce()
-    expect(onSend).toHaveBeenCalledWith('Hello world')
+    expect(onSend).toHaveBeenCalledWith('Hello world', [])
     expect(screen.getByRole('textbox')).toHaveValue('')
   })
 
@@ -33,7 +33,7 @@ describe('InputBar — baseline behaviour', () => {
     const onSend = vi.fn()
     render(<InputBar onSend={onSend} disabled={false} />)
     await user.type(screen.getByRole('textbox'), 'Test{Enter}')
-    expect(onSend).toHaveBeenCalledWith('Test')
+    expect(onSend).toHaveBeenCalledWith('Test', [])
   })
 
   it('does NOT send on Shift+Enter', async () => {

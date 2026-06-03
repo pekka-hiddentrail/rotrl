@@ -475,9 +475,12 @@ def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
     """Convert a CombatState to a JSON-serialisable dict, or None."""
     if state is None:
         return None
+    _occupied = {c.zone for c in state.combatants if c.zone and c.zone != "default"}
+    _all_zones = sorted(_occupied | set(state.known_zones))
     return {
         "round": state.round,
         "current_actor": state.current_actor,
+        "zones": _all_zones,
         "combatants": [
             {
                 "name": c.name,
@@ -748,17 +751,36 @@ def _parse_action_block(text: Optional[str]) -> Optional[dict]:
     if action not in {"attack", "use_ability", "move", "delay"}:
         action = "delay"
 
+    # ── action_type field (AC-001 to AC-004 of enemy-action-type.feature) ────
+    _VALID_ACTION_TYPES = {
+        "standard", "move", "full", "swift", "free", "five_foot_step", "delay",
+    }
+    _ACTION_TYPE_INFERENCE = {
+        "attack":      "standard",
+        "use_ability": "standard",
+        "move":        "move",
+        "delay":       "delay",
+    }
+    raw_at = fields.get("action_type", "").lower().strip()
+    if raw_at in _VALID_ACTION_TYPES:
+        action_type = raw_at
+    elif raw_at:
+        action_type = "standard"  # unknown value → normalise
+    else:
+        action_type = _ACTION_TYPE_INFERENCE.get(action, "standard")  # infer from action
+
     return {
-        "action":   action,
-        "target":   fields.get("target",   ""),
-        "weapon":   fields.get("weapon",   ""),
-        "bonus":    fields.get("bonus",    ""),
-        "damage":   fields.get("damage",   ""),
-        "ability":  fields.get("ability",  ""),
-        "movement": fields.get("movement", ""),
-        "reason":   fields.get("reason",   ""),
-        "if_hit":   fields.get("if_hit",   ""),
-        "if_miss":  fields.get("if_miss",  ""),
+        "action":      action,
+        "action_type": action_type,
+        "target":      fields.get("target",   ""),
+        "weapon":      fields.get("weapon",   ""),
+        "bonus":       fields.get("bonus",    ""),
+        "damage":      fields.get("damage",   ""),
+        "ability":     fields.get("ability",  ""),
+        "movement":    fields.get("movement", ""),
+        "reason":      fields.get("reason",   ""),
+        "if_hit":      fields.get("if_hit",   ""),
+        "if_miss":     fields.get("if_miss",  ""),
     }
 
 
@@ -1137,6 +1159,7 @@ class CombatState:
     round: int
     combatants: list  # list[Combatant]
     current_actor: Optional[str] = None  # name of whoever is acting this turn
+    known_zones: list = field(default_factory=list)  # all zone names from event file
 
 
 @dataclass
@@ -3849,19 +3872,28 @@ def _build_enemy_turn_system(session: "GameSession", name: str) -> str:
     pcs     = [c for c in session.combat_state.combatants if _is_pc_attacker(c.name, session)]
     allies  = [c for c in enemies if c.name.lower() != actor.name.lower()]
 
-    # ── Weapon lines (equipped = primary; available = secondary) ─────────────
-    _atk    = actor.attacks if isinstance(actor.attacks, dict) else {}
-    _melee  = _atk.get("melee",  [])
-    _ranged = _atk.get("ranged", [])
-    if _melee:
-        _equipped  = _melee[0]
-        _available = _ranged[0] if _ranged else None
+    # ── Zone-aware weapon equip ───────────────────────────────────────────────
+    # When no PCs share the actor's zone, ranged is the natural "in-hand" weapon.
+    # When PCs are adjacent (same zone), melee is equipped and ranged is available.
+    _atk        = actor.attacks if isinstance(actor.attacks, dict) else {}
+    _melee      = _atk.get("melee",  [])
+    _ranged     = _atk.get("ranged", [])
+    _actor_zone = actor.zone if actor.zone else "default"
+    _pcs_in_zone = [c for c in pcs if (c.zone if c.zone else "default") == _actor_zone]
+
+    if _melee and _ranged:
+        if _pcs_in_zone:
+            _equipped, _available = _melee[0], _ranged[0]
+        else:
+            # No PCs adjacent — ranged weapon is already drawn
+            _equipped, _available = _ranged[0], _melee[0]
+    elif _melee:
+        _equipped, _available = _melee[0], None
     elif _ranged:
-        _equipped  = _ranged[0]
-        _available = None
+        _equipped, _available = _ranged[0], None
     else:
-        _equipped  = None
-        _available = None
+        _equipped, _available = None, None
+
     _equipped_line  = f"Equipped weapon: {_equipped}" if _equipped else "Equipped weapon: (unarmed)"
     _available_line = f"Available weapon: {_available}" if _available else "Available weapon: (none)"
 
@@ -3874,16 +3906,18 @@ def _build_enemy_turn_system(session: "GameSession", name: str) -> str:
         return f"- {c.name}: {c.status}{cond}"
 
     def _pc_line(c: Combatant) -> str:
-        cond = f", conditions: {', '.join(c.conditions)}" if c.conditions else ""
-        return f"- {c.name}: hp {c.hp_current}/{c.hp_max}, {c.status}{cond}"
+        cond  = f", conditions: {', '.join(c.conditions)}" if c.conditions else ""
+        zone  = f", zone: {c.zone}" if c.zone and c.zone != "default" else ""
+        return f"- {c.name}: hp {c.hp_current}/{c.hp_max}, {c.status}{cond}{zone}"
 
     _actor_cond   = f", conditions: {', '.join(actor.conditions)}" if actor.conditions else ""
+    _actor_zone_label = f", zone: {_actor_zone}" if _actor_zone != "default" else ""
     _allies_block = "\n".join(_ally_line(c) for c in allies) if allies else "- (none)"
     _pcs_block    = "\n".join(_pc_line(c)   for c in pcs)    if pcs    else "- (none)"
 
     briefing = f"""[ENEMY TURN BRIEFING]
 Round: {session.combat_state.round}
-Actor: {actor.name}, {actor.status}{_actor_cond}
+Actor: {actor.name}, {actor.status}{_actor_cond}{_actor_zone_label}
 Action budget: {_enemy_action_budget(actor)}
 {_equipped_line}
 {_available_line}
@@ -3904,6 +3938,7 @@ Full-round: full attack (all iterative attacks) or charge.
 
 %%ACTION%%
 action: attack|use_ability|move|delay
+action_type: standard|move|full|swift|free|five_foot_step
 target: <target name, if attacking or moving toward>
 weapon: <weapon name, if attack — must match Equipped or Available weapon>
 ability: <ability name, if use_ability>
@@ -3989,7 +4024,41 @@ def _parse_atk_bonus(atk_str: str) -> int:
         return 0
 
 
-def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
+# Maps the UI hint labels to internal action_type values used by stream_pc_turn.
+_HINT_TO_ACTION_TYPE: dict[str, str] = {
+    "standard": "attack",
+    "move":     "move",
+    "full":     "attack",   # full-round attack treated as attack for now
+}
+
+
+def _build_session_zone_map(session: "GameSession") -> dict:
+    """Return a {lowercase_name: original_name} map of all zones in active combat events.
+
+    Includes zones inferred from combatant positions and zones declared in event
+    zone tables.  Excludes combatant names and common table header words.
+    """
+    if session.combat_state is None:
+        return {}
+    _combatant_names_lower = {_c.name.lower() for _c in session.combat_state.combatants}
+    _zm: dict = {}
+    for _c in session.combat_state.combatants:
+        if _c.zone and _c.zone != "default":
+            _zm[_c.zone.lower()] = _c.zone
+    for _ev in session.active_events:
+        _ze = _get_event_index().get(_ev.event_id)
+        if _ze and _ze.event_type == "combat":
+            import re as _re_z
+            _skip = {"zone", "adjacent to", "name", "hp", "ac", "init", "properties", "starting zone"}
+            for _zma in _re_z.finditer(r'^\|\s*([A-Za-z][^|]*?)\s*\|', _ze.content, _re_z.MULTILINE):
+                _zn = _zma.group(1).strip()
+                if (_zn and "---" not in _zn and _zn.lower() not in _skip
+                        and len(_zn) > 2 and _zn.lower() not in _combatant_names_lower):
+                    _zm[_zn.lower()] = _zn
+    return _zm
+
+
+def _extract_pc_combat_intent(text: str, session: "GameSession", action_type_hint: Optional[str] = None, target_hint: Optional[str] = None, action_type_hints: Optional[list] = None) -> dict:
     """Extract PC combat intent from free-text player input.
 
     Returns a dict with: actor, action_type, weapon_name, weapon_atk,
@@ -4094,6 +4163,17 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
             elif active_enemies:
                 import random as _random
                 spell_target = _random.choice(active_enemies)
+
+        # ── UI target hint overrides all text inference for spells ────────
+        if target_hint:
+            _th = next(
+                (c for c in session.combat_state.combatants
+                 if c.name.lower() == target_hint.lower()),
+                None,
+            )
+            if _th:
+                spell_target = _th
+
         return {
             "actor":         actor_name,
             "action_type":   "cast",
@@ -4150,6 +4230,51 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
             action_type = "use_ability"
             break
 
+    # ── Apply UI action-type hint(s) ──────────────────────────────────────
+    # action_type_hints (list) takes priority over action_type_hint (str).
+    # - Non-empty list → use first primary-capable hint for main action_type;
+    #                    remaining hints become secondary_actions.
+    # - Empty list     → no hint override (keyword inference stands).
+    # - None           → fall back to legacy single action_type_hint.
+    _PRIMARY_HINT_ORDER = ["standard", "full", "move"]
+    secondary_actions: list[dict] = []
+
+    def _build_zone_map() -> dict:
+        return _build_session_zone_map(session)
+
+    def _zone_from_text(tl: str) -> str:
+        """Find the best matching zone name in player text."""
+        _zm = _build_zone_map()
+        _best = 0
+        _dest = ""
+        for _zlow, _zorig in _zm.items():
+            if _zlow in tl and len(_zlow) > _best:
+                _dest = _zorig
+                _best = len(_zlow)
+        return _dest
+
+    if action_type_hints is not None:
+        if action_type_hints:
+            # Primary hint: first of standard/full/move found in the list.
+            # swift/free are never primary — always secondary.
+            _primary_hint: Optional[str] = None
+            for _ph in _PRIMARY_HINT_ORDER:
+                if _ph in action_type_hints:
+                    _primary_hint = _ph
+                    break
+            if _primary_hint and _primary_hint in _HINT_TO_ACTION_TYPE:
+                if _primary_hint == "move" or action_type not in ("use_ability", "cast"):
+                    action_type = _HINT_TO_ACTION_TYPE[_primary_hint]
+            # Remaining hints become secondary actions
+            for _h in action_type_hints:
+                if _h != _primary_hint:
+                    secondary_actions.append({"type": _h})
+        # else: empty list → no hint override; keyword inference stands
+    elif action_type_hint and action_type_hint in _HINT_TO_ACTION_TYPE:
+        # Legacy single-hint path (backward compat)
+        if action_type_hint == "move" or action_type not in ("use_ability", "cast"):
+            action_type = _HINT_TO_ACTION_TYPE[action_type_hint]
+
     # ── Target resolution ─────────────────────────────────────────────────
     active_enemies = [
         c for c in session.combat_state.combatants
@@ -4177,40 +4302,32 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
 
     target_name = matched_target.name if matched_target else ""
 
-    # ── Destination zone (move actions only) ─────────────────────────────────
+    # ── UI target hint overrides all text inference ───────────────────────────
+    if target_hint:
+        target_name = target_hint
+
+    # ── Destination zone (primary move action) ────────────────────────────────
     destination_zone = ""
     if action_type == "move":
-        # Build zone name map from current combatants + active event's ## Zones table
-        _zone_map: dict = {}   # lowercase → original-case
-        for _c in session.combat_state.combatants:
-            if _c.zone and _c.zone != "default":
-                _zone_map[_c.zone.lower()] = _c.zone
-        for _ev in session.active_events:
-            _ze = _get_event_index().get(_ev.event_id)
-            if _ze and _ze.event_type == "combat":
-                import re as _re2
-                _skip = {"zone", "adjacent to", "name", "hp", "ac", "init", "properties", "starting zone"}
-                for _zm in _re2.finditer(r'^\|\s*([A-Za-z][^|]*?)\s*\|', _ze.content, _re2.MULTILINE):
-                    _zn = _zm.group(1).strip()
-                    if _zn and "---" not in _zn and _zn.lower() not in _skip and len(_zn) > 2:
-                        _zone_map[_zn.lower()] = _zn
-        # Match player text against known zone names (longest match wins)
-        _best_len = 0
-        for _zlow, _zorig in _zone_map.items():
-            if _zlow in text_lower and len(_zlow) > _best_len:
-                destination_zone = _zorig
-                _best_len = len(_zlow)
+        destination_zone = _zone_from_text(text_lower)
+
+    # Populate destination_zone in any secondary move actions
+    for _sa in secondary_actions:
+        if _sa["type"] == "move":
+            _sa["destination_zone"] = _zone_from_text(text_lower)
 
     return {
-        "actor":            actor_name,
-        "action_type":      action_type,
-        "weapon_name":      weapon_name,
-        "weapon_atk":       weapon_atk,
-        "weapon_dmg":       weapon_dmg,
-        "weapon_type":      weapon_type,
-        "target":           target_name,
-        "destination_zone": destination_zone,
-        "original_text":    text,
+        "actor":             actor_name,
+        "action_type":       action_type,
+        "weapon_name":       weapon_name,
+        "weapon_atk":        weapon_atk,
+        "weapon_dmg":        weapon_dmg,
+        "weapon_type":       weapon_type,
+        "target":            target_name,
+        "destination_zone":  destination_zone,
+        "secondary_actions": secondary_actions,
+        "available_zones":   sorted(_build_zone_map().values()),
+        "original_text":     text,
     }
 
 
@@ -4234,6 +4351,10 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
 
     narrative = _extract_narrative(response)
     action    = _parse_action_block(response)
+
+    # Log the chosen action so AC-007 test and devs can see action_type in the session log.
+    if action:
+        _log(session, f"\n> *[Enemy action parsed: {actor.name} — {action.get('action', '?')} (action_type: {action.get('action_type', 'standard')})]*\n")
 
     # B-C04: warn when the LLM wrote unexpected sections (%%COMBAT%%, %%ATTACK%%, etc.)
     _unexpected_sections = _SECTION_MARKER_RE.findall(response)
@@ -4275,7 +4396,8 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
     # Action card — emitted BEFORE narrative so the player sees the mechanical
     # outcome first (centered combat-event card in the chat), then reads the flavor.
     if result is not None:
-        yield f"data: {json.dumps({'type': 'action_card', **result})}\n\n"
+        _at = action.get("action_type", "standard") if action else "standard"
+        yield f"data: {json.dumps({'type': 'action_card', 'action_type': _at, **result})}\n\n"
 
     # Dev mode: stream full raw response (all %%MARKERS%% visible) with the resolved
     # outcome injected before %%ACTION%% so the developer can see which branch was chosen.
@@ -4305,7 +4427,7 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
-def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, None, None]:
+def stream_pc_turn(session: GameSession, player_text: str, action_type_hint: Optional[str] = None, target_hint: Optional[str] = None, action_type_hints: Optional[list] = None) -> Generator[str, None, None]:
     """Handle a PC combat turn: extract intent, queue attack from profile, prompt dice.
 
     No LLM call is made here — the attack is queued from the PC's actual weapon stats.
@@ -4315,7 +4437,12 @@ def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, Non
         yield f"data: {json.dumps({'type': 'error', 'message': 'No active combat'})}\n\n"
         return
 
-    intent = _extract_pc_combat_intent(player_text, session)
+    # Refresh known zones from event files so zone chips are always up-to-date.
+    _zone_map = _build_session_zone_map(session)
+    if _zone_map:
+        session.combat_state.known_zones = sorted(_zone_map.values())
+
+    intent = _extract_pc_combat_intent(player_text, session, action_type_hint, target_hint, action_type_hints)
     if not intent:
         yield f"data: {json.dumps({'type': 'error', 'message': 'Could not resolve PC turn intent'})}\n\n"
         return
@@ -4348,9 +4475,31 @@ def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, Non
             is_pc=True,
         ))
         session._pending_pc_narration = intent
+        # Build log suffix for secondary actions (swift/free/move)
+        _secondary = intent.get("secondary_actions", [])
+        _sec_types = [a["type"] for a in _secondary]
+        _sec_suffix = f" + {', '.join(_sec_types)}" if _sec_types else ""
         _log(session,
              f"\n> *[PC turn: {intent['actor']} → {intent['target']} "
-             f"with {intent['weapon_name']} ({intent['weapon_atk']}, {intent['weapon_dmg']})]*\n")
+             f"with {intent['weapon_name']} ({intent['weapon_atk']}, {intent['weapon_dmg']}){_sec_suffix}]*\n")
+
+        # Apply any secondary move action before emitting attack_request so the LLM
+        # narration (via _stream_pc_turn_narration) sees the updated zone.
+        for _sa in _secondary:
+            if _sa["type"] == "move":
+                _dest = _sa.get("destination_zone", "")
+                if _dest:
+                    _mover = next(
+                        (c for c in session.combat_state.combatants
+                         if c.name.lower() == intent["actor"].lower()), None
+                    )
+                    if _mover:
+                        _old_zone = _mover.zone
+                        _mover.zone = _dest
+                        _log(session, f"\n> *[Zone move: {intent['actor']} {_old_zone} → {_dest}]*\n")
+                        _write_session_state(session)
+                        yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+                # If no zone recognised, silently skip — don't block the attack
 
         # Emit attack_request to activate the dice tray
         target_ac = _get_combatant_ac(intent["target"], session.combat_state)
@@ -4479,20 +4628,21 @@ def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, Non
         if intent.get("action_type") == "move":
             _dest = intent.get("destination_zone", "")
             if not _dest:
-                # Destination zone not recognised — surface a soft warning
+                # Destination zone not recognised — surface a soft warning with zone list
                 _actor_name = intent["actor"]
-                yield f"data: {json.dumps({'type': 'attention', 'message': f'{_actor_name} — zone not recognised. Name an exact zone to move there.'})}\n\n"
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                return
-            _mover = next((c for c in session.combat_state.combatants
-                           if c.name.lower() == intent["actor"].lower()), None)
-            if _mover:
-                _old_zone = _mover.zone
-                _mover.zone = _dest
-                _log(session, f"\n> *[Zone move: {intent['actor']} {_old_zone} → {_dest}]*\n")
-                _write_session_state(session)
-                # Emit the updated state immediately so the UI reflects the move
-                yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+                _zone_names = intent.get("available_zones", [])
+                _zones_hint = (", ".join(_zone_names)) if _zone_names else "none known"
+                yield f"data: {json.dumps({'type': 'attention', 'message': f'{_actor_name} — zone not recognised. Available zones: {_zones_hint}.'})}\n\n"
+            else:
+                _mover = next((c for c in session.combat_state.combatants
+                               if c.name.lower() == intent["actor"].lower()), None)
+                if _mover:
+                    _old_zone = _mover.zone
+                    _mover.zone = _dest
+                    _log(session, f"\n> *[Zone move: {intent['actor']} {_old_zone} → {_dest}]*\n")
+                    _write_session_state(session)
+                    # Emit the updated state immediately so the UI reflects the move
+                    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
 
         system   = _build_pc_turn_system(session, intent, {})
         user_msg = intent.get("original_text", "")
@@ -4556,8 +4706,10 @@ def stream_close_combat(session: GameSession) -> Generator[str, None, None]:
 
 
 _PC_TURN_SYSTEM = """You are the Game Master for a Pathfinder 1E campaign: Rise of the Runelords.
-Write vivid but brief action narration (%%NARRATIVE%% only, 2–5 sentences).
-Write ONLY %%NARRATIVE%%. Do NOT write %%ACTION%%, %%COMBAT%%, %%ATTACK%%, %%ROLL%%, %%GENERATE%%, %%DELTAS%%, or %%EVENT%%.
+Begin your response with the EXACT literal line:
+%%NARRATIVE%%
+Then write 2–5 sentences of vivid action narration.
+Write ONLY the %%NARRATIVE%% section. Do NOT write %%ACTION%%, %%COMBAT%%, %%ATTACK%%, %%ROLL%%, %%GENERATE%%, %%DELTAS%%, or %%EVENT%%.
 Do not mention dice numbers, bonuses, or AC values. The backend has already resolved all mechanics."""
 
 

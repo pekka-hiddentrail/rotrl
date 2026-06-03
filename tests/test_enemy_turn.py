@@ -78,16 +78,17 @@ class TestActionBlockParser:
             "reason: closest threat"
         )
         assert attack == {
-            "action":   "attack",
-            "target":   "Vanx",
-            "weapon":   "dogslicer",
-            "bonus":    "",
-            "damage":   "",
-            "ability":  "",
-            "movement": "",
-            "reason":   "closest threat",
-            "if_hit":   "",
-            "if_miss":  "",
+            "action":      "attack",
+            "action_type": "standard",
+            "target":      "Vanx",
+            "weapon":      "dogslicer",
+            "bonus":       "",
+            "damage":      "",
+            "ability":     "",
+            "movement":    "",
+            "reason":      "closest threat",
+            "if_hit":      "",
+            "if_miss":     "",
         }
 
         ability = _parse_action_block("action: use_ability | target: Ani | ability: demoralize")

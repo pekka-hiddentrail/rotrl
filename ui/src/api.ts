@@ -18,7 +18,7 @@ export type SseEvent =
   | { type: 'damage_request'; caster: string; target: string; damage_expr: string; spell_name: string }
   | { type: 'heal_request';   caster: string; target: string; damage_expr: string; spell_name: string }
   | { type: 'attack_result'; attacker: string; target: string; roll: number; bonus: number; total: number; ac: number; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean }
-  | { type: 'action_card';  attacker: string; target: string; roll: number | null; bonus: number; total: number | null; ac: number | null; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean; is_spell?: boolean; spell_name?: string | null; is_heal?: boolean }
+  | { type: 'action_card';  attacker: string; target: string; roll: number | null; bonus: number; total: number | null; ac: number | null; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; action_type?: string; is_pc: boolean; is_spell?: boolean; spell_name?: string | null; is_heal?: boolean }
 
 export async function* bootSession(
   sessionNumber: number,
@@ -100,11 +100,11 @@ export async function rollInitiatives(sessionId: string): Promise<{ combat_state
 }
 
 
-export async function* pcTurn(sessionId: string, input: string): AsyncGenerator<SseEvent> {
+export async function* pcTurn(sessionId: string, input: string, actionTypeHints?: string[], targetHint?: string): AsyncGenerator<SseEvent> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/pc_turn`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
+    body: JSON.stringify({ input, action_type_hints: actionTypeHints ?? [], action_type_hint: null, target_hint: targetHint ?? null }),
   })
   if (!res.ok) {
     const detail = await res.text()

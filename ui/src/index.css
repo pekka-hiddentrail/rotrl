@@ -1067,6 +1067,96 @@ body {
 
 /* ── Input bar ───────────────────────────── */
 
+/* Action-type selector row (Standard / Move / Full-Round) */
+.action-type-row {
+  display: flex;
+  gap: 5px;
+  padding-bottom: 2px;
+}
+
+.btn-action-type {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: monospace;
+  letter-spacing: 0.02em;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.btn-action-type:hover:not(:disabled) {
+  border-color: var(--gm);
+  color: var(--text);
+}
+
+.btn-action-type.active {
+  background: color-mix(in srgb, var(--gm) 18%, var(--surface-2));
+  border-color: var(--gm);
+  color: var(--gm);
+  font-weight: 600;
+}
+
+.btn-action-type:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Swift and Free modifier buttons are visually lighter to signal their secondary role */
+.btn-action-type[title*="Swift"],
+.btn-action-type[title*="Free"] {
+  font-size: 10px;
+  padding: 3px 7px;
+  opacity: 0.8;
+  border-style: dashed;
+}
+
+.btn-action-type[title*="Swift"].active,
+.btn-action-type[title*="Free"].active {
+  opacity: 1;
+  border-style: solid;
+}
+
+/* Zone chips — shown below the textarea when Move action is selected */
+.zone-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px 2px;
+  align-items: center;
+}
+
+.zone-chips-label {
+  font-size: 10px;
+  color: #806040;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+}
+
+.btn-zone-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid #806040;
+  border-radius: 10px;
+  background: transparent;
+  color: #c0a060;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-zone-chip:hover:not(:disabled) {
+  background: #806040;
+  color: #f0e0b0;
+}
+
+.btn-zone-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .combat-weapons-hint {
   position: absolute;
   bottom: 4px;
@@ -1079,6 +1169,65 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: calc(100% - 120px);
+}
+
+/* Zone chips shown when Move action is selected */
+.zone-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px 2px;
+  border-top: 1px solid rgba(120,80,20,0.25);
+}
+.zone-chips-label {
+  font-size: 10px;
+  color: #9a7a3a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+.btn-zone-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border: 1px solid #7a5a20;
+  border-radius: 10px;
+  background: rgba(80,50,0,0.25);
+  color: #d4a84b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-zone-chip:hover:not(:disabled) {
+  background: rgba(120,80,10,0.5);
+  color: #f0c060;
+}
+.btn-zone-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.target-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(204, 34, 34, 0.12);
+  border: 1px solid #cc222244;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text);
+  margin: 0 24px 0 24px;
+}
+
+.target-badge-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
 }
 
 .input-bar {
@@ -2215,6 +2364,15 @@ body {
 .combatant-current {
   border-color: #c9a84c;
   box-shadow: 0 0 8px #c9a84c18;
+}
+
+.combatant-targeted {
+  outline: 2px solid #cc2222;
+  outline-offset: -1px;
+}
+
+.combatant-targetable:hover {
+  background: rgba(204, 34, 34, 0.06);
 }
 
 .combatant-inactive {
