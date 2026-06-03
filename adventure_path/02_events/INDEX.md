@@ -22,13 +22,13 @@ The complete event chain for Act I, from the opening ceremony through the goblin
 |------|------|---------|----------|
 | [welcoming_speeches.md](welcoming_speeches.md) | social | Act start — Autumnal Equinox, morning | `festival_social_phase` |
 | [festival_social_phase.md](festival_social_phase.md) | social | Speeches complete, festival open | `cathedral_alarm` |
-| [cathedral_alarm.md](cathedral_alarm.md) | narrative | Sunset — consecration begins | `goblin_attack_starts` |
+| [cathedral_alarm.md](cathedral_alarm.md) | narrative | Sunset — consecration begins | `goblin_attack_begins` |
 
 ### The Goblin Raid
 
 | File | Type | Trigger | Leads to |
 |------|------|---------|----------|
-| [goblin_attack_starts.md](goblin_attack_starts.md) | combat | Thunderstone crack / alarm bell | `first_wave_repelled` |
+| [goblin_attack_begins.md](goblin_attack_begins.md) | combat | Thunderstone crack / alarm bell | `first_wave_repelled` |
 | [first_wave_repelled.md](first_wave_repelled.md) | social | All first-wave goblins dead/fled | `fire_phase_begins` |
 | [fire_phase_begins.md](fire_phase_begins.md) | combat | After the first-wave breather | `second_wave_repelled` |
 | [second_wave_repelled.md](second_wave_repelled.md) | social | All fire-phase goblins dead/fled | `goblin_cavalry_attack_begins` |
@@ -48,7 +48,7 @@ The complete event chain for Act I, from the opening ceremony through the goblin
 
 ### Civilian family
 
-The family of four (Center zone, `goblin_attack_starts`) is the moral pressure point of Wave 1. Rescue outcome feeds the `CIVILIAN_DEATHS` delta in `attack_repelled`.
+The family of four (Center zone, `goblin_attack_begins`) is the moral pressure point of Wave 1. Rescue outcome feeds the `CIVILIAN_DEATHS` delta in `attack_repelled`.
 
 ### Bestiary references
 

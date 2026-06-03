@@ -18,21 +18,19 @@ Same location as the first wave. Zones and adjacency unchanged.
 
 The Alleyway leads out of the square — it is the goblins' escape route.
 
+**PC Starting Zone:** Based on the actions in the `%%EVENT%% goblin_attack_begins`
+
 ## Combatants
 
 Goblin stats from bestiary (`adventure_path/09_bestiary/goblin.md`).
 Warchanter stats from bestiary (`adventure_path/09_bestiary/goblin_warchanter.md`).
 
-| Name | HP | AC | Init | Starting Zone |
-|------|----|----|------|---------------|
-| Goblin Warrior 4 | 5 | 16 | +6 | Alleyway |
-| Goblin Warrior 5 | 5 | 16 | +6 | Alleyway |
-| Goblin Warrior 6 | 5 | 16 | +6 | Market Stalls |
-| Goblin Warchanter | 8 | 14 | +3 | Market Stalls |
-
-### Warchanter Attacks
-Ranged: Shortbow +5 (1d4+1/×3)
-Melee: Whip +2 (1d3 nonlethal, trip, 15 ft. reach) · Dogslicer +1 (1d4/19–20)
+| Name | HP | AC | Init | Zone | Melee | Ranged |
+|------|----|----|------|------|-------|--------|
+| Goblin Warrior 4 | 5 | 16 | +6 | Alleyway | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 5 | 5 | 16 | +6 | Alleyway | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 6 | 5 | 16 | +6 | Market Stalls | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warchanter | 8 | 14 | +3 | Market Stalls | whip +2 (1d3), dogslicer +1 (1d4) | shortbow +5 (1d4+1) |
 Bardic Music 4/day — Inspire Courage +1 (morale bonus to attack, damage, and saves vs fear/charm for all active goblins while singing)
 
 ### Appearance

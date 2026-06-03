@@ -25,16 +25,12 @@ Same location as the previous waves.
 Commando stats from bestiary (`adventure_path/09_bestiary/goblin_commando.md`).
 Goblin Dog stats from bestiary (`adventure_path/09_bestiary/goblin_dog.md`).
 
-| Name | HP | AC | Init | Starting Zone |
-|------|----|----|------|---------------|
-| Goblin Commando | 11 | 15 | +3 | Alleyway |
-| Goblin Dog (mount) | 9 | 13 | +2 | Alleyway |
+| Name | HP | AC | Init | Zone | Melee | Ranged |
+|------|----|----|------|------|-------|--------|
+| Goblin Commando | 11 | 15 | +3 | Alleyway | horsechopper +4 (1d8+2) | shortbow +1 (1d4) |
+| Goblin Dog (mount) | 9 | 13 | +2 | Alleyway | bite +2 (1d6+3) | |
 
 The commando is already raging (potion consumed before arrival — 6 rounds total). Use raging stats throughout.
-
-**Commando attacks (raging, mounted):**
-Melee: Mwk horsechopper +4 (1d8+2/×3, reach 10 ft.)
-Ranged: Shortbow +1 (1d4/×3) — mounted penalty applies
 
 **Goblin Dog attack:**
 Melee: Bite +2 (1d6+3 plus Allergic Reaction — Fort DC 12 or –2 Dex and Cha for 1 day; disease effect, does not stack)

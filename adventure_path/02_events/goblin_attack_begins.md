@@ -18,17 +18,17 @@ The square is divided into five named zones. Adjacency determines movement and m
 
 The civilian family of four occupies Center zone. Goblins start in the zones below.
 
+**PC Starting Zone:** Center
+
 ## Combatants
 
 Goblin stats from bestiary (`adventure_path/09_bestiary/goblin.md`).
 
-| Name | HP | AC | Init | Zone |
-|------|----|----|------|------|
-| Goblin Warrior 1 | 5 | 16 | +6 | Center |
-| Goblin Warrior 2 | 5 | 16 | +6 | Well |
-| Goblin Warrior 3 | 5 | 16 | +6 | Market Stalls |
-
-Attacks: Dogslicer +2 (1d4/19–20) melee · Shortbow +4 (1d4/×3) ranged
+| Name | HP | AC | Init | Zone | Melee | Ranged |
+|------|----|----|------|------|-------|--------|
+| Goblin Warrior 1 | 5 | 16 | +6 | Center | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 2 | 5 | 16 | +6 | Well | dogslicer +2 (1d4) | shortbow +4 (1d4) |
+| Goblin Warrior 3 | 5 | 16 | +6 | Market Stalls | dogslicer +2 (1d4) | shortbow +4 (1d4) |
 
 ### Appearance
 
@@ -92,4 +92,4 @@ A mother, a father, and two small children are huddled behind an overturned vege
 - Goblins are chaotic and opportunistic — they loot, screech war songs, and bite dogs
 
 ### Combat ends when
-All three goblins are dead or have fled the square. Write `%%EVENT%% attack_repelled` when combat ends.
+All three goblins are dead or have fled the square. Write `%%EVENT%% first_wave_repelled` when combat ends.

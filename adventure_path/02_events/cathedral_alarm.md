@@ -66,7 +66,7 @@ This event ends immediately after the alarm begins. There is no branch — the a
 
 **Father Zantus's last visible action:** He looks back over his shoulder at the PCs — just once — before pressing the last civilian through the cathedral doors. His expression is not fear. It is the expression of someone who hoped it would not come to this.
 
-Write `%%EVENT%% goblin_attack_starts` immediately.
+Write `%%EVENT%% goblin_attack_begins` immediately.
 
 ## Scene Constraints (Binding)
 
@@ -74,4 +74,4 @@ Write `%%EVENT%% goblin_attack_starts` immediately.
 - Do NOT have Zantus explain what is happening; he does not know more than the PCs
 - Do NOT have Hemlock give orders to the PCs; he is handling his own people
 - The PCs are not surprised — the alarm bell gives them a moment before the first goblin appears
-- Do NOT describe goblins entering the square until `goblin_attack_starts` fires
+- Do NOT describe goblins entering the square until `goblin_attack_begins` fires

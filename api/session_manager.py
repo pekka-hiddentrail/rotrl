@@ -831,13 +831,31 @@ def _tick_effects(combatant: "Combatant") -> None:
 def _get_combatant_ac(name: str, combat_state: Optional["CombatState"]) -> int:
     """Look up a combatant's effective AC (base + active effects) by name.
 
-    Returns 10 if the combatant is not found.
+    Falls back through: exact match → partial word match → first active combatant
+    of the appropriate type (so vague LLM targets like "nearest PC" still resolve).
+    Returns 10 only when combat_state is None.
     """
     if combat_state is None:
         return 10
+    name_lower = name.lower()
+    # Exact match
     for c in combat_state.combatants:
-        if c.name.lower() == name.lower():
+        if c.name.lower() == name_lower and c.status == "active":
             return _effective_ac(c)
+    # Partial match — any significant word (≥4 chars) from the target string
+    # appears in a combatant's name (handles "Goblin Warrior" matching "Goblin Warrior 1")
+    for word in name_lower.split():
+        if len(word) < 4:
+            continue
+        for c in combat_state.combatants:
+            if word in c.name.lower() and c.status == "active":
+                return _effective_ac(c)
+    # Last resort: if the name suggests a PC target ("pc", "player", "character",
+    # "wizard", "cleric", etc.) return the first active combatant regardless.
+    # This handles LLM vague targets like "nearest PC" or "the wizard".
+    active = [c for c in combat_state.combatants if c.status == "active"]
+    if active:
+        return _effective_ac(active[0])
     return 10
 
 
@@ -1162,6 +1180,9 @@ class GameSession:
     # Stores resolved PC turn intent + original text pending LLM narration.
     # Set by stream_pc_turn; consumed by stream_resume_combat → _stream_pc_turn_narration.
     _pending_pc_narration: Optional[dict] = None
+    # Set True when combat is auto-initialized from a combat event file.
+    # Causes the LLM's %%COMBAT%% block to be discarded this turn (backend owns the state).
+    _skip_combat_block: bool = False
     # Active combat state — set when the LLM writes a %%COMBAT%% block with round ≥ 1.
     # Cleared to None when round == 0 or all combatants are inactive.
     combat_state: Optional[CombatState] = None
@@ -1176,6 +1197,10 @@ class GameSession:
     # Active character in the UI — PC name when a character is selected, "party" otherwise.
     # Set by the frontend via PUT /sessions/{id}/active_character.
     active_character: str = "party"
+    # PC HP tracker — persists current HP between combats within a session.
+    # Keys are lowercase PC names. Updated from combat_state on every _write_session_state call.
+    # Used instead of hp_max when seeding a new combat so healed-only recovery is respected.
+    pc_current_hp: dict = field(default_factory=dict)
 
 
 _sessions: dict[str, GameSession] = {}
@@ -1193,6 +1218,12 @@ def _write_session_state(session: "GameSession") -> None:
     import json as _json
     path = _session_state_path(session)
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Snapshot current PC HP from active combat state so it survives combat end
+    if session.combat_state is not None:
+        pc_keys = set(session.pc_profiles.keys())
+        for _c in session.combat_state.combatants:
+            if _c.name.lower() in pc_keys:
+                session.pc_current_hp[_c.name.lower()] = _c.hp_current
     state = {
         "mode":             "combat" if session.combat_state is not None else "social",
         "round":            session.combat_state.round if session.combat_state is not None else 0,
@@ -1208,6 +1239,7 @@ def _write_session_state(session: "GameSession") -> None:
             _serialize_combat_state(session.combat_state)["combatants"]
             if session.combat_state is not None else []
         ),
+        "pc_current_hp": session.pc_current_hp,
     }
     try:
         path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
@@ -1488,20 +1520,52 @@ def _seed_enemy_stats(session: "GameSession", combat_state: "CombatState") -> No
 
     Only called when a combat event is active.  Replaces LLM-written enemy list
     with individual named entries from the ## Combatants table (fixes grouped notation).
+    Also ensures all PCs from pc_profiles are present (LLM often omits them).
     """
     if not session.pending_combatants:
         return
     pc_keys = set(session.pc_profiles.keys())
-    # Keep PCs, replace all non-PCs with event-file data
-    seeded = [c for c in combat_state.combatants if c.name.lower() in pc_keys]
+
+    # Keep PCs already in the LLM list; seed HP/AC from profiles
+    seeded = []
+    seen_pc_keys: set = set()
+    for c in combat_state.combatants:
+        key = c.name.lower()
+        if key in pc_keys:
+            profile = session.pc_profiles[key]
+            cs_data = profile.get("combat_stats", {})
+            c.hp_max = cs_data.get("hp_max", 0) or 10
+            c.ac     = cs_data.get("ac", 10) or 10
+            # Preserve tracked HP between combats; fall back to max for first combat
+            c.hp_current = session.pc_current_hp.get(key, c.hp_max)
+            seeded.append(c)
+            seen_pc_keys.add(key)
+
+    # Add any PCs the LLM omitted entirely
+    for key, profile in session.pc_profiles.items():
+        if key not in seen_pc_keys:
+            cs_data = profile.get("combat_stats", {})
+            name   = cs_data.get("name", "")
+            hp_max = cs_data.get("hp_max", 10)
+            ac     = cs_data.get("ac", 10)
+            hp_cur = session.pc_current_hp.get(key, hp_max)
+            if name:
+                seeded.append(Combatant(name=name, hp_current=hp_cur, hp_max=hp_max, ac=ac, initiative=0))
+
+    # Replace all non-PC combatants with authoritative event-file entries
     for _key, data in session.pending_combatants.items():
         name    = data.get("name", _key.title())
         hp      = data.get("hp", 5)
         ac      = data.get("ac", 13)
         attacks = data.get("attacks", {})
-        seeded.append(Combatant(name=name, hp_current=hp, hp_max=hp, ac=ac, initiative=0, attacks=attacks))
+        zone    = data.get("zone", "default")
+        seeded.append(Combatant(name=name, hp_current=hp, hp_max=hp, ac=ac, initiative=0,
+                                attacks=attacks, zone=zone))
+
     combat_state.combatants = seeded
-    _log(session, f"\n> *[Enemy stats seeded: {len(session.pending_combatants)} from event file]*\n")
+    _log(session, f"\n> *[Enemy stats seeded: {len(session.pending_combatants)} enemies + "
+                  f"{len(seen_pc_keys)} existing PCs + "
+                  f"{len(seeded) - len(seen_pc_keys) - len(session.pending_combatants)} added PCs]*\n")
 
 
 def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
@@ -1782,7 +1846,7 @@ Markers in order: %%NARRATIVE%%  %%ROLL%%  %%GENERATE%%  %%DELTAS%%  %%EVENT%%  
 
 SCENE EVENT — append after %%DELTAS%% (or %%GENERATE%% if %%DELTAS%% is not active) on the first turn a trigger is met:
 %%EVENT%% <event_id>   ← ID on the SAME LINE; nothing else on this line
-CORRECT: %%EVENT%% goblin_attack_starts
+CORRECT: %%EVENT%% goblin_attack_begins
 WRONG:   %%EVENT%%  |  %%EVENT%%\\n%%EVENT%% id  |  %%EVENT%% id (Note: …)
 
 %%COMBAT%% — write when starting or continuing combat; omit when no combat.
@@ -3083,12 +3147,48 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
-                    # Seed initiative modifiers (and future HP/AC/attacks) from ## Combatants table
-                    if _entry.event_type == "combat":
+                    # Seed combatants from ## Combatants table and auto-initialize combat state.
+                    # The LLM does not need to write %%COMBAT%% for event-driven combat starts —
+                    # the backend owns the authoritative data; LLM block is discarded this turn.
+                    if _entry.event_type == "combat" and session.combat_state is None:
                         _seeded = _parse_event_combatants(_entry.content)
                         if _seeded:
                             session.pending_combatants.update(_seeded)
-                            _log(session, f"\n> *[Combat event seeded {len(_seeded)} combatant(s) into pending_combatants]*\n")
+                        # Parse optional PC starting zone from event content
+                        import re as _re_pcz
+                        _pcz_m = _re_pcz.search(r'\*\*PC Starting Zone:\*\*\s*(.+)', _entry.content)
+                        _pc_start_zone = _pcz_m.group(1).strip() if _pcz_m else "default"
+                        # Build CombatState: PCs from profiles + enemies from event file
+                        _init_combatants: list = []
+                        for _pk, _pp in session.pc_profiles.items():
+                            _cs = _pp.get("combat_stats", {})
+                            _pname = _cs.get("name", "")
+                            _php   = _cs.get("hp_max", 10) or 10
+                            _pac   = _cs.get("ac",     10) or 10
+                            # Use tracked HP between combats; fall back to max for first combat
+                            _pcur  = session.pc_current_hp.get(_pk, _php)
+                            if _pname:
+                                _init_combatants.append(Combatant(
+                                    name=_pname, hp_current=_pcur, hp_max=_php, ac=_pac, initiative=0,
+                                    zone=_pc_start_zone,
+                                ))
+                        for _ek, _ed in session.pending_combatants.items():
+                            _init_combatants.append(Combatant(
+                                name=_ed.get("name", _ek.title()),
+                                hp_current=_ed.get("hp", 5),
+                                hp_max=_ed.get("hp", 5),
+                                ac=_ed.get("ac", 13),
+                                initiative=0,
+                                attacks=_ed.get("attacks", {}),
+                                zone=_ed.get("zone", "default"),
+                            ))
+                        session.combat_state = CombatState(round=1, combatants=_init_combatants)
+                        session._await_initiative_roll = True
+                        session._skip_combat_block = True
+                        _log(session, f"\n> *[Combat auto-initialized from event file: "
+                                      f"{len(session.pc_profiles)} PC(s) + "
+                                      f"{len(session.pending_combatants)} enemy(ies)]*\n")
+                        yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
                     _write_session_state(session)
                 else:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
@@ -3101,7 +3201,15 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         _combat_section = _sections.get("COMBAT", "")
         if _combat_section:
             try:
-                _combat_result = _parse_combat_block(_combat_section, existing_state=session.combat_state)
+                # Discard LLM %%COMBAT%% when combat was auto-initialized from an event file
+                # this same turn (round 0 = intentional clear signal, never skip that).
+                if session._skip_combat_block:
+                    session._skip_combat_block = False
+                    _log(session, "\n> *[%%COMBAT%% block discarded — combat auto-initialized from event file]*\n")
+                    _write_session_state(session)
+                    _combat_result = None
+                else:
+                    _combat_result = _parse_combat_block(_combat_section, existing_state=session.combat_state)
                 if _combat_result is not None:
                     if _combat_result.round == 0:          # intentional clear signal
                         session.combat_state = None
@@ -3930,8 +4038,9 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
                 matched_spell = sp
                 break
         # Partial word match (e.g. "missile" → "Magic Missile"; min 4 chars to avoid noise)
+        # "shoot" and "fire" excluded — those are weapon attack words, not spell triggers.
         if matched_spell is None:
-            _cast_words = {"cast", "invoke", "conjure", "shoot", "fire", "launch", "hurl", "use"}
+            _cast_words = {"cast", "invoke", "conjure", "launch", "hurl", "use"}
             if any(w in text_lower for w in _cast_words):
                 for sp in spells:
                     for part in sp["name"].lower().split():
@@ -3941,9 +4050,10 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
                     if matched_spell:
                         break
 
-    # Detect "cast" keyword with no spell match → the character doesn't have that spell.
+    # Detect unambiguous cast keyword with no spell match → unknown spell.
+    # "shoot" and "fire" excluded — they refer to bows/crossbows, not spells.
     if matched_spell is None:
-        _cast_words_check = {"cast", "invoke", "conjure", "shoot", "fire", "launch", "hurl", "use"}
+        _cast_words_check = {"cast", "invoke", "conjure", "launch", "hurl"}
         if any(w in text_lower for w in _cast_words_check) and spells:
             # Player tried to cast something; nothing matched. Signal a "spell not found" intent
             # so stream_pc_turn can return a proper error instead of silently falling to weapon.
@@ -4086,15 +4196,40 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
 
     target_name = matched_target.name if matched_target else ""
 
+    # ── Destination zone (move actions only) ─────────────────────────────────
+    destination_zone = ""
+    if action_type == "move":
+        # Build zone name map from current combatants + active event's ## Zones table
+        _zone_map: dict = {}   # lowercase → original-case
+        for _c in session.combat_state.combatants:
+            if _c.zone and _c.zone != "default":
+                _zone_map[_c.zone.lower()] = _c.zone
+        for _ev in session.active_events:
+            _ze = _get_event_index().get(_ev.event_id)
+            if _ze and _ze.event_type == "combat":
+                import re as _re2
+                _skip = {"zone", "adjacent to", "name", "hp", "ac", "init", "properties", "starting zone"}
+                for _zm in _re2.finditer(r'^\|\s*([A-Za-z][^|]*?)\s*\|', _ze.content, _re2.MULTILINE):
+                    _zn = _zm.group(1).strip()
+                    if _zn and "---" not in _zn and _zn.lower() not in _skip and len(_zn) > 2:
+                        _zone_map[_zn.lower()] = _zn
+        # Match player text against known zone names (longest match wins)
+        _best_len = 0
+        for _zlow, _zorig in _zone_map.items():
+            if _zlow in text_lower and len(_zlow) > _best_len:
+                destination_zone = _zorig
+                _best_len = len(_zlow)
+
     return {
-        "actor":         actor_name,
-        "action_type":   action_type,
-        "weapon_name":   weapon_name,
-        "weapon_atk":    weapon_atk,
-        "weapon_dmg":    weapon_dmg,
-        "weapon_type":   weapon_type,
-        "target":        target_name,
-        "original_text": text,
+        "actor":            actor_name,
+        "action_type":      action_type,
+        "weapon_name":      weapon_name,
+        "weapon_atk":       weapon_atk,
+        "weapon_dmg":       weapon_dmg,
+        "weapon_type":      weapon_type,
+        "target":           target_name,
+        "destination_zone": destination_zone,
+        "original_text":    text,
     }
 
 
@@ -4206,8 +4341,8 @@ def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, Non
 
     if intent.get("action_type") == "cast_unknown":
         actor = intent.get("actor", "The character")
-        msg = f"{actor} doesn't have that spell."
-        yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"
+        msg = f"{actor} doesn't know that spell."
+        yield f"data: {json.dumps({'type': 'attention', 'message': msg})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
@@ -4358,6 +4493,26 @@ def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, Non
         # Non-attack actions (move, use_ability, delay).
         # No dice to roll — narrate immediately in this stream rather than waiting for resume_combat.
         _log(session, f"\n> *[PC turn: {intent['actor']} action={intent['action_type']}]*\n")
+
+        # Apply zone movement before narrating so the LLM sees the updated state
+        if intent.get("action_type") == "move":
+            _dest = intent.get("destination_zone", "")
+            if not _dest:
+                # Destination zone not recognised — surface a soft warning
+                _actor_name = intent["actor"]
+                yield f"data: {json.dumps({'type': 'attention', 'message': f'{_actor_name} — zone not recognised. Name an exact zone to move there.'})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                return
+            _mover = next((c for c in session.combat_state.combatants
+                           if c.name.lower() == intent["actor"].lower()), None)
+            if _mover:
+                _old_zone = _mover.zone
+                _mover.zone = _dest
+                _log(session, f"\n> *[Zone move: {intent['actor']} {_old_zone} → {_dest}]*\n")
+                _write_session_state(session)
+                # Emit the updated state immediately so the UI reflects the move
+                yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+
         system   = _build_pc_turn_system(session, intent, {})
         user_msg = intent.get("original_text", "")
         try:

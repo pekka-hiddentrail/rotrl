@@ -7,6 +7,7 @@ export type SseEvent =
   | { type: 'status'; message: string }
   | { type: 'done'; session_id?: string; recap_path?: string; boot_path?: string; saved_to?: string }
   | { type: 'error'; message: string }
+  | { type: 'attention'; message: string }
   | { type: 'context'; npc: string | null; npc_trigger: string | null; skill: string | null; skill_trigger: string | null; location: string | null; location_npcs: string[]; scene_npcs: string[] }
   | { type: 'patch_last'; content: string }
   | { type: 'roll_request'; skill: string; dc: number; success: string; failure: string; speaker?: string | null }
