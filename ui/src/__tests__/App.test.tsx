@@ -32,6 +32,7 @@ vi.mock('../api', () => ({
 
 vi.mock('../data/characters', () => ({
   useCharacters: vi.fn(),
+  loadCharacterSheet: vi.fn(),
 }))
 
 // ── Typed references to mocked functions ─────────────────────────────────────
@@ -46,7 +47,7 @@ import {
   resolveDamageRoll,
   resumeCombat,
 } from '../api'
-import { useCharacters } from '../data/characters'
+import { loadCharacterSheet, useCharacters } from '../data/characters'
 
 const mockBoot = vi.mocked(bootSession)
 const mockSend = vi.mocked(sendTurn)
@@ -57,6 +58,7 @@ const mockResolveAttackRoll = vi.mocked(resolveAttackRoll)
 const mockResolveDamageRoll = vi.mocked(resolveDamageRoll)
 const mockResumeCombat = vi.mocked(resumeCombat)
 const mockUseChars = vi.mocked(useCharacters)
+const mockLoadCharacterSheet = vi.mocked(loadCharacterSheet)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +111,7 @@ function setup() {
     loading: false,
     error: null,
   })
+  mockLoadCharacterSheet.mockResolvedValue(makeCharacter())
   stubFetch()
 }
 
@@ -546,6 +549,26 @@ describe('App - character speaker integration', () => {
     expect(screen.queryByText(/Speaking as/)).not.toBeInTheDocument()
   })
 
+  it('fetches the full character sheet only when Open Sheet is selected', async () => {
+    mockLoadCharacterSheet.mockClear()
+
+    await user.click(screen.getByTitle(/Yanyeeku/))
+    expect(mockLoadCharacterSheet).not.toHaveBeenCalled()
+
+    await user.click(screen.getByText(/Open Sheet/))
+
+    await waitFor(() => expect(mockLoadCharacterSheet).toHaveBeenCalledWith('yanyeeku'))
+    await waitFor(() => expect(screen.getByText(/Ability Scores/)).toBeInTheDocument())
+  })
+
+  it('loads a full sheet when setting active so dice bonuses can use skills', async () => {
+    mockLoadCharacterSheet.mockClear()
+
+    await setActive(/Yanyeeku/)
+
+    await waitFor(() => expect(mockLoadCharacterSheet).toHaveBeenCalledWith('yanyeeku'))
+  })
+
   it('uses the roll_request speaker when resolving a prompted roll', async () => {
     const vanx = makeCharacter({
       id: 'vanx',
@@ -560,6 +583,7 @@ describe('App - character speaker integration', () => {
       loading: false,
       error: null,
     })
+    mockLoadCharacterSheet.mockResolvedValue(vanx)
     mockSend.mockImplementationOnce(() =>
       makeGen({
         type: 'roll_request' as const,

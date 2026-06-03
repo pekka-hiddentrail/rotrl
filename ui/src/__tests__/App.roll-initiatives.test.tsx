@@ -28,6 +28,7 @@ vi.mock('../api', () => ({
 
 vi.mock('../data/characters', () => ({
   useCharacters: vi.fn(),
+  loadCharacterSheet: vi.fn(),
 }))
 
 import { bootSession, sendTurn } from '../api'

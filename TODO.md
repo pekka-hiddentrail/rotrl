@@ -165,6 +165,22 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ---
 
+## Movement & Zone System
+
+> All zone-based combat movement work lives in **[MOVEMENT-TODO.md](MOVEMENT-TODO.md)**.
+> Named in-world zones, adjacency-based range, AoE by target count. No grid, no compass.
+> Current status: not yet started. Tier M1 next (zone data model + event file format).
+
+---
+
+## Magic System
+
+> All spell and magic work lives in **[MAGIC-TODO.md](MAGIC-TODO.md)**.
+> Tiers S1–S6: spell recognition, auto-hit damage, slot tracking, saves, buffs, spell resistance.
+> Current status: not yet started. Tier S1 next (spell recognition + intent extraction).
+
+---
+
 ## Combat System
 
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
@@ -260,6 +276,7 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 - [ ] Make sidebar character icons bigger
 - [ ] Splash portrait click opens character sheet — same behaviour as "Open Sheet" in session
 - [ ] Add fun rotating hints to splash screen — PF1e flavour or adventure-specific
+- [ ] **Extract abilities, feats, and class features into separate reference files** — currently each PC's `player_*.json` embeds spell descriptions, feat text, and ability summaries inline. This is redundant (all three kitsune characters share the same racial spells) and hard to maintain. The pattern established by `04_rules/skills/` and the planned `04_rules/spells/` should extend to: `04_rules/feats/<feat_name>.md`, `04_rules/class_features/<class>/<feature>.md`. Character sheets become name lists only; the system looks up mechanics from these files. Applies to: Flurry of Blows (Ani), Nine Tailed Heir bloodline abilities (Yanyeeku), kitsune racial traits (all three), warpriest blessings (Ani).
 - [ ] Normalize all player JSON files to one agreed UI schema and keep them synchronized with the markdown sheets.
 - [ ] Audit Ani's data and other player records for internal inconsistencies before relying on them in UI or prompts.
 - [ ] Add a small sync tool or documented workflow for copying approved sheet changes into UI JSON files.
@@ -294,6 +311,10 @@ Visual and interaction improvements to the UI. These are not blocked by backend 
 - [ ] **Action card — richer content and polish** — the initial action card layout (CB1.9-3) uses a minimal mock. Follow-up: decide final information hierarchy (weapon flavour name vs. mechanical name, condition effects applied, death/KO indicator when HP hits 0), typography, colour coding (red for hits, grey for misses), and animation (brief slide-in). Requires CB1.9-3 to land first. *(Blocked on: CB1.9-3)*
 
 - [ ] **Combat action overlay toast** — after a resolved enemy attack, flash a brief ephemeral overlay (auto-dismiss ~2 s) like *"Goblin Warchanter hits Yanyeeku with an arrow!"* on top of the chat area. Pure UI — reads from the same `action_card` SSE payload. Gives the combat kinetic feedback before the player reads the narrative. *(Blocked on: CB1.9-3)*
+
+- [ ] **Intent bar — combat mode** — during combat the intent bar shows NPC/skill/location detection tags that are meaningless (the backend doesn't emit a `context` SSE on combat turns, so it falls through to "no npc / no skill" noise or the misleading "no event — restart backend?" message). In combat mode the intent bar should instead surface combat-relevant state: current actor, detected action type (`attack` / `cast` / `move`), resolved weapon or spell name, and target. The `context` SSE is the social-turn signal; a new `combat_intent` SSE (or reuse `action_card` payload) should feed the bar during PC turns. Enemy turns could show the parsed `%%ACTION%%` fields (action, weapon, target) after they resolve. Requires a new SSE type or a mode flag passed from `App.tsx` (`combatState !== null`) to switch the bar's rendering branch entirely.
+
+- [ ] **Enemy turn — goblinesque taunts and battle cries in the InputBar placeholder** *(nice to have)* — the input bar already shows `enemyTaunt()` placeholder text during enemy turns. Replace the generic five-phrase list (`ENEMY_TAUNTS` in `InputBar.tsx`) with a richer, creature-specific pool. For goblins: war shrieks, broken Common insults, fire-obsessed boasts ("BURN BURN BURN!"), dog-eating taunts, and panicked retreats. For other creature types (undead, humanoids, beasts) add their own flavour lists keyed by a creature-type tag on the combatant. Chosen deterministically by name so re-renders don't flicker. Pure UI change — no backend required.
 
 ---
 

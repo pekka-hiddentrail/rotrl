@@ -178,7 +178,14 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
   const handleDamageRollClick = async () => {
     if (pending.length === 0) return
     const rolls = pending.map(rollDie)
-    const total = rolls.reduce((a, b) => a + b, 0)
+    const rawTotal = rolls.reduce((a, b) => a + b, 0)
+    // Parse modifier from damage_expr (e.g. "1d4+1" → +1, "1d8-1" → -1, "1d6" → 0)
+    const dmgExpr = attackPhase && (attackPhase.phase === 'damage' || attackPhase.phase === 'spell_damage')
+      ? attackPhase.phase === 'damage' ? attackPhase.damage_expr : attackPhase.damage_expr
+      : ''
+    const modMatch = dmgExpr.match(/[+-]\d+$/)
+    const dmgMod = modMatch ? parseInt(modMatch[0], 10) : 0
+    const total = rawTotal + dmgMod
     setPending([])
     await onDamageRoll?.(rolls, total)
   }
@@ -221,6 +228,28 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
             onClick={handleDamageRollClick}
             disabled={pending.length === 0}
           >Roll Damage</button>
+        </div>
+      ) : attackPhase?.phase === 'spell_damage' ? (
+        <div className="roll-request-banner attack-banner attack-banner--damage">
+          <div className="roll-request-skill">✦ {attackPhase.spell_name}: {attackPhase.caster} → {attackPhase.target}</div>
+          <div className="roll-request-dc">Roll damage: {attackPhase.damage_expr}</div>
+          <div className="roll-request-hint">pick dice above, then Roll</div>
+          <button
+            className="btn btn-roll attack-damage-roll-btn"
+            onClick={handleDamageRollClick}
+            disabled={pending.length === 0}
+          >Roll Damage</button>
+        </div>
+      ) : attackPhase?.phase === 'spell_heal' ? (
+        <div className="roll-request-banner attack-banner attack-banner--heal">
+          <div className="roll-request-skill">✚ {attackPhase.spell_name}: {attackPhase.caster} → {attackPhase.target}</div>
+          <div className="roll-request-dc">Roll healing: {attackPhase.damage_expr}</div>
+          <div className="roll-request-hint">pick dice above, then Roll</div>
+          <button
+            className="btn btn-roll attack-damage-roll-btn"
+            onClick={handleDamageRollClick}
+            disabled={pending.length === 0}
+          >Roll Healing</button>
         </div>
       ) : pendingRoll ? (
         <div className="roll-request-banner">

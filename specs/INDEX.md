@@ -21,7 +21,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button, API Logs button |
 | [chat-display.feature](chat-display.feature) | Frontend | `@chat` `@streaming` `@bubbles` `@markdown` | 7 | `ChatWindow.tsx`, `MessageBubble.tsx`, thinking indicator |
 | [dice-panel.feature](dice-panel.feature) | Frontend | `@dice` `@roll` `@pending-roll` `@history` | 15 | `DicePanel.tsx`, `resolve_roll` endpoint, skill bonus auto-apply, active character integration, `pendingRoll.speaker` fallback speaker, hidden before session boot |
-| [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 12 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, active character state, speaker badge |
+| [character-system.feature](character-system.feature) | Frontend | `@character` `@sidebar` `@sheet` `@data` | 13 | `CharacterSidebar.tsx`, `CharacterSheet.tsx`, `useCharacters`, `loadCharacterSheet`, active character state, speaker badge |
 | [intent-bar.feature](intent-bar.feature) | Frontend | `@intent` `@context` `@tags` `@sse` | 5 | `IntentBar.tsx`, `context` SSE event |
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 10 | `_build_slim_system_prompt()`, per-turn copy, Groq cap, `_FORMAT_EXAMPLE`, `_COMBAT_FULL_SPEC`, `_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC`, `_build_pc_profiles()` |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
@@ -40,8 +40,11 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [roll-initiatives.feature](roll-initiatives.feature) | Backend \| Frontend | `@combat` `@initiative` `@session` `@layout` | 9 | `roll_combat_initiatives()`, `_parse_event_combatants()`, `pending_combatants` seeding, auto-roll hook on round-1 `%%COMBAT%%` with combat event, `POST /combat/roll_initiatives` (debug), `tests/test_roll_initiatives.py`, `CombatPanelRollInit.test.tsx` |
 
 | [pc-combat-turn.feature](pc-combat-turn.feature) | Backend \| Frontend | `@combat` `@pc` `@action` `@turn` `@streaming` `@parsing` | 10 | `_extract_pc_combat_intent`, `stream_pc_turn`, `_stream_pc_turn_narration`, `_PC_TURN_SYSTEM`, `_build_pc_turn_system`, `POST /pc_turn`, `session._pending_pc_narration`, `pc_profiles.weapons`, App.tsx routing, `pcTurn()` in api.ts |
+| [magic-spell-system.feature](magic-spell-system.feature) | Backend \| Frontend | `@magic` `@spell` `@combat` `@pc` `@action` `@streaming` | 14 | `_build_pc_profiles` spell parsing, `_extract_pc_combat_intent` spell detection, `stream_pc_turn` `cast` branch, `PendingAttack.is_spell`, `damage_request` SSE, `AttackPhase` `spell_damage`, `DicePanel.tsx` spell banner, `MessageBubble.tsx` spell card |
+| [healing-spells.feature](healing-spells.feature) | Backend \| Frontend | `@magic` `@spell` `@heal` `@combat` `@pc` | 12 | `_build_pc_profiles` `healing_expr`/`is_heal`, `stream_pc_turn` heal branch, `PendingAttack.is_heal`, `heal_request` SSE, `AttackPhase` `spell_heal`, `DicePanel.tsx` heal banner, `MessageBubble.tsx` heal card, `resolve_damage_roll` positive delta, unconscious→active restore |
+| [ac-buffs.feature](ac-buffs.feature) | Backend \| Frontend | `@magic` `@spell` `@buff` `@combat` `@ac` | 13 | `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects`, `_build_pc_profiles` `buff_ac`, `stream_pc_turn` buff branch, `advance_combat_turn` effect expiry, `_serialize_combat_state` `effective_ac`, `CombatPanel.tsx` ✦ indicator. Covers shield, deflection, luck, natural, dodge (future) |
 
-**Total: 296 acceptance criteria across 31 feature files**
+**Total: 335 acceptance criteria across 34 feature files**
 
 ---
 

@@ -7,34 +7,48 @@ export interface MessageSpeaker {
   rune: string
 }
 
+export interface ActiveEffect {
+  name: string
+  bonus_type: string
+  ac_bonus: number
+  rounds_remaining: number
+}
+
 export interface Combatant {
   name: string
   hp_current: number
   hp_max: number
   ac: number
+  effective_ac: number
   initiative: number
   status: 'active' | 'unconscious' | 'fled' | 'dead'
   conditions?: string[]
+  active_effects?: ActiveEffect[]
 }
 
 export interface AttackResult {
   attacker: string
   target: string
-  roll: number
+  roll: number | null
   bonus: number
-  total: number
-  ac: number
+  total: number | null
+  ac: number | null
   hit: boolean
   damage_rolls: number[]
   damage_total: number
   attack_type: string
   is_pc: boolean
+  is_spell?: boolean
+  spell_name?: string | null
+  is_heal?: boolean
 }
 
 export type AttackPhase =
   | null
   | { phase: 'to_hit'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
   | { phase: 'damage'; attacker: string; target: string; damage_expr: string; hit_total: number; attack_type: string }
+  | { phase: 'spell_damage'; caster: string; target: string; damage_expr: string; spell_name: string }
+  | { phase: 'spell_heal';   caster: string; target: string; damage_expr: string; spell_name: string }
 
 export interface CombatState {
   round: number

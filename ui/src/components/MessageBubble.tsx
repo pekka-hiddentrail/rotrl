@@ -71,6 +71,32 @@ function PartyLabel() {
 export default function MessageBubble({ message, isLast, streaming }: Props) {
   if (message.role === 'combat-event' && message.attackResult) {
     const r = message.attackResult
+    if (r.is_heal && r.spell_name) {
+      return (
+        <div className="combat-event-row">
+          <div className="combat-event-card combat-event-card--heal">
+            <div className="combat-event-attacker">✚ {r.attacker} → {r.target}</div>
+            <div className="combat-event-roll">{r.spell_name} · healing touch</div>
+            <div className="combat-event-outcome combat-event-heal">
+              HEALED — {r.damage_total} hp
+            </div>
+          </div>
+        </div>
+      )
+    }
+    if (r.is_spell && r.spell_name) {
+      return (
+        <div className="combat-event-row">
+          <div className="combat-event-card">
+            <div className="combat-event-attacker">✦ {r.attacker} → {r.target}</div>
+            <div className="combat-event-roll">{r.spell_name} · auto-hit</div>
+            <div className="combat-event-outcome combat-event-hit">
+              HIT — {r.damage_total} damage
+            </div>
+          </div>
+        </div>
+      )
+    }
     const weapon = r.attack_type === 'ranged' ? '🏹' : '⚔'
     const bonusStr = r.bonus >= 0 ? `+${r.bonus}` : String(r.bonus)
     const hitLabel = r.hit ? `HIT — ${r.damage_total} damage` : 'MISS'

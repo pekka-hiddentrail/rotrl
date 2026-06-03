@@ -24,8 +24,18 @@ Items that span multiple combat tiers or require coordination with non-combat la
 - [ ] **Enemy stat authority for combat** — stop relying on model-invented enemy stats after initial setup. Load enemies from canonical NPC/monster stat blocks where possible, persist generated combatants into session state, and validate AC/HP/initiative/attack bonuses against those sources.
 - [ ] **Combat prompt: PC vs enemy turn behavior** — clarify and test the combat prompt contract: on a PC turn, the GM should present the immediate situation and wait for/resolve the player's declared action; on an enemy turn, the GM may choose and narrate the enemy action using `%%ATTACK%%`/`%%HP%%` as needed. This should align with the active-character/enemy input-state UI.
 - [ ] **Combat action economy rules** — add prompt guidance and backend/test support for PF1e action economy: standard/move/swift/immediate/full-round actions, attacks of opportunity, readied/delayed actions, and limits on how much one combatant can do per turn.
+
+- [ ] **PC full-round actions — Flurry of Blows and iterative attacks** — the current `/pc_turn` endpoint only resolves a single standard-action attack. PCs with high BAB or class abilities that grant multiple attacks per round (e.g. Ani's **Flurry of Blows** — two attacks at full BAB when using a staff or unarmed, monk ability) need a `full_round_action` path. Design notes:
+  - Intent extraction should detect "I flurry" / "full attack" / "I use flurry of blows" keywords and set `action_type = "full_round_attack"`
+  - Backend looks up the PC's iterative attack sequence from `pc_profiles["weapons"]` (each weapon entry should carry attack count and bonus progression)
+  - Dice tray queues all attacks in sequence (same pattern as multi-attack queue already used for enemy turns in Tier 1.5)
+  - Each attack resolves to hit/miss/damage independently; all results fed into the narration briefing
+  - **Ani specifically:** Flurry of Blows at level 1 gives two attacks at full BAB (or two at −2 if using non-monk weapons). Her staff entry already has the data. `full_round_attack` should default to her Flurry bonus line.
+  - This is a prerequisite for any realistic mid-to-high-level monk or fighter gameplay.
 - [ ] **Combat end conditions** — define when combat should emit `round: 0` and clear the tracker: all enemies dead/fled/surrendered, encounter defused, or GM/player explicitly ends combat. Add tests so victory, surrender, fleeing enemies, and manual End Combat behave consistently.
 - [ ] **Condition duration tracking** — extend combat state to track condition durations and expiry rules, not just condition labels. Include prompt/backend behavior for one-round effects, save-ends effects, prone/standing, bleed, poison, fear states, and other common PF1e combat conditions.
+- [ ] **Flanking** — in PF1e, flanking grants +2 to attack rolls when two or more attackers threaten the same target from opposite sides. In Theater of Mind this is a GM/narrative judgement: when the situation clearly describes two attackers on opposite sides, the target gets the `flanked: bool` condition. Add `flanked: bool = False` to `Combatant`. Set it via `%%HP%%` or a future `%%CONDITION%%` block when the LLM or backend determines flanking is occurring. `resolve_attack_roll` adds +2 to the attacker's roll when `target.flanked`. No grid or compass needed — purely declared by the scene narrative.
+
 - [ ] **Flat-footed and touch AC on Combatant** — PF1e distinguishes three AC values: normal AC (vs. standard attacks), flat-footed AC (vs. attacks when denied DEX bonus — at combat start, surprised, flanked), and touch AC (vs. spells/abilities that only require skin contact). The `Combatant` dataclass currently stores only a single `ac` field. Add `ac_touch: int` and `ac_flat_footed: int` to the dataclass; seed them from the event file `## Combatants` table (add columns) and from bestiary entries (SA-4). Update `_resolve_npc_attack` and `resolve_attack_roll` to use the correct AC type based on `attack_type` (touch attacks → `ac_touch`; flat-footed situations → `ac_flat_footed`). Display in CombatPanel as a tooltip or secondary badge on the AC display. Update `state.json` serialisation and `_COMBAT_SPEC_ROUND1` format.
 
 - [ ] **System prompt — strip non-combat context blocks outside active combat** — when `session.combat_state is None`, suppress from the per-turn injection: `_COMBAT_FULL_SPEC`, `_COMBAT_SPEC_ONGOING`, `[CURRENT HP]` block, `_ENEMY_TURN_DIRECTIVE`, and the attack-resolution section of `_COMBAT_SPEC_ONGOING`. Broader review: audit all per-turn injections for appropriate activity-gating; consider a leaner "exploration mode" base prompt variant separate from a "combat mode" variant that activates only when `combat_state is not None`. Potentially large token savings on every non-combat turn.
@@ -377,20 +387,6 @@ interaction model entirely.
 
 ---
 
-### Tier 1.11 — Death, Dying, and Healing
-
-Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn advancement and narrative accuracy: when a combatant drops to 0 HP or below, the backend derives their status automatically rather than relying on the LLM's `status:` field. Conditions with mechanical effects (attack/AC modifiers) depend on SA-2 authoritative stats and are tracked in Tier 2 SA-7.
-
-- [ ] **CB1.11-1 — Death and dying states** — current `status` field has `active / unconscious / fled / dead`. PF1e requires graduated states: 0 HP = Disabled (may take one action, then falls unconscious); negative HP above −CON = Dying (loses 1 HP/round unless stabilised); at or below −CON HP = Dead. Add `constitution: int` field to `Combatant` (default 10; seeded from `pc_profiles` for PCs and event/bestiary data for enemies when SA-2 lands). `_apply_hp_deltas` derives status automatically on every HP write: `active → disabled → dying → dead`. CombatPanel shows distinct badges for Disabled / Dying / Dead. Dying combatants automatically lose 1 HP per round at the start of their turn in `advance_combat_turn` unless stabilised.
-
-- [ ] **CB1.11-2 — Turn skip for out-of-action combatants** — `advance_combat_turn` already skips non-`active` combatants. Extend: `disabled` combatants act normally but flag the GM; `dying` combatants are skipped (auto-advance) and lose 1 HP; `dead` combatants are skipped silently. Emit a `combat_update` after each auto-advance so the UI stays in sync without a GM click.
-
-- [ ] **CB1.11-3 — Healing in combat** — `%%HP%%` delta blocks apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`, and re-derives status (e.g. Dying → Disabled if healed above 0). LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
-
-- [ ] **CB1.11-T — Tests** — `_apply_hp_deltas`: 0 HP → Disabled; −1 HP → Dying; −CON HP → Dead; heal from Dying to Disabled re-derives status. `advance_combat_turn`: skips Dying combatant and applies −1 HP; skips Dead combatant unchanged; Disabled combatant appears in turn order. `test_combat.py` existing HP clamp tests still pass.
-
----
-
 ### Tier 1.8 — Initiative Authority
 
 > **Bug:** B-C06 — LLM writes arbitrary initiative totals. Fixed. B-C06 marked obsolete in TODO.md.
@@ -536,6 +532,51 @@ When the current turn advances in the combat tracker, automatically update the a
 
 ---
 
+### Tier 1.11 — Death, Dying, and Healing
+
+Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn advancement and narrative accuracy: when a combatant drops to 0 HP or below, the backend derives their status automatically rather than relying on the LLM's `status:` field. Conditions with mechanical effects (attack/AC modifiers) depend on SA-2 authoritative stats and are tracked in Tier 2 SA-7.
+
+- [ ] **CB1.11-1 — Death and dying states** — current `status` field has `active / unconscious / fled / dead`. PF1e requires graduated states: 0 HP = Disabled (may take one action, then falls unconscious); negative HP above −CON = Dying (loses 1 HP/round unless stabilised); at or below −CON HP = Dead. Add `constitution: int` field to `Combatant` (default 10; seeded from `pc_profiles` for PCs and event/bestiary data for enemies when SA-2 lands). `_apply_hp_deltas` derives status automatically on every HP write: `active → disabled → dying → dead`. CombatPanel shows distinct badges for Disabled / Dying / Dead. Dying combatants automatically lose 1 HP per round at the start of their turn in `advance_combat_turn` unless stabilised.
+
+- [ ] **CB1.11-2 — Turn skip for out-of-action combatants** — `advance_combat_turn` already skips non-`active` combatants. Extend: `disabled` combatants act normally but flag the GM; `dying` combatants are skipped (auto-advance) and lose 1 HP; `dead` combatants are skipped silently. Emit a `combat_update` after each auto-advance so the UI stays in sync without a GM click.
+
+- [ ] **CB1.11-3 — Healing in combat** — `%%HP%%` delta blocks apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`, and re-derives status (e.g. Dying → Disabled if healed above 0). LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
+
+- [ ] **CB1.11-T — Tests** — `_apply_hp_deltas`: 0 HP → Disabled; −1 HP → Dying; −CON HP → Dead; heal from Dying to Disabled re-derives status. `advance_combat_turn`: skips Dying combatant and applies −1 HP; skips Dead combatant unchanged; Disabled combatant appears in turn order. `test_combat.py` existing HP clamp tests still pass.
+
+---
+
+### Tier 1.12 — Miscellaneous
+
+- [ ] **CB1.12-1 — Total Party Kill (TPK) detection** — after every HP delta is applied (in `_apply_hp_deltas` or immediately after `advance_combat_turn`), check whether all PC combatants are `unconscious` or `dead`. If so:
+  1. Emit a `tpk` SSE event so the frontend can react immediately.
+  2. Auto-clear combat state (`session.combat_state = None`) and write `state.json`.
+  3. Call a new `_stream_tpk_ending(session)` generator that: (a) has the LLM narrate the party's fall in a short, sombre paragraph (`%%NARRATIVE%%` only, no mechanics); (b) streams a styled "session end" card to the frontend with a "Thanks for playing" message and options to restart or quit.
+  4. The frontend receives `tpk` → shows a full-screen modal overlay (dark, with a skull motif or thematic image) with the narrated text and two buttons: **"Play Again"** (boots a new session) and **"End Session"** (clears state, returns to pre-boot splash). Modal is dismissible only via those buttons — no accidental click-away.
+
+  **Detection logic:** `_all_pcs_down(session) -> bool` — returns True when every combatant whose name appears in `session.pc_profiles` has `status` in `("unconscious", "dead")`. Called from `advance_combat_turn` and from `_apply_hp_deltas` after any PC takes damage.
+
+  **Why:** A wiped party currently leaves combat in a broken state — the turn tracker still advances, enemies keep attacking downed PCs, and there is no way for the player to gracefully end the session. This makes the game feel broken rather than dramatic.
+
+- [ ] **CB1.12-2 — Combat victory system prompt** — `stream_close_combat` currently calls the LLM with the bare one-liner `"You close a Pathfinder combat scene briefly."` as its system prompt. The LLM has no campaign identity, no party context, no knowledge of what just happened, and no transition guidance. Replace with a proper `_build_combat_close_system(session)` function that includes:
+
+  - Full GM identity: campaign name, session number, tone (gritty low-fantasy, no heroic cheese).
+  - Combat outcome snapshot: enemies defeated/fled/status, PCs standing with current HP, round count, location.
+  - Transition directive: signal that combat is over and the scene returns to exploration/social mode — describe the immediate aftermath (silence after the fighting, bodies, smells, sounds), not the next encounter.
+  - What to write: `%%NARRATIVE%%` only — 2–4 sentences of visceral aftermath. May include one interactive element (a door ajar, a dropped key, a fleeing goblin) to hook the next scene.
+  - What NOT to write: `%%COMBAT%%`, `%%ATTACK%%`, `%%ACTION%%`, `%%HP%%`, `%%ROLL%%`, `%%DELTAS%%`, `%%EVENT%%`, new combatants, mechanical outcomes, HP numbers.
+  - Loot hint (optional): if the event file defines `## Loot` for the encounter, inject it so the LLM can seed one visible item naturally into the description without listing everything.
+
+  This is the narrative bridge back to the main game loop. A good close makes the fight feel consequential; the current bare prompt produces generic filler.
+
+  **Note:** The user-message half (`_build_combat_close_directive`) already provides the combatant snapshot — keep it, just fix the system message half.
+
+- [ ] **CB1.12-3 — Weapon fallback prefers first melee weapon for melee intent** — ✅ fixed. When the player's input contains melee-intent words (strike, swing, stab, etc.) and no specific weapon name is found, `_extract_pc_combat_intent` now falls back to the first *melee* weapon in the profile rather than the first weapon overall. Prevents a character whose first listed weapon is a crossbow (like Vanx) from defaulting to a ranged attack when the player clearly means melee.
+
+- [ ] **CB1.12-4 — Ani's equipped weapon in flavor text** — the LLM narration for Ani's attacks occasionally names a "sword" despite her not having one. The `[PC TURN BRIEFING]` correctly states the weapon used (e.g. "Unarmed Attack"), but the LLM hallucinates flavor. Fix: add a prohibition line to `_PC_TURN_SYSTEM` and `_build_pc_turn_system` — "Weapon used: {weapon_name}. Do not name any other weapon in the narrative." Alternatively, inject the weapon name more prominently at the top of the briefing so the LLM cannot miss it.
+
+- [ ] **CB1.12-5 — Attacks of opportunity** — triggered when a combatant moves out of a zone while in melee (same zone as an enemy). See MOVEMENT-TODO.md Future section for full design.
+
 ### Tier 2 — Server-Authoritative State
 
 **The foundational shift: the backend, not the LLM, is the single source of truth for everything displayed on screen.**
@@ -627,6 +668,8 @@ exist.
 
 #### SA-3 — State read endpoint
 
+- [ ] (maybe not in this position) **XXXX** - Attach a combatant to another. They must make a move action to move to another enemy.
+- [ ] (maybe not in this position) **XXXX** - Show somewhere near the character name what weapon is equipped at what point.
 - [ ] **CB2-SA3 — `GET /api/sessions/{id}/state`** — returns the full current `state.json` content as JSON. Frontend polls this or uses it to hydrate after a reconnect. Returns 404 on unknown session. Returns the on-disk file if `session.combat_state` is None (social mode). Does NOT trigger a file write — reads from the in-memory `GameSession` serialised on the fly, same structure as `state.json`.
 
 #### SA-4 — Frontend reads state from backend

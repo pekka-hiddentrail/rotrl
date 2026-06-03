@@ -14,8 +14,10 @@ export type SseEvent =
   | { type: 'combat_update'; combat_state: CombatState | null }
   | { type: 'initiative_pending'; combat_state: CombatState }
   | { type: 'attack_request'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
+  | { type: 'damage_request'; caster: string; target: string; damage_expr: string; spell_name: string }
+  | { type: 'heal_request';   caster: string; target: string; damage_expr: string; spell_name: string }
   | { type: 'attack_result'; attacker: string; target: string; roll: number; bonus: number; total: number; ac: number; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean }
-  | { type: 'action_card';  attacker: string; target: string; roll: number; bonus: number; total: number; ac: number; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean }
+  | { type: 'action_card';  attacker: string; target: string; roll: number | null; bonus: number; total: number | null; ac: number | null; hit: boolean; damage_rolls: number[]; damage_total: number; attack_type: string; is_pc: boolean; is_spell?: boolean; spell_name?: string | null; is_heal?: boolean }
 
 export async function* bootSession(
   sessionNumber: number,

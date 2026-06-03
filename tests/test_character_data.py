@@ -8,7 +8,8 @@ Validates that:
   - each player file contains all fields the CharacterData TypeScript type requires
   - numeric fields are sane (level >= 1, hp.max > 0, etc.)
   - no broken cross-references within a file
-  - /api/characters returns all characters as a JSON array
+  - /api/characters returns lightweight character summaries
+  - /api/characters/{id} returns one full character sheet
 """
 from __future__ import annotations
 
@@ -36,6 +37,11 @@ REQUIRED_OBJECT_FIELDS = [
     "hp", "ac", "abilities", "saves", "skills",
     "feats", "weapons", "spells", "inventory",
 ]
+
+SUMMARY_FIELDS = {
+    "id", "portrait", "color", "rune", "name", "player", "race",
+    "subrace", "class", "archetype", "level", "hp",
+}
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -238,13 +244,30 @@ def test_api_characters_ids_match_index(api_client, character_ids):
     assert returned_ids == character_ids
 
 
-def test_api_characters_each_has_required_fields(api_client):
+def test_api_characters_returns_summaries_only(api_client):
     resp = api_client.get("/api/characters")
     for char in resp.json():
-        for field in REQUIRED_STRING_FIELDS:
-            assert field in char, f"API response for '{char.get('id')}' missing '{field}'"
-        for field in REQUIRED_OBJECT_FIELDS:
-            assert field in char, f"API response for '{char.get('id')}' missing '{field}'"
+        assert set(char.keys()) == SUMMARY_FIELDS
+        assert "skills" not in char
+        assert "spells" not in char
+        assert "inventory" not in char
+
+
+def test_api_character_detail_returns_full_sheet(api_client, character_ids):
+    cid = character_ids[0]
+    resp = api_client.get(f"/api/characters/{cid}")
+    assert resp.status_code == 200
+    char = resp.json()
+    assert char["id"] == cid
+    for field in REQUIRED_STRING_FIELDS:
+        assert field in char, f"API detail response for '{cid}' missing '{field}'"
+    for field in REQUIRED_OBJECT_FIELDS:
+        assert field in char, f"API detail response for '{cid}' missing '{field}'"
+
+
+def test_api_character_detail_unknown_returns_404(api_client):
+    resp = api_client.get("/api/characters/no_such_character")
+    assert resp.status_code == 404
 
 
 def test_api_characters_missing_index_returns_404(monkeypatch, tmp_path):

@@ -86,10 +86,25 @@ export default function CombatPanel({
               ].filter(Boolean).join(' ')}
             >
               <div className="combatant-name-row">
-                <span className="combatant-name">{c.name}</span>
+                <span className="combatant-name" title={c.name}>{c.name}</span>
                 <span className="combatant-meta">
                   <span className="combatant-init" title="Initiative">⚡ Init {c.initiative}</span>
-                  <span className="combatant-ac" title="Armour Class">🛡 AC {c.ac}</span>
+                  <span
+                    className="combatant-ac"
+                    title={(() => {
+                      const base = c.ac
+                      const effects = c.active_effects ?? []
+                      if (effects.length === 0) return `AC ${base}`
+                      const parts = [`Base ${base}`]
+                      effects.forEach(e => parts.push(`+${e.ac_bonus} ${e.bonus_type} (${e.name}, ${e.rounds_remaining}r left)`))
+                      return parts.join(' · ')
+                    })()}
+                  >
+                    🛡 AC {c.effective_ac ?? c.ac}
+                    {c.active_effects && c.active_effects.length > 0 && (
+                      <span className="combatant-ac-buffed">✦</span>
+                    )}
+                  </span>
                 </span>
               </div>
               <div className="combatant-hp-row">

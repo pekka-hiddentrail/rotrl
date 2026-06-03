@@ -33,14 +33,16 @@ vi.mock('../api', () => ({
 
 vi.mock('../data/characters', () => ({
   useCharacters: vi.fn(),
+  loadCharacterSheet: vi.fn(),
 }))
 
 import { bootSession, setActiveCharacter as mockSetActiveCharacterRaw } from '../api'
-import { useCharacters } from '../data/characters'
+import { loadCharacterSheet, useCharacters } from '../data/characters'
 
 const mockBoot           = vi.mocked(bootSession)
 const mockSetActiveChar  = vi.mocked(mockSetActiveCharacterRaw)
 const mockUseChars       = vi.mocked(useCharacters)
+const mockLoadCharacterSheet = vi.mocked(loadCharacterSheet)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +65,7 @@ const VANX = makeCharacter({ id: 'vanx',     name: 'Vanx',     color: '#5a8fc0',
 function setup() {
   vi.clearAllMocks()
   mockSetActiveChar.mockResolvedValue({ active_character: 'party' })
+  mockLoadCharacterSheet.mockResolvedValue(ANI)
   mockUseChars.mockReturnValue({
     characters: [ANI, VANX],
     characterMap: { ani: ANI, vanx: VANX },

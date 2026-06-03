@@ -46,6 +46,38 @@ cd ui && npm run test -- ChatWindow.test.tsx App.enemy-turn.test.tsx --run
 
 These cover the mode contract for `%%EVENT%%`: dev mode shows raw markers for debugging, while normal/full mode hides event tags from player-visible chat. They also cover the empty GM bubble showing three thinking dots while an enemy-turn stream is waiting for its first token.
 
+Buff spell system — Tier S2-3 (Shield / self-buff AC spells) coverage:
+
+```
+python -m pytest tests/test_buff_spells.py -q -p no:cacheprovider
+```
+
+23 tests covering buff_ac parsing (shield bonus regex), _effective_ac with
+no/single/multiple effects, _apply_ac_effect stacking prevention (same
+bonus_type replaces, different types stack), stream_pc_turn buff path (no
+dice, effect applied, combat_update emitted), attack resolution using
+effective AC, and advance_combat_turn effect expiry (decrement + removal).
+
+Magic spell system — Tiers S1 + S2-1 (auto-hit damage spells) coverage:
+
+```
+python -m pytest tests/test_spell_system.py -q -p no:cacheprovider
+```
+
+34 tests covering spell profile parsing (auto_hit, damage_expr, sr, per_day),
+spell intent extraction (name match, partial match, spell > weapon priority,
+target resolution, non-caster fallback), stream_pc_turn cast branch (damage_request
+SSE, PendingAttack pre-hit, is_spell flag), resolve_damage_roll spell result, and
+_build_pc_turn_system spell briefing. Rules-agnostic: test character "Bonnie" used
+to confirm the system works for any caster, not only the live party characters.
+
+Character summary + lazy sheet loading coverage:
+
+```
+python -m pytest tests/test_character_data.py -q -p no:cacheprovider
+cd ui && npm run test -- characters.test.tsx App.test.tsx ActiveCharacter.test.tsx CharacterSidebar.test.tsx CharacterSidebarHealth.test.tsx CharacterSheet.test.tsx --run
+```
+
 Start the stack:
 
 ```
