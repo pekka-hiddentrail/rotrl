@@ -115,6 +115,11 @@ export default function CombatPanel({
                   </span>
                 )}
               </div>
+              {c.zone && c.zone !== 'default' && (
+                <div className="combatant-zone-row">
+                  <span className="zone-badge">📍 {c.zone}</span>
+                </div>
+              )}
               {c.conditions && c.conditions.length > 0 && (
                 <div className="combatant-conditions">
                   {c.conditions.map(cond => (

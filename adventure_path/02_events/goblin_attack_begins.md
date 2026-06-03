@@ -16,7 +16,7 @@ The square is divided into five named zones. Adjacency determines movement and m
 | Market Stalls | Well, Center |
 | Center | Cathedral Stairs, Alleyway, Market Stalls |
 
-At combat start, assign each goblin to a random unoccupied zone other than Center. The civilian family of four occupies Center zone.
+The civilian family of four occupies Center zone. Goblins start in the zones below.
 
 ## Combatants
 
@@ -24,9 +24,9 @@ Goblin stats from bestiary (`adventure_path/09_bestiary/goblin.md`).
 
 | Name | HP | AC | Init | Zone |
 |------|----|----|------|------|
-| Goblin Warrior 1 | 5 | 16 | +6 | (random) |
-| Goblin Warrior 2 | 5 | 16 | +6 | (random) |
-| Goblin Warrior 3 | 5 | 16 | +6 | (random) |
+| Goblin Warrior 1 | 5 | 16 | +6 | Center |
+| Goblin Warrior 2 | 5 | 16 | +6 | Well |
+| Goblin Warrior 3 | 5 | 16 | +6 | Market Stalls |
 
 Attacks: Dogslicer +2 (1d4/19–20) melee · Shortbow +4 (1d4/×3) ranged
 
@@ -35,10 +35,10 @@ Attacks: Dogslicer +2 (1d4/19–20) melee · Shortbow +4 (1d4/×3) ranged
 **Goblin Warrior 1**
 Missing its left ear, replaced by a knot of scar tissue. Two lopsided red handprints painted on its leather armour. Slightly fat by goblin standards — its belly wobbles when it runs.
 
-**Goblin Warrior 2"**
+**Goblin Warrior 2**
 Unnervingly still one moment, then convulsing with nervous energy the next. Eyes point in slightly different directions. A dead crow tied to its belt swings as it moves.
 
-**Goblin Warrior 3"**
+**Goblin Warrior 3**
 Exceptionally thin, almost skeletal, with limbs that seem too long for its body. Crude runes scrawled on its face in charcoal. Wears a stolen child's sun-hat jammed sideways over its enormous ears.
 
 

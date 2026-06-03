@@ -489,6 +489,7 @@ def _serialize_combat_state(state: Optional[CombatState]) -> Optional[dict]:
                 "status": c.status,
                 "conditions": list(c.conditions),
                 "active_effects": list(c.active_effects),
+                "zone": c.zone,
             }
             for c in state.combatants
         ],
@@ -1077,6 +1078,7 @@ class Combatant:
     # bonus_type values: "shield", "deflection", "morale", "dodge", etc. Same-type effects
     # do not stack — the new entry replaces the old one (higher value wins in _apply_ac_effect).
     active_effects: list = field(default_factory=list)
+    zone: str = "default"           # named zone from event file; "default" = no zone tracking
 
     def __post_init__(self) -> None:
         self.hp_current = max(0, min(self.hp_current, self.hp_max))
@@ -1373,6 +1375,12 @@ def _parse_event_combatants(content: str) -> dict:
                         'ranged': _extract_attack_names(ranged_raw),
                     }
                 # Old single 'attacks' column — ignored for names (kept for compat)
+                # Zone column — strip parentheticals like "(random)"; fall back to "default"
+                raw_zone = row.get('zone', '').strip()
+                if raw_zone and not raw_zone.startswith('('):
+                    entry['zone'] = raw_zone
+                else:
+                    entry['zone'] = 'default'
                 entry['name'] = name  # preserve original capitalisation
                 result[name.lower()] = entry
             elif header_idx is not None:
@@ -1435,6 +1443,7 @@ def _seed_round1_combatants(session: "GameSession", combat_state: "CombatState")
             seeded.append(Combatant(
                 name=name, hp_current=hp, hp_max=hp, ac=ac, initiative=0,
                 attacks=attacks,
+                zone=data.get("zone", "default"),
             ))
         _log(session,
              f"\n> *[Round-1 seed: replaced enemy list with {len(session.pending_combatants)} "

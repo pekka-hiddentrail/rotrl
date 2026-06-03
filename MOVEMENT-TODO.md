@@ -88,17 +88,47 @@ Single-zone combats use `"default"` for everyone and skip all range checks.
 
 Define zones in the data layer. No rules enforcement yet — just the data structures and event file parsing.
 
-- [ ] **M1-1 — `Combatant.zone: str`** — add to `Combatant` dataclass; default `"default"`. Serialised in `state.json` and `_serialize_combat_state`.
+### Architecture — zone definition source
 
-- [ ] **M1-2 — `GameSession.zone_map`** — `dict[str, set[str]]` adjacency map. Example: `{"stairs": {"stalls"}, "stalls": {"stairs", "well"}, "well": {"stalls"}}`. Populated at combat start from event file. Empty when no `## Zones` section.
+Zone definitions live in **location files** (`adventure_path/03_locations/<location>/base.md`), not duplicated across event files. Event files carry a `**Location:** <id>` metadata header; the backend loads the zone map from the location file. Event files may override with their own `## Zones` section; location file is the fallback.
 
-- [ ] **M1-3 — `GameSession.zone_properties`** — `dict[str, list[str]]`. Example: `{"stairs": ["higher_ground"]}`. Empty when no properties defined.
+This means:
+- `festival_square/base.md` → canonical zone definition for all Festival Square events
+- `goblin_attack_starts.md`, `fire_phase_begins.md`, `goblin_cavalry_attack_begins.md` → carry `**Location:** festival_square`; their inline `## Zones` tables stay for LLM readability only
+- `LocationIndex.get_zones(location_id)` → returns parsed adjacency map
+- `EventEntry.location_id` → the location to look up if the event has no `## Zones`
 
-- [ ] **M1-4 — `_parse_event_combatants` extension** — parse `## Zones` table if present. Populate `session.zone_map` and `session.zone_properties`. Add `zone` column support to `## Combatants` table so each combatant's starting zone is seeded at round 1.
+### PoC — minimum end-to-end (start here)
 
-- [ ] **M1-5 — Update event files** — add `## Zones` section and `zone` column to all three combat event files (`goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`). Design the goblin attack zones: `square` (main engagement), `alley` (flanking goblins), `stalls` (civilian area). Warchanter starts in `square`, Warriors start in `square` or `alley`.
+Three changes only — no adjacency, no range validation, no movement:
 
-- [ ] **M1-T — Tests** — `_parse_event_combatants` reads zone adjacency and properties; combatant zone seeded correctly; `session.zone_map` populated; default zone when section absent.
+1. `Combatant.zone: str = "default"` in the dataclass
+2. Parse `Zone` column from the existing `## Combatants` table in event files → seed each combatant's zone at round 1
+3. Include `zone` in `_serialize_combat_state` → show zone badge in CombatPanel
+
+This proves the data flows end-to-end. Everything else builds on top.
+
+---
+
+- [x] **M1-5 — Update event files** — all three combat event files have `## Zones` sections and `Zone` columns in the Combatants table. Festival Square: Cathedral Stairs · Alleyway · Well · Market Stalls · Center (adjacency table defined). Goblin warriors placed in random zones; warchanter in Market Stalls; commando enters from Alleyway. Zone format is LLM-readable; backend parsing still pending.
+
+- [x] **M1-PoC-1 — `Combatant.zone: str`** — added to `Combatant` dataclass; default `"default"`.
+
+- [x] **M1-PoC-2 — Seed zone from `## Combatants` table** — `_parse_event_combatants` reads `Zone` column; parenthetical values like `(random)` fall back to `"default"`. `_seed_round1_combatants` passes `zone` when constructing `Combatant` objects.
+
+- [x] **M1-PoC-3 — Serialize + display** — `_serialize_combat_state` includes `"zone"`. `ui/src/types.ts` has `zone?: string`. `CombatPanel.tsx` renders `.zone-badge` below the HP bar when zone is not `"default"`. 9 pytest + 4 Vitest tests passing. Spec: `specs/zone-combat.feature` (ZC-001–ZC-006).
+
+- [ ] **M1-6 — Location file zone definition** — add `## Zones` section to `adventure_path/03_locations/festival_square/base.md` with the adjacency table. Add `**Location:** festival_square` metadata header to the three Festival Square event files. Serves as documentation now; becomes the backend source in M1-7.
+
+- [ ] **M1-7 — `LocationIndex.get_zones()`** — extend `api/context/location_lookup.py` to parse `## Zones` tables and expose `get_zones(location_id) -> dict[str, set[str]]` and `get_zone_properties(location_id) -> dict[str, list[str]]`.
+
+- [ ] **M1-8 — `EventEntry.location_id` + zone loading** — add `location_id: str` and `zone_map: dict` to `EventEntry`. Parser reads `**Location:**` header. At combat start, backend calls `LocationIndex.get_zones(location_id)` to populate `session.zone_map` (event-file `## Zones` overrides if present).
+
+- [ ] **M1-1 — `GameSession.zone_map`** — `dict[str, set[str]]` adjacency map. Populated from location file (M1-7/M1-8) or event file `## Zones`. Empty for single-zone encounters.
+
+- [ ] **M1-2 — `GameSession.zone_properties`** — `dict[str, list[str]]`. Example: `{"stairs": ["higher_ground"]}`. Empty when no properties defined.
+
+- [ ] **M1-T — Tests** — `Combatant.zone` defaults to `"default"`; zone column parsed and seeded correctly; `_serialize_combat_state` includes zone; `LocationIndex.get_zones` returns correct adjacency; `session.zone_map` populated from location file; default zone when location has no `## Zones`.
 
 ---
 

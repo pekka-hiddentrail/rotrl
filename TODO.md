@@ -74,7 +74,9 @@ The adventure is ~80% narrative infrastructure and ~20% mechanical execution. Th
 
 ### Act I — Swallowtail Festival (levels 1–2)
 
-- [x] **Festival encounter sequence** — `FESTIVAL_ENCOUNTER.md` created: three-wave raid script, Aldern rescue moment, Hemlock arrival timing, civilian rescue beat, aftermath state changes. All 12 encounter stubs (EC-COM-01 through EC-SUP-01) written with PF1e-correct content.
+- [x] **Act I event chain — full rewrite** — `adventure_path/02_events/` now contains the complete Act I chain (9 events) replacing the old flat EC-* encounter stubs. Pre-combat social phase: `welcoming_speeches` (four speakers with full scripted speeches), `festival_social_phase` (games, swallowtail release with Desna parable, lunch with Ameiko, Aldern first meeting), `cathedral_alarm` (thunderstone moment, transition to CRISIS). Goblin raid: `goblin_attack_starts` (3 warriors, 5 named zones, civilian family, AI tactics, appearance, taunts), `first_wave_repelled` / `second_wave_repelled` (social breathers), `fire_phase_begins` (warchanter + arsonists, surprise check, arson countdown, morale), `goblin_cavalry_attack_begins` (single commando + goblin dog, Aldern at well), `attack_repelled` (full aftermath — Zantus, Hemlock, Aldern, Ameiko, deltas, level 2 milestone). Templates: `_EVENT_TEMPLATE.md` (combat) and `_SOCIAL_TEMPLATE.md`; `INDEX.md` with full chain map. `ACT_01_OVERVIEW.md` updated to reference event files.
+- [x] **Goblin dog bestiary entry** — `adventure_path/09_bestiary/goblin_dog.md` created with correct PF1e stats: HP 9, AC 13, bite +2 (1d6+3 plus Allergic Reaction — Fort DC 12 or –2 Dex/Cha for 1 day, disease effect, non-stacking), immune to disease, Speed 50 ft. Corrects the old EC-COMBAT-03 stats which had wrong HP (14) and wrong effect (Goblin Pox).
+- [x] **Festival encounter sequence** — superseded by the event chain rewrite above. Old EC-COM-01 through EC-SUP-01 stubs deleted; content absorbed and expanded into the 02_events/ chain.
 - [x] **Aldern Foxglove introduction** — `base.md` verified complete (rescue hook, hunting trip, estate reference present); `knowledge.md` exists as session tracking log (correct format); backstory seed content lives in `base.md`.
 
 ### Act II — Shadows in Sandpoint (levels 2–3)
@@ -169,7 +171,9 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 > All zone-based combat movement work lives in **[MOVEMENT-TODO.md](MOVEMENT-TODO.md)**.
 > Named in-world zones, adjacency-based range, AoE by target count. No grid, no compass.
-> Current status: not yet started. Tier M1 next (zone data model + event file format).
+> Current status: PoC complete (M1-PoC-1/2/3 done) — `Combatant.zone` field, Zone column parsed from event files, badge shown in CombatPanel. Next: location file as zone source (M1-6/7/8), then adjacency helpers (M2).
+
+- [ ] **Zone terrain and features** — zones can carry properties (difficult terrain, cover, higher ground, darkness) that create mechanical effects for occupants. Defined in the event file `## Zones` table under a `Properties` column. Effects tracked on `Combatant.conditions` and enforced during attack resolution. Examples: `higher_ground` grants +1 ranged attack, `cover` adds +4 AC vs ranged from other zones, `difficult_terrain` costs an extra move action to enter. See M5 in MOVEMENT-TODO for the full tier breakdown.
 
 ---
 
@@ -389,7 +393,7 @@ Event-triggered context injection. When the LLM decides a scene condition is met
 - [ ] **Monitor event firing in real sessions** — verify the LLM fires events at the right narrative moments and does not double-fire or skip. N=5 turns TTL is a starting point; tune against observed sessions. Also watch whether the CORRECT/WRONG examples in the prompt fully eliminate the double-write behavior over time.
 - [ ] **Rethink event TTL as dialogue milestones** — instead of a raw turn count, the `length` (or TTL) of an event should express "these are the dialogue lines/topics that must be said before event X resolves." A goblin attack event, for example, stays active until the key beats (screams heard, guards mobilised, players decide to fight/flee) have each been touched — not just after N turns have elapsed. Concrete approach: events declare a list of milestone phrases/topics; the system ticks them off as they appear in GM output, and the event expires only when all milestones are acknowledged (or a hard-cap turn limit is hit as a safety net).
 - [x] **Spec — `%%EVENT%%` block format** — `specs/event-injection.feature` written: 9 ACs (AC-009 adds `event_type` metadata), inline syntax `%%EVENT%% <id>`, single event per response, TTL-only expiry.
-- [x] **Event content files** — `adventure_path/02_events/` created with `goblin_attack_starts.md`, `fire_phase_begins.md`, `cavalry_arrives.md`, `attack_repelled.md`. Format: metadata header above `<!-- INJECT -->`, injectable content below.
+- [x] **Event content files** — `adventure_path/02_events/` contains 9 event files covering the full Act I chain (see Adventure Content section). Format: metadata header above `<!-- INJECT -->`, injectable content below. Old flat stubs (`cavalry_arrives.md`, original `goblin_attack_starts.md`) replaced by zone-based rewrites with appearance, taunts, and binding AI tactics.
 - [x] **`EventIndex`** — `api/context/event_index.py`: `EventEntry` dataclass, `EventIndex` with lazy load, `get()`, `event_map_text()`, `_parse_event_file()`. Singleton + `_get_event_index()` in `session_manager.py`.
 - [x] **Session state** — `ActiveEvent` dataclass (`event_id`, `content`, `turns_remaining`) added. `active_events: list` field on `GameSession`. TTL decremented in `_inject_context`; expired entries removed.
 - [x] **Parser** — `_EVENT_LINE_RE` regex; fires in both section-based and flat-block paths. Duplicate check (no TTL reset), unknown-ID guard (silent ignore).

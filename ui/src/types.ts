@@ -24,6 +24,7 @@ export interface Combatant {
   status: 'active' | 'unconscious' | 'fled' | 'dead'
   conditions?: string[]
   active_effects?: ActiveEffect[]
+  zone?: string
 }
 
 export interface AttackResult {

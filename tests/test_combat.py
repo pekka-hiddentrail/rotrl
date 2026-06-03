@@ -241,6 +241,53 @@ class TestSerializeCombatState:
         assert first["status"] == "active"
 
 
+# ── ZC-001 / ZC-003 — Zone field on Combatant and serialization ───────────────
+
+class TestZone:
+    """ZC-001 — Combatant.zone defaults; ZC-003 — zone survives serialization."""
+
+    def test_zone_defaults_to_default(self):
+        c = Combatant(name="X", hp_current=5, hp_max=5, ac=13, initiative=8)
+        assert c.zone == "default"
+
+    def test_zone_set_explicitly(self):
+        c = Combatant(name="X", hp_current=5, hp_max=5, ac=13, initiative=8, zone="Alleyway")
+        assert c.zone == "Alleyway"
+
+    def test_zone_serialized(self):
+        state = CombatState(
+            round=1,
+            combatants=[
+                Combatant(name="Goblin Warrior 1", hp_current=5, hp_max=5, ac=16, initiative=8, zone="Center"),
+            ],
+        )
+        d = _serialize_combat_state(state)
+        assert d["combatants"][0]["zone"] == "Center"
+
+    def test_zone_default_serialized(self):
+        state = CombatState(
+            round=1,
+            combatants=[
+                Combatant(name="Goblin", hp_current=5, hp_max=5, ac=16, initiative=8),
+            ],
+        )
+        d = _serialize_combat_state(state)
+        assert d["combatants"][0]["zone"] == "default"
+
+    def test_multiple_combatants_different_zones(self):
+        state = CombatState(
+            round=1,
+            combatants=[
+                Combatant(name="A", hp_current=5, hp_max=5, ac=13, initiative=10, zone="Cathedral Stairs"),
+                Combatant(name="B", hp_current=5, hp_max=5, ac=13, initiative=8,  zone="Well"),
+                Combatant(name="C", hp_current=5, hp_max=5, ac=13, initiative=6,  zone="default"),
+            ],
+        )
+        d = _serialize_combat_state(state)
+        zones = [c["zone"] for c in d["combatants"]]
+        assert zones == ["Cathedral Stairs", "Well", "default"]
+
+
 # ── SSE integration: combat_update event ──────────────────────────────────────
 
 class TestCombatSseIntegration:

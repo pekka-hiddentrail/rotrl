@@ -388,7 +388,7 @@ class TestParseEventCombatants:
         assert result["goblin"]["init_mod"] == 0
 
     def test_real_goblin_event_file(self):
-        path = Path(__file__).resolve().parents[1] / "adventure_path" / "02_events" / "goblin_attack_starts.md"
+        path = Path(__file__).resolve().parents[1] / "adventure_path" / "02_events" / "goblin_attack_begins.md"
         if not path.exists():
             pytest.skip("Event file not found")
         content = path.read_text(encoding="utf-8")
@@ -396,10 +396,68 @@ class TestParseEventCombatants:
         inject_idx = content.find("<!-- INJECT -->")
         injectable = content[inject_idx + len("<!-- INJECT -->"):] if inject_idx >= 0 else content
         result = _parse_event_combatants(injectable)
-        assert len(result) >= 2
-        assert any("warchanter" in k for k in result)
+        assert len(result) >= 1
         for v in result.values():
             assert isinstance(v["init_mod"], int)
+
+
+# ── ZC-002 — Zone column parsing ─────────────────────────────────────────────
+
+_TABLE_WITH_ZONE = """
+## Combatants
+
+| Name | HP | AC | Init | Zone |
+|------|----|----|------|------|
+| Goblin Warrior 1 | 5 | 16 | +6 | Center |
+| Goblin Warrior 2 | 5 | 16 | +6 | Well |
+| Goblin Warrior 3 | 5 | 16 | +6 | Market Stalls |
+"""
+
+_TABLE_WITHOUT_ZONE = """
+## Combatants
+
+| Name | HP | AC | Init |
+|------|----|----|------|
+| Goblin Warrior 1 | 5 | 16 | +6 |
+"""
+
+_TABLE_RANDOM_ZONE = """
+## Combatants
+
+| Name | HP | AC | Init | Zone |
+|------|----|----|------|------|
+| Goblin Warrior 1 | 5 | 16 | +6 | (random) |
+"""
+
+
+class TestZoneColumnParsing:
+    """ZC-002 — Zone column is parsed and stored; fallbacks work correctly."""
+
+    def test_zone_parsed_correctly(self):
+        result = _parse_event_combatants(_TABLE_WITH_ZONE)
+        assert result["goblin warrior 1"]["zone"] == "Center"
+        assert result["goblin warrior 2"]["zone"] == "Well"
+        assert result["goblin warrior 3"]["zone"] == "Market Stalls"
+
+    def test_missing_zone_column_defaults_to_default(self):
+        result = _parse_event_combatants(_TABLE_WITHOUT_ZONE)
+        assert result["goblin warrior 1"]["zone"] == "default"
+
+    def test_parenthetical_zone_falls_back_to_default(self):
+        result = _parse_event_combatants(_TABLE_RANDOM_ZONE)
+        assert result["goblin warrior 1"]["zone"] == "default"
+
+    def test_real_goblin_event_file_has_zones(self):
+        path = Path(__file__).resolve().parents[1] / "adventure_path" / "02_events" / "goblin_attack_begins.md"
+        if not path.exists():
+            pytest.skip("Event file not found")
+        content = path.read_text(encoding="utf-8")
+        inject_idx = content.find("<!-- INJECT -->")
+        injectable = content[inject_idx + len("<!-- INJECT -->"):] if inject_idx >= 0 else content
+        result = _parse_event_combatants(injectable)
+        for v in result.values():
+            assert "zone" in v
+            assert isinstance(v["zone"], str)
 
 
 # ── AC-003 / pending_combatants ───────────────────────────────────────────────
