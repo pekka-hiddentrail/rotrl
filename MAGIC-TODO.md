@@ -83,7 +83,7 @@ Items that span multiple tiers or require coordination with other systems.
 
 ### Spell Dictionary
 
-- [ ] **Create `adventure_path/04_rules/spells/` directory** — each spell gets its own `.md` file in the same format as skill files. The character sheet only lists spell names; the system looks up mechanics from this dictionary. Prevents duplicating stat blocks across multiple character sheets. Format:
+- [x] **Create `adventure_path/10_spells/` directory** — each spell gets its own `.md` file with structured metadata, a backend-facing `## Resolution` block, and a rules summary below `<!-- REFERENCE -->`. The character sheet should eventually list spell names/resources only; mechanics should come from this dictionary. Class index subfolders exist for `wizard/` and `cleric/`.
 
   ```
   # Magic Missile
@@ -104,11 +104,13 @@ Items that span multiple tiers or require coordination with other systems.
   SR: Yes  Save: None
   ```
 
-  Spells to create immediately: Magic Missile, Shield, Disrupt Undead, Detect Magic,
-  Shield of Faith, Protection from Evil, Stabilize, Resistance, Pyrotechnics,
+  Created immediately: Magic Missile, Shield, Shield of Faith, Protection from Evil, Cure Light Wounds.
+  Remaining first pass: Disrupt Undead, Detect Magic, Stabilize, Resistance, Pyrotechnics,
   Disguise Self, Dancing Lights.
 
-- [ ] **`SpellIndex`** — lazy-loaded singleton (same pattern as `SkillIndex`, `NpcIndex`, `CombatRulesIndex`). Detects spell name mentions in PC input and injects the spell's payload section into `_build_pc_turn_system` instead of using the inline `effect` string from the character sheet JSON. Characters sheets become a name list only.
+- [ ] **`SpellIndex`** — lazy-loaded singleton (same pattern as `SkillIndex`, `NpcIndex`, `CombatRulesIndex`). Reads canonical spell files from `adventure_path/10_spells/`, detects spell name mentions in PC input, and injects the spell's payload section into `_build_pc_turn_system` instead of using the inline `effect` string from the character sheet JSON. Character sheets become a name/resource list only.
+
+- [ ] **Replace duplicated spell mechanics in character JSON** — everywhere a spell is referenced (`player_*.json`, PC profiles, InputBar hints, spell intent extraction), use the canonical `10_spells/<spell>.md` data for mechanics. Character JSON may keep prepared/known spell names, per-day slots, caster level, and character-specific DC/concentration data, but should not be the source of truth for spell descriptions, damage dice, AC bonuses, saves, SR, or targeting.
 
 - [ ] **`pc_profiles["spells"]` — structured list** — parse `player_*.json["spells"]["list"]` into structured dicts: `[{"name": "Magic Missile", "level": "1st", "per_day": 5, "cast_time": "standard", "touch": false, "auto_hit": true, "save": "", "sr": true, "damage_expr": "1d4+1", "buff_ac": 0}]`. Cantrips: `per_day = -1`. Character sheet `effect` text replaced by SpellIndex lookup.
 
@@ -138,9 +140,9 @@ Backend identifies when a PC wants to cast a spell and which one, mirroring weap
 
 > **Prerequisite:** SpellIndex + structured `pc_profiles["spells"]` (cross-cutting above).
 
-- [ ] **S1-1 — Spell dictionary files** — create `adventure_path/04_rules/spells/` with one `.md` per spell (see cross-cutting item). Triggers, resolution summary above `<!-- REFERENCE -->`; full stat block below.
+- [x] **S1-1 — Initial spell dictionary files** — created `adventure_path/10_spells/` with `SPELL_TEMPLATE.md`, canonical files for Magic Missile, Shield, Shield of Faith, Protection from Evil, Cure Light Wounds, and class indexes under `wizard/` and `cleric/`. Continue adding remaining party spells as needed.
 
-- [ ] **S1-2 — `SpellIndex` singleton** — same pattern as `SkillIndex`. Lazy-loads all spell files from `04_rules/spells/`. `get(name)` returns payload text; `detect(text)` matches spell names/triggers against player input.
+- [ ] **S1-2 — `SpellIndex` singleton** — same pattern as `SkillIndex`. Lazy-loads all spell files from `10_spells/`. `get(name)` returns payload text; `detect(text)` matches spell names/triggers against player input.
 
 - [x] **S1-3 — Spell intent extraction** — extend `_extract_pc_combat_intent` to detect `action_type = "cast"` when "cast", "use my spell", or any spell name is in the player text. Populate `spell_name` and `spell_data` (from profile). Spell detection runs before weapon matching and wins on direct name match regardless of cast keyword. Rules-agnostic: reads from `pc_profiles["spells"]` for any PC.
 

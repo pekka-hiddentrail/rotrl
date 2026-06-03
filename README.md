@@ -220,6 +220,7 @@ rotrl/
 │   ├── 03_locations/              # Location profiles (read by LocationIndex at runtime)
 │   ├── 02_events/                 # Event files — fired by %%EVENT%% tag, injected for N turns
 │   ├── 09_monsters/               # Generic monster stat blocks (AC, HP, attacks, morale, XP)
+│   ├── 10_spells/                 # Canonical spell markdown + class indexes (SpellIndex follow-up)
 │   └── 90_shared_references/      # Shared reference tables
 │
 ├── players/
