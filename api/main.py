@@ -41,6 +41,11 @@ class TurnRequest(BaseModel):
     input: str
 
 
+class PcTurnRequest(BaseModel):
+    input: str
+    action_type_hint: str | None = None
+
+
 class RollRequest(BaseModel):
     expr: str
     rolls: list[int]
@@ -204,7 +209,7 @@ def post_resume_combat(session_id: str):
 
 
 @app.post("/api/sessions/{session_id}/pc_turn")
-def post_pc_turn(session_id: str, req: TurnRequest):
+def post_pc_turn(session_id: str, req: PcTurnRequest):
     """Handle a PC combat turn: extract intent, queue attack from profile, emit attack_request.
 
     Routes the player's free-text action through backend intent extraction rather than
@@ -215,7 +220,7 @@ def post_pc_turn(session_id: str, req: TurnRequest):
         raise HTTPException(status_code=404, detail="Session not found")
     if session.combat_state is None:
         raise HTTPException(status_code=409, detail="No active combat")
-    return StreamingResponse(stream_pc_turn(session, req.input), media_type="text/event-stream", headers=_SSE_HEADERS)
+    return StreamingResponse(stream_pc_turn(session, req.input, req.action_type_hint), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 @app.post("/api/sessions/{session_id}/enemy_turn")

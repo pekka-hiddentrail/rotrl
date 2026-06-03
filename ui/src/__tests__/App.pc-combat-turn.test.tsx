@@ -116,7 +116,7 @@ describe('App — PC combat turn routing (AC-010)', () => {
     await user.type(screen.getByRole('textbox'), 'I swing at the goblin')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    await waitFor(() => expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.stringContaining('I swing')))
+    await waitFor(() => expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.stringContaining('I swing'), undefined))
   })
 
   it('routes to /turn when no combat is active', async () => {
@@ -159,7 +159,7 @@ describe('App — PC combat turn routing (AC-010)', () => {
     await waitFor(() => expect(mockPcTurn).toHaveBeenCalled())
     // Attack phase should be set (dice tray becomes active)
     // We verify pcTurn was called with the right args
-    expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.any(String))
+    expect(mockPcTurn).toHaveBeenCalledWith('sess-pc', expect.any(String), undefined)
   })
 
   it('routes to /turn when enemy is current actor', async () => {

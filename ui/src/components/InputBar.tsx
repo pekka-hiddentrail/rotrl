@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { ActiveSpeaker } from '../types'
 
@@ -46,25 +46,45 @@ function SkullIcon() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+type ActionType = 'standard' | 'move' | 'full'
+
+const ACTION_BUTTONS: { type: ActionType; label: string; title: string }[] = [
+  { type: 'standard', label: 'Standard',  title: 'Standard Action (attack, cast, use ability)' },
+  { type: 'move',     label: 'Move',      title: 'Move Action (movement, stand up, draw weapon)' },
+  { type: 'full',     label: 'Full-Round', title: 'Full-Round Action (full attack, charge, run)' },
+]
+
 interface Props {
-  onSend: (input: string) => void
+  onSend: (input: string, actionTypeHint?: string) => void
   onEnemyTurn?: () => void
   disabled: boolean
   activeSpeaker?: ActiveSpeaker | null
   combatWeapons?: string[]  // shown as a hint strip when it's a PC's combat turn
+  inPcCombatTurn?: boolean  // show action-type buttons when true
 }
 
-export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker = null, combatWeapons }: Props) {
+export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker = null, combatWeapons, inPcCombatTurn = false }: Props) {
   const [value, setValue] = useState('')
+  const [actionType, setActionType] = useState<ActionType | null>(null)
 
   const isEnemy = activeSpeaker?.isEnemy ?? false
+
+  // Reset selected action type when the turn changes to a new actor
+  useEffect(() => {
+    setActionType(null)
+  }, [activeSpeaker?.name])
 
   const submit = () => {
     if (isEnemy) return  // enemy turn: Enter does nothing; use the Enemy Turn button
     const trimmed = value.trim()
     if (!trimmed || disabled) return
-    onSend(trimmed)
+    if (actionType) {
+      onSend(trimmed, actionType)
+    } else {
+      onSend(trimmed)
+    }
     setValue('')
+    setActionType(null)
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -81,6 +101,22 @@ export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker 
   return (
     <div className={`input-bar${isEnemy ? ' hostile' : ''}`}>
       <div className="input-main">
+        {inPcCombatTurn && !isEnemy && (
+          <div className="action-type-row">
+            {ACTION_BUTTONS.map(({ type, label, title }) => (
+              <button
+                key={type}
+                className={`btn btn-action-type${actionType === type ? ' active' : ''}`}
+                onClick={() => setActionType(prev => prev === type ? null : type)}
+                disabled={disabled}
+                title={title}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {activeSpeaker && (
           <div
             className="speaker-badge"

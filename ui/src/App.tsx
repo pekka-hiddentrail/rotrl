@@ -141,7 +141,7 @@ export default function App() {
     }
   }
 
-  const handleSend = async (input: string) => {
+  const handleSend = async (input: string, actionTypeHint?: string) => {
     if (!session) return
     // During combat, the current initiative actor is the speaker (if they're a PC).
     // Falls back to the manually selected activeCharacter outside combat.
@@ -175,7 +175,7 @@ export default function App() {
       )
     )
     const turnStream = isPcCombatTurn
-      ? pcTurn(session.id, sentInput)
+      ? pcTurn(session.id, sentInput, actionTypeHint)
       : sendTurn(session.id, sentInput)
 
     try {
@@ -670,6 +670,7 @@ export default function App() {
               onEnemyTurn={handleEnemyTurn}
               disabled={streaming || ending || enemyTurnStreaming || combatClosing}
               activeSpeaker={inputActiveSpeaker}
+              inPcCombatTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
               combatWeapons={(() => {
                 if (!combatState || !currentCombatantName) return undefined
                 const pc = Object.values(fullCharacterMap).find(
