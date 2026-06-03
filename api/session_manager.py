@@ -3989,7 +3989,15 @@ def _parse_atk_bonus(atk_str: str) -> int:
         return 0
 
 
-def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
+# Maps the UI hint labels to internal action_type values used by stream_pc_turn.
+_HINT_TO_ACTION_TYPE: dict[str, str] = {
+    "standard": "attack",
+    "move":     "move",
+    "full":     "attack",   # full-round attack treated as attack for now
+}
+
+
+def _extract_pc_combat_intent(text: str, session: "GameSession", action_type_hint: Optional[str] = None) -> dict:
     """Extract PC combat intent from free-text player input.
 
     Returns a dict with: actor, action_type, weapon_name, weapon_atk,
@@ -4150,6 +4158,14 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
             action_type = "use_ability"
             break
 
+    # ── Apply UI action-type hint (overrides keyword inference) ───────────
+    # "move" is always authoritative.
+    # "standard"/"full" only reinforce the attack path — they must not suppress
+    # use_ability inference (rage, inspire, channel energy, etc.).
+    if action_type_hint and action_type_hint in _HINT_TO_ACTION_TYPE:
+        if action_type_hint == "move" or action_type != "use_ability":
+            action_type = _HINT_TO_ACTION_TYPE[action_type_hint]
+
     # ── Target resolution ─────────────────────────────────────────────────
     active_enemies = [
         c for c in session.combat_state.combatants
@@ -4305,7 +4321,7 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
-def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, None, None]:
+def stream_pc_turn(session: GameSession, player_text: str, action_type_hint: Optional[str] = None) -> Generator[str, None, None]:
     """Handle a PC combat turn: extract intent, queue attack from profile, prompt dice.
 
     No LLM call is made here — the attack is queued from the PC's actual weapon stats.
@@ -4315,7 +4331,7 @@ def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, Non
         yield f"data: {json.dumps({'type': 'error', 'message': 'No active combat'})}\n\n"
         return
 
-    intent = _extract_pc_combat_intent(player_text, session)
+    intent = _extract_pc_combat_intent(player_text, session, action_type_hint)
     if not intent:
         yield f"data: {json.dumps({'type': 'error', 'message': 'Could not resolve PC turn intent'})}\n\n"
         return

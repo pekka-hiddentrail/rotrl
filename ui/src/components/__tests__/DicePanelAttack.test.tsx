@@ -128,11 +128,12 @@ describe('DicePanel — AC-004 damage banner', () => {
 
   it('V8 — Roll Damage calls onDamageRoll with actual rolled values, not die sizes', async () => {
     // Math.random = 0.6 → rollDie(8) = floor(0.6 * 8) + 1 = 5
+    // damage_expr = '1d8+3' → modifier = +3 → total = 5 + 3 = 8
     const onDamageRoll = vi.fn().mockResolvedValue(undefined)
     renderPanel({ attackPhase: DAMAGE_PHASE, onDamageRoll })
     fireEvent.click(screen.getByTitle('d8'))
     fireEvent.click(screen.getByRole('button', { name: 'Roll Damage' }))
-    await waitFor(() => expect(onDamageRoll).toHaveBeenCalledWith([5], 5))
+    await waitFor(() => expect(onDamageRoll).toHaveBeenCalledWith([5], 8))
   })
 })
 

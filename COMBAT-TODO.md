@@ -816,15 +816,20 @@ type was spent. This tier adds awareness of the full action menu.
   tracking needed; backend logs it for the session record.
 
 - [ ] **5-foot step** — `action_type: five_foot_step`. Only legal if no other movement occurred
-  this turn; backend validates and logs. Useful for melee positioning.
+  this turn; backend validates and logs. Useful for melee positioning. 5-footstep removes "flanked" condition.
+- [ ] **Flanked condition** - TBD
 
-- [ ] **Action type picker in InputBar** — during a PC's combat turn, show a row of compact
-  action-type buttons above (or beside) the text input: **Standard · Move · Full-Round · Swift · Free**.
-  Selecting one pre-tags the outgoing message so the LLM doesn't have to guess from prose alone.
-  The selected type is injected as a prefix into `sentInput` (e.g. `[Standard action] @Vanx: "I cast ray of frost at the goblin"`).
-  Optionally, selecting Full-Round could grey out the Swift slot for that turn.
-  Buttons are only shown when `combatState` is active and it is a PC's turn (same gate as the
-  initiative-actor speaker fix). Deselects automatically when the turn advances.
+- [x] **Action type picker in InputBar** — during a PC's combat turn, a row of compact
+  action-type buttons (**Standard · Move · Full-Round**) appears above the textarea in InputBar.
+  Selecting one sends `action_type_hint: "standard"|"move"|"full"` as a separate POST body field
+  on `/pc_turn` (Option 2 — not a text prefix). Backend: new `PcTurnRequest` model with the field;
+  `stream_pc_turn` passes it to `_extract_pc_combat_intent`; `_HINT_TO_ACTION_TYPE` maps
+  `standard→attack`, `move→move`, `full→attack`. Hint overrides keyword inference.
+  Selecting the same button again deselects (toggle). Selection resets on turn advance and on send.
+  Only visible when `inPcCombatTurn` prop is true (PC turn gate, same as speaker fix).
+  CSS: `.action-type-row`, `.btn-action-type`, `.btn-action-type.active` (gold highlight).
+  **Deferred:** Swift and Free buttons — deferred pending action slot tracking (CB2.5-3/4 below).
+  **No spec file yet** — add ACs to `specs/pc-combat-turn.feature` or new spec.
 
 - [ ] **Click-to-target enemy in CombatPanel** — clicking a non-active combatant row in the
   CombatPanel marks them as the current target (`selectedTarget` state in App.tsx). The target

@@ -23,6 +23,8 @@ This file is a working backlog for the RotRL automation project. Items are group
 
 ## Quality and Testing
 
+- [ ] **Write `specs/action-economy.feature`** — the action type picker (Standard/Move/Full-Round buttons in InputBar, `action_type_hint` POST field, `_HINT_TO_ACTION_TYPE` backend map) shipped without a spec file. Add ACs covering: (1) buttons only visible on PC combat turn; (2) selecting a type sends correct `action_type_hint` in POST body; (3) hint overrides keyword inference; (4) toggle-off by re-clicking; (5) reset on turn advance and on send. Until the spec exists the feature has zero AC coverage in the coverage matrix.
+- [ ] Rewrite the token test. The combat is more complex now and the current implementation is very different from the test.
 - [ ] **Update `specs/INDEX.md` and `README.md` test table for `feat/initiative-roller`** — AC count in `specs/INDEX.md` and the test-count table in `README.md` need updating after the roll-initiatives spec (9 ACs) and test files (18 pytest + 8 Vitest) landed.
 - [ ] **Add AC-009 App wiring test** — `handleRollInitiatives` in `App.tsx` has no Vitest test; mock `rollInitiatives` from `api.ts` and assert `setCombatState` and `setCurrentCombatantName` are called with the response values. *(spec: roll-initiatives.feature AC-009)*
 - [ ] **Remove dead `or True` assertion in `test_roll_initiatives.py`** — `assert session.combat_state.combatants[0].initiative != 99 or True` always passes; the actual coverage is in the loop below it. *(tests/test_roll_initiatives.py `TestInactiveCombatantsRolled`)*
@@ -36,6 +38,7 @@ This file is a working backlog for the RotRL automation project. Items are group
 - [ ] Test the roll endpoint writes the correct expression and total to the log, including multi-die breakdowns (e.g. 3d6 showing individual rolls). *(low — single-die case covered in `test_roll_logged`; multi-die breakdown not tested)*
 - [ ] **Live Playwright — dice roller scenario coverage** — extend `ui/e2e/live-flows.spec.ts` with dedicated dice scenarios against a real booted session: (1) basic multi-die queue (2d6+1d20) rolls and result appears in history; (2) auto-bonus applies when active character has a matching skill modifier; (3) auto-bonus absent when toggle is OFF; (4) pending roll banner clears after resolve and PASSED/FAILED badge appears; (5) history cap at 10 rolls — 12th roll evicts the oldest entry; (6) roll-while-streaming is blocked — send button disabled during GM response.
 - [ ] **Skill-use rules for trained-only skills** — define and enforce when a PC can attempt skill checks they do not have trained. Knowledge skills should follow PF1e trained-only behavior where appropriate; if a character lacks the relevant Knowledge skill, fall back to an untrained general ability check only for common information, likely INT-based with a higher DC (for example +10), and make the GM state the limitation instead of silently granting full expert knowledge.
+- [x] **Fix DicePanelAttack V8 test — modifier extraction added after test was written** — `handleDamageRollClick` now extracts the `+N` modifier from `damage_expr` (e.g. `1d8+3` → mod=3) and adds it to the raw roll total before calling `onDamageRoll`. Test `V8` was asserting `([5], 5)` (no modifier); corrected to `([5], 8)` to match `roll=5 + mod=3`. *(ui/src/components/__tests__/DicePanelAttack.test.tsx)*
 - [x] **Add pytest-cov to backend** — generate per-file line coverage report; identify untested paths in streaming and fallback parsers. **Done:** `pytest-cov>=4.0.0` in requirements; `.coveragerc` (source=api, show_missing, json→outputs/code_coverage.json); `GET /api/code-coverage` endpoint; "Code Lines" tab added to the Coverage modal showing per-file bars, %, and missing line numbers.
 - [x] **Build feature coverage matrix** — map each of the 178 spec ACs to the test(s) that cover it; flag ACs with zero test coverage. **Done:** `scripts/build_coverage.py` reads all `specs/*.feature` files and all test suites (pytest / Vitest / Playwright), writes `outputs/coverage.json` (45/178 covered, 133 gaps as of first run). `GET /api/coverage` serves the data. `CoverageMatrix.tsx` modal opens from a "Coverage" button in the header — filterable by feature and by gap status. Spec: `specs/coverage-matrix.feature` (6 ACs).
 - [x] Add a test fixture representing a corrupt or partially-written log file and assert the parser either recovers gracefully or raises a clear error. *(low)*
@@ -190,7 +193,9 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.
 > Tiers 1-4 (tracker, HP authority, attack flow, system prompt, enemy turn, conditions,
 > initiative, state authority, spells) plus cross-cutting quality items are tracked there.
-> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tiers 1.9 and 1.10.5 complete. Tier 1.11 next (death/dying/healing). Tier 2 (server-authoritative state) follows.
+> Current status: Tiers 1, 1.1, 1.5, 1.6, 1.7, 1.8, and 1.10 (partial) complete. Tiers 1.9 and 1.10.5 complete. Tier 1.11 next (death/dying/healing).
+> Tier 2.5 (action economy) in progress: action type picker (Standard/Move/Full-Round buttons) shipped on `feat/action-economy`. Swift/Free deferred.
+> Tier 2 (server-authoritative state) follows Tier 1.11.
 > See `specs/roll-initiatives.feature` (9 ACs, 18 pytest + 8 Vitest tests).
 
 ---

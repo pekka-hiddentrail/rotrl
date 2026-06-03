@@ -100,11 +100,11 @@ export async function rollInitiatives(sessionId: string): Promise<{ combat_state
 }
 
 
-export async function* pcTurn(sessionId: string, input: string): AsyncGenerator<SseEvent> {
+export async function* pcTurn(sessionId: string, input: string, actionTypeHint?: string): AsyncGenerator<SseEvent> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/pc_turn`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
+    body: JSON.stringify({ input, action_type_hint: actionTypeHint ?? null }),
   })
   if (!res.ok) {
     const detail = await res.text()

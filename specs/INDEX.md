@@ -43,9 +43,10 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [magic-spell-system.feature](magic-spell-system.feature) | Backend \| Frontend | `@magic` `@spell` `@combat` `@pc` `@action` `@streaming` | 14 | `_build_pc_profiles` spell parsing, `_extract_pc_combat_intent` spell detection, `stream_pc_turn` `cast` branch, `PendingAttack.is_spell`, `damage_request` SSE, `AttackPhase` `spell_damage`, `DicePanel.tsx` spell banner, `MessageBubble.tsx` spell card |
 | [healing-spells.feature](healing-spells.feature) | Backend \| Frontend | `@magic` `@spell` `@heal` `@combat` `@pc` | 12 | `_build_pc_profiles` `healing_expr`/`is_heal`, `stream_pc_turn` heal branch, `PendingAttack.is_heal`, `heal_request` SSE, `AttackPhase` `spell_heal`, `DicePanel.tsx` heal banner, `MessageBubble.tsx` heal card, `resolve_damage_roll` positive delta, unconscious→active restore |
 | [ac-buffs.feature](ac-buffs.feature) | Backend \| Frontend | `@magic` `@spell` `@buff` `@combat` `@ac` | 13 | `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects`, `_build_pc_profiles` `buff_ac`, `stream_pc_turn` buff branch, `advance_combat_turn` effect expiry, `_serialize_combat_state` `effective_ac`, `CombatPanel.tsx` ✦ indicator. Covers shield, deflection, luck, natural, dodge (future) |
+| [action-economy.feature](action-economy.feature) | Backend \| Frontend | `@combat` `@pc` `@action` `@turn` `@input` `@economy` | 9 | `InputBar.tsx` action-type row (Standard/Move/Full-Round buttons), `inPcCombatTurn` prop, `actionType` state + toggle + reset on turn-advance, `action_type_hint` POST field, `PcTurnRequest` Pydantic model, `_HINT_TO_ACTION_TYPE`, `_extract_pc_combat_intent` hint override, `pcTurn()` in api.ts |
 | [zone-combat.feature](zone-combat.feature) | Backend \| Frontend | `@combat` `@zone` `@movement` | 8 | `Combatant.zone`, `_parse_event_combatants` Zone column, `(random)` fallback to `"default"`, `_seed_round1_combatants` zone seed, `_serialize_combat_state` zone field, `CombatPanel.tsx` `.zone-badge` below HP bar, `tests/test_combat.py TestZone`, `tests/test_roll_initiatives.py TestZoneColumnParsing` |
 
-**Total: 343 acceptance criteria across 35 feature files**
+**Total: 344 acceptance criteria across 36 feature files**
 
 ---
 
