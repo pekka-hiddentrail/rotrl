@@ -15,7 +15,7 @@ Darkvision 60 ft.
 ## Attacks
 **Melee**
 - Dogslicer +2 (1d4/19–20)
-- Torch –1 (1d2 + 1 fire)
+- Whip +2 (1d3 nonlethal, trip)
 
 **Ranged**
 - Shortbow +4 (1d4/×3)
