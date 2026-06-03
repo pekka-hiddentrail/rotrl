@@ -271,12 +271,14 @@ class TestStateJsonWritten:
 
     def test_log_entry_written_in_dev_mode(self, tmp_path: Path):
         session = _make_session(tmp_path, dev_mode=True)
-        session.combat_state = _combat(("Goblin 1", 5, "active"))
+        session.combat_state = _combat(("Goblin 1", 5, "active"), ("Goblin 2", 5, "active"))
         state_path = tmp_path / "state.json"
-        with patch.object(sm, "_session_state_path", return_value=state_path):
+        with patch.object(sm, "_session_state_path", return_value=state_path), \
+             patch.object(sm.random, "randint", side_effect=[18, 11]):
             roll_combat_initiatives(session)
         log_text = session.log_path.read_text(encoding="utf-8") if session.log_path.exists() else ""
-        assert "Roll initiatives" in log_text or "initiative" in log_text.lower()
+        assert "Roll initiatives" in log_text
+        assert "new order Goblin 1 18, Goblin 2 11" in log_text
 
 
 # ── AC-007 — endpoint tests ────────────────────────────────────────────────────

@@ -216,6 +216,36 @@ def test_multiline_roll_block_still_works(booted_session):
     assert roll_events[0]["dc"] == 20
 
 
+def test_indented_flat_roll_block_uses_shared_roll_parser(booted_session):
+    """Old flat fallback normalises %%ROLL%% into the shared section parser."""
+    import api.session_manager as sm
+
+    client, session_id = booted_session
+    long_intro = "The crowd churns around the square. " * 8
+    tokens = [
+        long_intro,
+        "\n  %%ROLL%%\n",
+        "skill: Perception\n",
+        "dc: 17\n",
+        "success: You pick out the goblin hiding near the fountain.\n",
+        "failure: The panic hides the movement.\n",
+    ]
+    mock_resp = make_stream_response(tokens)
+
+    with patch("api.session_manager._requests.post", return_value=mock_resp):
+        resp = _send(client, session_id, "I scan the square.")
+
+    events = parse_sse(resp)
+    roll_events = [e for e in events if e["type"] == "roll_request"]
+    assert len(roll_events) == 1
+    assert roll_events[0]["skill"] == "Perception"
+    assert roll_events[0]["dc"] == 17
+
+    session = sm._sessions[session_id]
+    assert session.pending_roll is not None
+    assert "fountain" in session.pending_roll["success"]
+
+
 def test_unbracketed_section_roll_block_sets_pending_roll(booted_session):
     """Section parser accepts live-model plain field ROLL blocks."""
     import api.session_manager as sm

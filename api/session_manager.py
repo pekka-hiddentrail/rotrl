@@ -571,7 +571,7 @@ def _write_npc_delta(fields: dict, session: GameSession) -> None:
         if npc_dir is None:
             return  # stub creation failed
 
-    ts_now = datetime.now().strftime("%H:%M:%S")
+    ts_now = _ts()
 
     # ── Session delta file (turn-by-turn status) ───────────────────────────────
     status_lines = [f"## Turn {session.turn_number} — {ts_now}"]
@@ -607,39 +607,6 @@ _COMBAT_BLOCK_RE = re.compile(
     r'^%%COMBAT%%[ \t]*\n(.*?)(?=^%%|\Z)',
     re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
-
-# Matches a %%HP%% delta block (Tier 1.1 — non-attack HP changes).
-_HP_BLOCK_RE = re.compile(
-    r'^%%HP%%[ \t]*\n(.*?)(?=^%%|\Z)',
-    re.IGNORECASE | re.MULTILINE | re.DOTALL,
-)
-
-# One combatant row inside a %%HP%% block.
-_HP_DELTA_LINE_RE = re.compile(
-    r'^\s*-\s*name\s*:\s*(?P<name>[^·•\n]+?)\s*[·•]\s*delta\s*:\s*(?P<delta>[+-]?\d+)',
-    re.IGNORECASE,
-)
-
-
-def _parse_hp_deltas(text: Optional[str]) -> list:
-    """Parse the body of a %%HP%% block into a list of (name, delta) tuples.
-
-    Each line should be:  - name: <Name> · delta: -N   (negative = damage, positive = healing)
-    Lines that don't match are silently skipped.
-    Returns an empty list on empty/None input.
-    """
-    if not text:
-        return []
-    results = []
-    for line in text.splitlines():
-        m = _HP_DELTA_LINE_RE.match(line)
-        if m:
-            try:
-                results.append((m.group("name").strip(), int(m.group("delta"))))
-            except ValueError:
-                pass
-    return results
-
 
 def _apply_hp_deltas(combat_state: Optional["CombatState"], deltas: list) -> None:
     """Apply a list of (name, delta) HP changes to *combat_state* in-place.
@@ -1067,6 +1034,64 @@ _ROLL_BLOCK_RE = re.compile(
     r'(?:%%END%%\s*)?',                    # %%END%% optional — LLMs often omit it
     re.IGNORECASE,
 )
+
+
+def _parse_roll_section(text: str) -> Optional[dict]:
+    """Parse a %%ROLL%% section body into skill/DC/success/failure fields."""
+    if not text:
+        return None
+
+    _roll_blocks = _parse_bracket_blocks(text)
+    if not _roll_blocks:
+        # Fallback: single-line bracket format (what the spec shows):
+        #   [ skill: X  dc: N  success: long text  failure: long text ]
+        # _BRACKET_BLOCK_RE requires [ on its own line; this handles inline.
+        _inline_m = re.search(
+            r"skill:\s*(?P<skill>.+?)\s+dc:\s*(?P<dc>\d+)\s+success:\s*(?P<success>.+?)\s+failure:\s*(?P<failure>.+?)\s*\]",
+            text,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if _inline_m:
+            _roll_blocks = [{
+                "skill":   _inline_m.group("skill").strip(),
+                "dc":      _inline_m.group("dc").strip(),
+                "success": _inline_m.group("success").strip(),
+                "failure": _inline_m.group("failure").strip(),
+            }]
+    if not _roll_blocks:
+        # Live models sometimes write the section body as plain fields:
+        # skill: Perception
+        # dc: 15
+        # success: ...
+        # failure: ...
+        _line_m = re.search(
+            r"(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n"
+            r"dc:\s*(?P<dc>\d+)\s*\n"
+            r"success:\s*(?P<success>.*?)\n"
+            r"failure:\s*(?P<failure>.*)\s*$",
+            text.strip(),
+            re.DOTALL | re.IGNORECASE,
+        )
+        if _line_m:
+            _roll_blocks = [{
+                "skill":   _line_m.group("skill").strip(),
+                "dc":      _line_m.group("dc").strip(),
+                "success": _line_m.group("success").strip(),
+                "failure": _line_m.group("failure").strip(),
+            }]
+    if not _roll_blocks:
+        return None
+
+    _rf = _roll_blocks[0]
+    try:
+        return {
+            "skill":   _rf.get("skill", "").strip(),
+            "dc":      int(_rf.get("dc", 0)),
+            "success": _rf.get("success", "").strip(),
+            "failure": _rf.get("failure", "").strip(),
+        }
+    except (ValueError, KeyError):
+        return None
 
 # The system prompt is fixed at boot.
 # Dynamic context (NPC profiles, skill rules, location NPCs) is injected per-turn
@@ -1617,8 +1642,16 @@ def roll_combat_initiatives(session: "GameSession") -> Optional[dict]:
     return _serialize_combat_state(session.combat_state)
 
 
-def _ts() -> str:
-    return datetime.now().strftime("%H:%M:%S")
+def _ts(moment: Optional[datetime] = None) -> str:
+    return (moment or datetime.now()).strftime("%H:%M:%S")
+
+
+def _ts_file(moment: Optional[datetime] = None) -> str:
+    return (moment or datetime.now()).strftime("%Y%m%d_%H%M%S")
+
+
+def _ts_human(moment: Optional[datetime] = None) -> str:
+    return (moment or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _log(session: GameSession, text: str) -> None:
@@ -2016,7 +2049,7 @@ def create_session(
 
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     started = datetime.now()
-    log_name = f"session_{session_number:03d}_{started.strftime('%Y%m%d_%H%M%S')}.log.md"
+    log_name = f"session_{session_number:03d}_{_ts_file(started)}.log.md"
 
     session = GameSession(
         id=str(uuid.uuid4()),
@@ -2094,7 +2127,7 @@ def create_session(
     _sessions[session.id] = session
 
     mode_label = "dev" if dev_mode else "full"
-    _log(session, f"# Session {session_number:03d} — {started.strftime('%Y-%m-%d %H:%M:%S')}")
+    _log(session, f"# Session {session_number:03d} — {_ts_human(started)}")
     _log(session, f"Model: `{model}` | Mode: {mode_label} | Temp: {temperature}\n")
     if _restored_npcs:
         _log(session, f"> *[Scene NPCs restored from boot.md: {', '.join(_restored_npcs)}]*\n")
@@ -2222,7 +2255,7 @@ def set_active_character(session: GameSession, name: str) -> None:
 
 def save_session(session: GameSession) -> Path:
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    _log(session, f"\n## Session Ended — {datetime.now().strftime('%H:%M:%S')}")
+    _log(session, f"\n## Session Ended — {_ts()}")
     _log(session, f"Total exchanges: {len([m for m in session.messages if m['role'] == 'user'])}\n")
 
     out = _OUTPUTS_DIR / f"session_{session.session_number:03d}_notes.json"
@@ -3059,62 +3092,6 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         _sections = _parse_response_sections(response_text)
         display_text = _sections.get("NARRATIVE", "").strip() or response_text.strip()
 
-        # ── %%ROLL%% ──────────────────────────────────────────────────────────
-        _roll_section = _sections.get("ROLL", "")
-        if _roll_section:
-            _roll_blocks = _parse_bracket_blocks(_roll_section)
-            if not _roll_blocks:
-                # Fallback: single-line bracket format (what the spec shows):
-                #   [ skill: X  dc: N  success: long text  failure: long text ]
-                # _BRACKET_BLOCK_RE requires [ on its own line; this handles inline.
-                _inline_m = re.search(
-                    r"skill:\s*(?P<skill>.+?)\s+dc:\s*(?P<dc>\d+)\s+success:\s*(?P<success>.+?)\s+failure:\s*(?P<failure>.+?)\s*\]",
-                    _roll_section,
-                    re.DOTALL | re.IGNORECASE,
-                )
-                if _inline_m:
-                    _roll_blocks = [{
-                        "skill":   _inline_m.group("skill").strip(),
-                        "dc":      _inline_m.group("dc").strip(),
-                        "success": _inline_m.group("success").strip(),
-                        "failure": _inline_m.group("failure").strip(),
-                    }]
-            if not _roll_blocks:
-                # Live models sometimes write the section body as plain fields:
-                # skill: Perception
-                # dc: 15
-                # success: ...
-                # failure: ...
-                _line_m = re.search(
-                    r"(?:skill:\s*)?(?P<skill>[^\n:]+?)(?:\s*:\s*\d+)?\s*\n"
-                    r"dc:\s*(?P<dc>\d+)\s*\n"
-                    r"success:\s*(?P<success>.*?)\n"
-                    r"failure:\s*(?P<failure>.*)\s*$",
-                    _roll_section.strip(),
-                    re.DOTALL | re.IGNORECASE,
-                )
-                if _line_m:
-                    _roll_blocks = [{
-                        "skill":   _line_m.group("skill").strip(),
-                        "dc":      _line_m.group("dc").strip(),
-                        "success": _line_m.group("success").strip(),
-                        "failure": _line_m.group("failure").strip(),
-                    }]
-            if _roll_blocks:
-                _rf = _roll_blocks[0]
-                try:
-                    roll_data = {
-                        "skill":   _rf.get("skill", "").strip(),
-                        "dc":      int(_rf.get("dc", 0)),
-                        "success": _rf.get("success", "").strip(),
-                        "failure": _rf.get("failure", "").strip(),
-                        "speaker": _speaker_from_user_input(session.messages[-1]["content"]) if session.messages else None,
-                    }
-                    session.pending_roll = roll_data
-                    _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
-                except (ValueError, KeyError):
-                    pass
-
         # ── %%GENERATE%% ──────────────────────────────────────────────────────
         # Processed before %%DELTAS%% so new stubs are in the index immediately.
         _gen_section = _sections.get("GENERATE", "")
@@ -3264,23 +3241,18 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     else:
         # ── Fallback: old flat-block format ───────────────────────────────────
         display_text = response_text
+        _sections = {}
 
         # %%ROLL%%
         _roll_m = _ROLL_BLOCK_RE.search(display_text)
         if _roll_m:
-            try:
-                roll_data = {
-                    "skill":   _roll_m.group("skill").strip(),
-                    "dc":      int(_roll_m.group("dc")),
-                    "success": _roll_m.group("success").strip(),
-                    "failure": _roll_m.group("failure").strip(),
-                    "speaker": _speaker_from_user_input(session.messages[-1]["content"]) if session.messages else None,
-                }
-                session.pending_roll = roll_data
-                display_text = _ROLL_BLOCK_RE.sub("", display_text).rstrip()
-                _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
-            except (ValueError, AttributeError):
-                pass
+            _sections["ROLL"] = (
+                f"skill: {_roll_m.group('skill').strip()}\n"
+                f"dc: {_roll_m.group('dc').strip()}\n"
+                f"success: {_roll_m.group('success').strip()}\n"
+                f"failure: {_roll_m.group('failure').strip()}"
+            )
+            display_text = _ROLL_BLOCK_RE.sub("", display_text).rstrip()
 
         # %%GENERATE%%
         _gen_matches = list(_GENERATE_BLOCK_RE.finditer(display_text))
@@ -3327,7 +3299,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                     _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
 
         # %%HP%% (flat-block fallback path) — discarded
-        if _HP_BLOCK_RE.search(response_text):
+        if "%%HP%%" in response_text.upper():
             _log(session, "\n> *[WARN: %%HP%% block received and discarded (flat path) — LLM should not write this]*\n")
 
         # %%COMBAT%% (flat-block fallback path)
@@ -3376,6 +3348,15 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         yield f"data: {json.dumps({'type': 'attack_result', **_npc_result})}\n\n"
             except Exception as _e:
                 _log(session, f"\n> *[%%ATTACK%% processing error (flat): {_e}]*\n")
+
+    _roll_fields = _parse_roll_section(_sections.get("ROLL", ""))
+    if _roll_fields:
+        roll_data = {
+            **_roll_fields,
+            "speaker": _speaker_from_user_input(session.messages[-1]["content"]) if session.messages else None,
+        }
+        session.pending_roll = roll_data
+        _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
 
     # ── Single patch_last if anything was stripped ────────────────────────────
     # Emitting one event after all stripping avoids the UI briefly flashing

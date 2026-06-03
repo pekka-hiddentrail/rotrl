@@ -108,10 +108,6 @@ class TestCombatSectionSpecs:
     def test_contains_attack_marker(self):
         assert "%%ATTACK%%" in _COMBAT_SECTION_SPECS
 
-    def test_no_hp_marker(self):
-        # CB1.9-4: %%HP%% removed from spec — LLM no longer instructed to write it
-        assert "%%HP%%" not in _COMBAT_SECTION_SPECS
-
     def test_no_generate_marker(self):
         assert "%%GENERATE%%" not in _COMBAT_SECTION_SPECS
 
@@ -152,10 +148,6 @@ class TestBuildCombatSystemPrompt:
 
     def test_has_attack_marker(self):
         assert "%%ATTACK%%" in self._prompt()
-
-    def test_no_hp_marker(self):
-        # CB1.9-4: %%HP%% removed from combat system prompt
-        assert "%%HP%%" not in self._prompt()
 
     def test_has_forbidden_prohibition(self):
         prompt = self._prompt()
