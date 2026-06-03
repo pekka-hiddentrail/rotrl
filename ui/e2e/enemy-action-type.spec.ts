@@ -74,24 +74,23 @@ test.describe('enemy-action-type', () => {
     await boot(page)
     await enterEnemyCombat(page)
 
-    // Enemy Turn button visible; click it
     await page.route('**/api/sessions/sess-eat/enemy_turn', r =>
       r.fulfill({ status: 200, contentType: 'text/event-stream',
         body: sse([
           { type: 'token',   content: 'The goblin slashes at Vanx.' },
-          { type: 'action_card', actor: 'Goblin Warrior 1', action: 'attack', target: 'Vanx',
+          { type: 'action_card', attacker: 'Goblin Warrior 1', target: 'Vanx',
             action_type: 'standard', roll: 12, bonus: 3, total: 15, ac: 15, hit: true,
-            damage_total: 4, attack_type: 'melee' },
+            damage_rolls: [4], damage_total: 4, attack_type: 'melee', is_pc: false },
           { type: 'combat_update', combat_state: AdvancedState },
           { type: 'done' },
         ]) }))
 
     await page.getByRole('button', { name: 'Enemy Turn' }).first().click()
 
-    // Action card should show in the chat / combat log
-    await expect(
-      page.locator('.action-card, .attack-result, [class*="action-card"]').first()
-    ).toBeVisible({ timeout: 8_000 })
+    const card = page.locator('.combat-event-card').first()
+    await expect(card).toBeVisible({ timeout: 8_000 })
+    await expect(card).toContainText('standard')
+    await expect(card).toContainText('Goblin Warrior 1')
   })
 
   test('EAT-E2E-002 — action_type "full" attack renders action card (AC-006)', async ({ page }) => {
@@ -103,18 +102,16 @@ test.describe('enemy-action-type', () => {
       r.fulfill({ status: 200, contentType: 'text/event-stream',
         body: sse([
           { type: 'token',   content: 'The goblin unleashes a full assault.' },
-          { type: 'action_card', actor: 'Goblin Warrior 1', action: 'attack', target: 'Vanx',
+          { type: 'action_card', attacker: 'Goblin Warrior 1', target: 'Vanx',
             action_type: 'full', roll: 15, bonus: 3, total: 18, ac: 15, hit: true,
-            damage_total: 6, attack_type: 'melee' },
+            damage_rolls: [6], damage_total: 6, attack_type: 'melee', is_pc: false },
           { type: 'combat_update', combat_state: AdvancedState },
           { type: 'done' },
         ]) }))
 
     await page.getByRole('button', { name: 'Enemy Turn' }).first().click()
 
-    // Narrative token should appear in chat
-    await expect(page.locator('.message-assistant, .gm-message, .chat-message').first())
-      .toContainText('goblin', { timeout: 8_000 })
+    await expect(page.locator('.combat-event-card').first()).toContainText('full')
   })
 
   test('EAT-E2E-003 — delay action produces no attack result, only combat_update (AC-007)', async ({ page }) => {
@@ -132,12 +129,10 @@ test.describe('enemy-action-type', () => {
 
     await page.getByRole('button', { name: 'Enemy Turn' }).first().click()
 
-    // Narrative appears
-    await expect(page.locator('.message-assistant, .gm-message, .chat-message').first())
+    await expect(page.locator('.bubble-row.gm .bubble-gm').first())
       .toContainText('goblin', { timeout: 8_000 })
 
-    // No attack result card (no action_card event was emitted)
-    await expect(page.locator('.attack-result, [class*="attack-result"]')).not.toBeVisible()
+    await expect(page.locator('.combat-event-card')).toHaveCount(0)
   })
 
 })

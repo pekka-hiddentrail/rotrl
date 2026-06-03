@@ -82,6 +82,12 @@ async function enterCombat(page: Page) {
   await expect(page.locator('.combat-round-badge').first()).toBeVisible({ timeout: 10_000 })
 }
 
+async function resolveSpellDamage(page: Page) {
+  await expect(page.getByRole('button', { name: 'Roll Damage' })).toBeVisible({ timeout: 8_000 })
+  await page.getByRole('button', { name: 'd4' }).click()
+  await page.getByRole('button', { name: 'Roll Damage' }).click()
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 test.describe('magic-spell-system', () => {
@@ -135,7 +141,9 @@ test.describe('magic-spell-system', () => {
       r.fulfill({ status: 200, contentType: 'text/event-stream',
         body: sse([
           { type: 'action_card', attacker: 'Yanyeeku', target: 'Goblin Warrior 1',
-            is_spell: true, spell_name: 'Force Bolt', damage_total: 3, hit: true },
+            roll: null, bonus: 0, total: null, ac: null, damage_rolls: [3],
+            is_spell: true, spell_name: 'Force Bolt', damage_total: 3, hit: true,
+            attack_type: 'spell', is_pc: true },
           { type: 'token',   content: 'The bolt of force slams into the goblin!' },
           { type: 'combat_update', combat_state: AfterSpellState },
           { type: 'done' },
@@ -147,7 +155,9 @@ test.describe('magic-spell-system', () => {
     // Wait for damage roll UI (damage_request), then simulate a resolve roll
     await page.route('**/api/sessions/sess-mss/resolve_damage_roll', r =>
       r.fulfill({ status: 200, contentType: 'application/json',
-        body: JSON.stringify({ result: { damage_total: 3, hit: true, is_spell: true, spell_name: 'Force Bolt', attack_type: 'spell' } }) }))
+        body: JSON.stringify({ damage_rolls: [3], damage_total: 3, queue_remaining: 0, next_attack: null }) }))
+
+    await resolveSpellDamage(page)
 
     // The HP for Goblin Warrior 1 should update to 2/5 after the resolve
     // (This verifies combat_update is applied from resume_combat stream)
@@ -182,10 +192,12 @@ test.describe('magic-spell-system', () => {
     // Route resolve_damage_roll so the resume_combat can proceed if the UI posts it
     await page.route('**/api/sessions/sess-mss/resolve_damage_roll', r =>
       r.fulfill({ status: 200, contentType: 'application/json',
-        body: JSON.stringify({ result: { damage_total: 2, hit: true, is_spell: true, spell_name: 'Force Bolt', attack_type: 'spell' } }) }))
+        body: JSON.stringify({ damage_rolls: [2], damage_total: 2, queue_remaining: 0, next_attack: null }) }))
+
+    await resolveSpellDamage(page)
 
     // Narrative from resume_combat should appear in the chat window
-    await expect(page.locator('.message-assistant, .gm-message, .chat-message').first())
+    await expect(page.locator('.bubble-row.gm .bubble-gm').last())
       .toContainText('force', { timeout: 12_000 })
   })
 

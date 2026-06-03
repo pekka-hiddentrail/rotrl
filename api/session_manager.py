@@ -4633,17 +4633,16 @@ def stream_pc_turn(session: GameSession, player_text: str, action_type_hint: Opt
                 _zone_names = intent.get("available_zones", [])
                 _zones_hint = (", ".join(_zone_names)) if _zone_names else "none known"
                 yield f"data: {json.dumps({'type': 'attention', 'message': f'{_actor_name} — zone not recognised. Available zones: {_zones_hint}.'})}\n\n"
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                return
-            _mover = next((c for c in session.combat_state.combatants
-                           if c.name.lower() == intent["actor"].lower()), None)
-            if _mover:
-                _old_zone = _mover.zone
-                _mover.zone = _dest
-                _log(session, f"\n> *[Zone move: {intent['actor']} {_old_zone} → {_dest}]*\n")
-                _write_session_state(session)
-                # Emit the updated state immediately so the UI reflects the move
-                yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+            else:
+                _mover = next((c for c in session.combat_state.combatants
+                               if c.name.lower() == intent["actor"].lower()), None)
+                if _mover:
+                    _old_zone = _mover.zone
+                    _mover.zone = _dest
+                    _log(session, f"\n> *[Zone move: {intent['actor']} {_old_zone} → {_dest}]*\n")
+                    _write_session_state(session)
+                    # Emit the updated state immediately so the UI reflects the move
+                    yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
 
         system   = _build_pc_turn_system(session, intent, {})
         user_msg = intent.get("original_text", "")
