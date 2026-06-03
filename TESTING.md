@@ -46,6 +46,13 @@ cd ui && npm run test -- ChatWindow.test.tsx App.enemy-turn.test.tsx --run
 
 These cover the mode contract for `%%EVENT%%`: dev mode shows raw markers for debugging, while normal/full mode hides event tags from player-visible chat. They also cover the empty GM bubble showing three thinking dots while an enemy-turn stream is waiting for its first token.
 
+Character summary + lazy sheet loading coverage:
+
+```
+python -m pytest tests/test_character_data.py -q -p no:cacheprovider
+cd ui && npm run test -- characters.test.tsx App.test.tsx ActiveCharacter.test.tsx CharacterSidebar.test.tsx CharacterSidebarHealth.test.tsx CharacterSheet.test.tsx --run
+```
+
 Start the stack:
 
 ```

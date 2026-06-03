@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Message, SessionInfo, CombatState, AttackPhase, AttackResult, ActiveSpeaker } from './types'
-import type { CharacterData } from './data/characters'
+import type { CharacterData, CharacterSummary } from './data/characters'
 import Header from './components/Header'
 import ChatWindow from './components/ChatWindow'
 import InputBar from './components/InputBar'
@@ -12,11 +12,11 @@ import CoverageMatrix from './components/CoverageMatrix'
 import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
-import { useCharacters } from './data/characters'
+import { loadCharacterSheet, useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
 import { advanceCombatTurn, bootSession, sendTurn, pcTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi } from './api'
 
-function SplashPortrait({ c }: { c: CharacterData }) {
+function SplashPortrait({ c }: { c: CharacterSummary }) {
   const [imgOk, setImgOk] = useState(true)
   return (
     <div className="splash-char">
@@ -47,6 +47,9 @@ export default function App() {
   // mid-combat. Takes priority over currentCombatantName until the next turn advances.
   const [combatSpeakerOverride, setCombatSpeakerOverride] = useState<string | null>(null)
   const [sheetCharId, setSheetCharId] = useState<string | null>(null)
+  const [sheetLoading, setSheetLoading] = useState(false)
+  const [sheetError, setSheetError] = useState<string | null>(null)
+  const [fullCharacterMap, setFullCharacterMap] = useState<Record<string, CharacterData>>({})
   const [lastInput, setLastInput] = useState('')
   const [intent, setIntent] = useState<{
     npc: string | null
@@ -491,6 +494,13 @@ export default function App() {
     setTimeout(() => setToast(null), 5000)
   }
 
+  const ensureFullCharacter = async (id: string) => {
+    if (fullCharacterMap[id]) return fullCharacterMap[id]
+    const data = await loadCharacterSheet(id)
+    setFullCharacterMap(prev => ({ ...prev, [id]: data }))
+    return data
+  }
+
   const handlePurgeNpcs = async () => {
     try {
       const { purged } = await purgeSessionNpcs()
@@ -512,13 +522,35 @@ export default function App() {
         const name = next ? (characterMap[next]?.name ?? next) : 'party'
         setActiveCharacterApi(session.id, name).catch(() => {/* non-blocking */})
       }
+      if (next) {
+        ensureFullCharacter(next).catch(e => setError(String(e)))
+      }
       return next
     })
   }
 
   const handleOpenSheet = (id: string) => {
     setSheetCharId(id)
+    setSheetError(null)
+    if (fullCharacterMap[id]) {
+      setSheetLoading(false)
+      return
+    }
+    setSheetLoading(true)
+    ensureFullCharacter(id)
+      .catch(e => setSheetError(String(e)))
+      .finally(() => setSheetLoading(false))
   }
+
+  useEffect(() => {
+    if (!pendingRoll) return
+    const speakerName = pendingRoll.speaker ?? currentCombatantName
+    if (!speakerName) return
+    const summary = characters.find(c => c.name.toLowerCase() === speakerName.toLowerCase())
+    if (summary && !fullCharacterMap[summary.id]) {
+      ensureFullCharacter(summary.id).catch(e => setError(String(e)))
+    }
+  }, [pendingRoll, currentCombatantName, characters, fullCharacterMap])
 
   const isBooted = session !== null
 
@@ -546,15 +578,15 @@ export default function App() {
 
   const pendingRollSpeakerName = pendingRoll?.speaker?.toLowerCase()
   const pendingRollSpeaker = pendingRollSpeakerName
-    ? characters.find(c => c.name.toLowerCase() === pendingRollSpeakerName) ?? null
+    ? Object.values(fullCharacterMap).find(c => c.name.toLowerCase() === pendingRollSpeakerName) ?? null
     : null
   // During combat with a pending roll, fall back to the current PC combatant so the
   // dice banner shows the right portrait and the auto-bonus uses their skill modifier.
   const combatRollSpeaker = (pendingRoll && currentCombatantName)
-    ? characters.find(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()) ?? null
+    ? Object.values(fullCharacterMap).find(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()) ?? null
     : null
   const diceSpeaker = activeCharacter
-    ? characterMap[activeCharacter]
+    ? fullCharacterMap[activeCharacter] ?? null
     : pendingRollSpeaker ?? combatRollSpeaker
 
   return (
@@ -708,8 +740,20 @@ export default function App() {
         )}
       </div>
 
-      {sheetCharId && characterMap[sheetCharId] && (
-        <CharacterSheet character={characterMap[sheetCharId]} onClose={() => setSheetCharId(null)} />
+      {sheetCharId && fullCharacterMap[sheetCharId] && (
+        <CharacterSheet character={fullCharacterMap[sheetCharId]} onClose={() => setSheetCharId(null)} />
+      )}
+
+      {sheetCharId && !fullCharacterMap[sheetCharId] && (
+        <div className="sheet-overlay" onClick={() => setSheetCharId(null)}>
+          <div className="sheet-panel" onClick={e => e.stopPropagation()}>
+            <button className="sheet-close" onClick={() => setSheetCharId(null)}>✕</button>
+            <div className="sheet-section-title">
+              {sheetLoading ? 'Loading character sheet' : 'Character sheet unavailable'}
+            </div>
+            {sheetError && <p className="sheet-appearance">{sheetError}</p>}
+          </div>
+        </div>
       )}
 
       {showApiLogs && (

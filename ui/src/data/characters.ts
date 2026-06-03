@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 export interface CharacterData {
   id: string
@@ -37,34 +37,112 @@ export interface CharacterData {
   }
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+export type CharacterSummary = Pick<
+  CharacterData,
+  | 'id'
+  | 'portrait'
+  | 'color'
+  | 'rune'
+  | 'name'
+  | 'player'
+  | 'race'
+  | 'subrace'
+  | 'class'
+  | 'archetype'
+  | 'level'
+  | 'hp'
+>
 
 export interface CharactersState {
-  characters: CharacterData[]
-  characterMap: Record<string, CharacterData>
+  characters: CharacterSummary[]
+  characterMap: Record<string, CharacterSummary>
   loading: boolean
   error: string | null
 }
 
-export function useCharacters(): CharactersState {
-  const [characters, setCharacters] = useState<CharacterData[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState<string | null>(null)
+const summaryCache: {
+  data: CharacterSummary[] | null
+  promise: Promise<CharacterSummary[]> | null
+} = { data: null, promise: null }
 
-  useEffect(() => {
-    fetch('/api/characters')
+const sheetCache = new Map<string, CharacterData>()
+const sheetPromises = new Map<string, Promise<CharacterData>>()
+
+function loadCharacterSummaries(): Promise<CharacterSummary[]> {
+  if (summaryCache.data) return Promise.resolve(summaryCache.data)
+  if (!summaryCache.promise) {
+    summaryCache.promise = fetch('/api/characters')
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json() as Promise<CharacterData[]>
+        return r.json() as Promise<CharacterSummary[]>
       })
       .then(data => {
+        summaryCache.data = data
+        return data
+      })
+      .finally(() => {
+        summaryCache.promise = null
+      })
+  }
+  return summaryCache.promise
+}
+
+export function loadCharacterSheet(id: string): Promise<CharacterData> {
+  const cached = sheetCache.get(id)
+  if (cached) return Promise.resolve(cached)
+  const pending = sheetPromises.get(id)
+  if (pending) return pending
+
+  const promise = fetch(`/api/characters/${encodeURIComponent(id)}`)
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      return r.json() as Promise<CharacterData>
+    })
+    .then(data => {
+      sheetCache.set(id, data)
+      return data
+    })
+    .finally(() => {
+      sheetPromises.delete(id)
+    })
+
+  sheetPromises.set(id, promise)
+  return promise
+}
+
+export function __resetCharacterCachesForTests() {
+  summaryCache.data = null
+  summaryCache.promise = null
+  sheetCache.clear()
+  sheetPromises.clear()
+}
+
+export function useCharacters(): CharactersState {
+  const [characters, setCharacters] = useState<CharacterSummary[]>(() => summaryCache.data ?? [])
+  const [loading, setLoading] = useState(() => summaryCache.data === null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    if (summaryCache.data) {
+      setCharacters(summaryCache.data)
+      setLoading(false)
+      return
+    }
+
+    loadCharacterSummaries()
+      .then(data => {
+        if (cancelled) return
         setCharacters(data)
         setLoading(false)
       })
       .catch(e => {
+        if (cancelled) return
         setError(String(e))
         setLoading(false)
       })
+
+    return () => { cancelled = true }
   }, [])
 
   const characterMap = Object.fromEntries(characters.map(c => [c.id, c]))
