@@ -2240,6 +2240,10 @@ body {
 
 .combatant-dead .combatant-name { color: #8b3333; }
 
+.combat-event-card--heal { border-color: #2a5a2a; background: #0d1f0d; }
+.combat-event-heal       { color: #4caf50; }
+.attack-banner--heal     { border-color: #2a5a2a; background: #0d1f0d; }
+
 .combatant-ac-buffed {
   color: #c9a84c;
   font-size: 9px;

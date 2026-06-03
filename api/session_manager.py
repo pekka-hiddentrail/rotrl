@@ -653,7 +653,7 @@ def _apply_hp_deltas(combat_state: Optional["CombatState"], deltas: list) -> Non
         combatant = by_name.get(name.lower())
         if combatant is not None:
             combatant.hp_current = max(0, min(combatant.hp_current + delta, combatant.hp_max))
-            if combatant.hp_current == 0 and combatant.status == "active":
+            if delta < 0 and combatant.hp_current == 0 and combatant.status == "active":
                 combatant.status = "unconscious"
 
 
@@ -1001,7 +1001,17 @@ def resolve_damage_roll(session: "GameSession", rolls: list, total: int) -> dict
     attack.damage_rolls = list(rolls)
     attack.damage_total = total
     if session.combat_state is not None:
-        _apply_hp_deltas(session.combat_state, [(attack.target, -total)])
+        if attack.is_heal:
+            # Positive delta: heal the target; also restore unconscious → active.
+            _apply_hp_deltas(session.combat_state, [(attack.target, +total)])
+            target_c = next(
+                (c for c in session.combat_state.combatants
+                 if c.name.lower() == attack.target.lower()), None
+            )
+            if target_c and target_c.status == "unconscious" and target_c.hp_current > 0:
+                target_c.status = "active"
+        else:
+            _apply_hp_deltas(session.combat_state, [(attack.target, -total)])
     result = {
         "attacker": attack.attacker, "target": attack.target,
         "roll": attack.hit_roll, "bonus": attack.bonus,
@@ -1011,12 +1021,14 @@ def resolve_damage_roll(session: "GameSession", rolls: list, total: int) -> dict
         "attack_type": attack.attack_type, "is_pc": True,
         "is_spell": attack.is_spell,
         "spell_name": attack.spell_name if attack.is_spell else None,
+        "is_heal": attack.is_heal,
     }
     session.attack_results.append(result)
     session.attack_queue.pop(0)
+    action = "healed" if attack.is_heal else "damage"
     _log(session, (
-        f"\n> *[PC damage: {attack.attacker}→{attack.target} "
-        f"rolled {rolls} = {total} damage]*\n"
+        f"\n> *[PC {action}: {attack.attacker}→{attack.target} "
+        f"rolled {rolls} = {total} {action}]*\n"
     ))
     next_attack = _next_attack_info(session)
     return {
@@ -1089,10 +1101,11 @@ class PendingAttack:
     target: str
     bonus: int
     damage_expr: str
-    attack_type: str = "melee"   # "melee" | "ranged" | "spell"
+    attack_type: str = "melee"   # "melee" | "ranged" | "spell" | "heal"
     is_pc: bool = False
     is_spell: bool = False        # True for spell-based attacks (no attack roll)
     spell_name: str = ""          # e.g. "Magic Missile"; empty for weapon attacks
+    is_heal: bool = False         # True for healing spells — positive HP delta
     # Filled progressively during resolution
     hit_roll: Optional[int] = None
     hit_total: Optional[int] = None
@@ -1869,27 +1882,31 @@ def _build_pc_profiles(data_dir: Path) -> dict:
         # Spell list — used by PC combat action system to resolve spells from profile data.
         # Rules-agnostic: any caster with a "spells" list in their JSON gets this automatically.
         # Example: Bonnie the Sorcerer with Magic Missile → auto_hit=True, damage_expr="1d4+1".
-        _DICE_EXPR_RE  = re.compile(r'\b(\d+d\d+(?:[+-]\d+)?)\b')
-        # Matches "+N <type> bonus to AC" — captures the number and bonus type word.
-        # Handles: shield, deflection, luck, natural, armor, dodge, morale, sacred, profane.
-        _AC_BONUS_RE   = re.compile(r'\+(\d+)\s+(\w+)\s+bonus\s+to\s+AC', re.IGNORECASE)
+        _DICE_EXPR_RE   = re.compile(r'\b(\d+d\d+(?:[+-]\d+)?)\b')
+        _AC_BONUS_RE    = re.compile(r'\+(\d+)\s+(\w+)\s+bonus\s+to\s+AC', re.IGNORECASE)
+        # "Heals Xd8+Y" or "heals Xd8" — positive-energy healing spells.
+        _HEALING_RE     = re.compile(r'[Hh]eals?\s+(\d+d\d+(?:[+-]\d+)?)', re.IGNORECASE)
         spells = []
         for sp in data.get("spells", {}).get("list", []):
-            effect    = sp.get("effect", "") or ""
-            dmg_match = _DICE_EXPR_RE.search(effect)
-            ac_match  = _AC_BONUS_RE.search(effect)
+            effect       = sp.get("effect", "") or ""
+            dmg_match    = _DICE_EXPR_RE.search(effect)
+            ac_match     = _AC_BONUS_RE.search(effect)
+            heal_match   = _HEALING_RE.search(effect)
+            healing_expr = heal_match.group(1) if heal_match else ""
             spells.append({
-                "name":        sp.get("name", "").strip(),
-                "school":      sp.get("school", "").strip(),
-                "sr":          sp.get("sr", "") == "Yes",
-                "save":        (sp.get("save", "") or "").strip(),
-                "auto_hit":    "never misses" in effect.lower(),
-                "damage_expr": dmg_match.group(1) if dmg_match else "",
-                "buff_ac":     int(ac_match.group(1)) if ac_match else 0,
-                "buff_type":   ac_match.group(2).lower() if ac_match else "",
-                "per_day":     (sp.get("perDay", "") or "").strip(),
-                "cast_time":   (sp.get("castTime", "") or "1 standard action").strip(),
-                "range_raw":   (sp.get("range", "") or "").strip(),
+                "name":         sp.get("name", "").strip(),
+                "school":       sp.get("school", "").strip(),
+                "sr":           sp.get("sr", "") == "Yes",
+                "save":         (sp.get("save", "") or "").strip(),
+                "auto_hit":     "never misses" in effect.lower(),
+                "damage_expr":  dmg_match.group(1) if (dmg_match and not healing_expr) else "",
+                "buff_ac":      int(ac_match.group(1)) if ac_match else 0,
+                "buff_type":    ac_match.group(2).lower() if ac_match else "",
+                "healing_expr": healing_expr,
+                "is_heal":      bool(healing_expr),
+                "per_day":      (sp.get("perDay", "") or "").strip(),
+                "cast_time":    (sp.get("castTime", "") or "1 standard action").strip(),
+                "range_raw":    (sp.get("range", "") or "").strip(),
             })
 
         profiles[name.lower()] = {
@@ -3932,11 +3949,21 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
 
     if matched_spell is not None:
         # Spell intent detected — resolve target.
-        # Buff spells (buff_ac > 0) may target a PC ally; damage spells target enemies only.
-        is_buff = matched_spell.get("buff_ac", 0) > 0
-        all_active = [c for c in session.combat_state.combatants if c.status == "active"]
+        is_buff  = matched_spell.get("buff_ac", 0) > 0
+        is_heal  = matched_spell.get("is_heal", False)
+        all_combatants = session.combat_state.combatants
+        all_active     = [c for c in all_combatants if c.status == "active"]
+        all_pcs        = [c for c in all_combatants if _is_pc_attacker(c.name, session)]
         active_enemies = [c for c in all_active if not _is_pc_attacker(c.name, session)]
-        target_pool = all_active if is_buff else active_enemies
+
+        # Healing spells can target any PC (including unconscious — that's the point).
+        # Buff spells target any active combatant. Damage spells target active enemies.
+        if is_heal:
+            target_pool = all_pcs
+        elif is_buff:
+            target_pool = all_active
+        else:
+            target_pool = active_enemies
 
         spell_target: Optional[Combatant] = None
         for c in target_pool:
@@ -3951,10 +3978,18 @@ def _extract_pc_combat_intent(text: str, session: "GameSession") -> dict:
                         break
                 if spell_target:
                     break
-        # Buff spells with no explicit target default to the caster (self-buff).
-        # Damage spells with no explicit target pick a random active enemy.
+        # Fallback defaults by spell type.
         if spell_target is None:
-            if is_buff:
+            if is_heal:
+                # Prefer the most wounded PC; fall back to caster.
+                wounded = sorted(
+                    [c for c in all_pcs if c.hp_max > 0],
+                    key=lambda c: c.hp_current / c.hp_max,
+                )
+                spell_target = wounded[0] if wounded else next(
+                    (c for c in all_pcs if c.name == actor_name), None
+                )
+            elif is_buff:
                 spell_target = next((c for c in all_active if c.name == actor_name), None)
             elif active_enemies:
                 import random as _random
@@ -4260,6 +4295,30 @@ def stream_pc_turn(session: GameSession, player_text: str) -> Generator[str, Non
             yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
+        elif spell.get("is_heal") and spell.get("healing_expr"):
+            # Healing spell (Cure Light Wounds, etc.). Auto-hits willing allies.
+            # Queue with is_heal=True so resolve_damage_roll applies a positive delta.
+            session.attack_queue.append(PendingAttack(
+                attacker=intent["actor"],
+                target=intent["target"],
+                bonus=0,
+                damage_expr=spell["healing_expr"],
+                attack_type="heal",
+                is_pc=True,
+                is_spell=True,
+                is_heal=True,
+                spell_name=spell["name"],
+                hit=True,
+                hit_roll=0,
+                hit_total=0,
+            ))
+            session._pending_pc_narration = intent
+            _log(session,
+                 f"\n> *[PC spell: {intent['actor']} casts {spell['name']} "
+                 f"({spell['healing_expr']}, heal target={intent['target']})]*\n")
+            yield f"data: {json.dumps({'type': 'heal_request', 'caster': intent['actor'], 'target': intent['target'], 'spell_name': spell['name'], 'damage_expr': spell['healing_expr']})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
         else:
             # Non-auto-hit or non-damage spell — narrate immediately without dice.
             _log(session, f"\n> *[PC spell: {intent['actor']} casts {spell.get('name', 'spell')} (no damage dice)]*\n")
@@ -4370,7 +4429,13 @@ def _build_pc_turn_system(session: "GameSession", intent: dict, result: dict) ->
     if intent.get("action_type") == "cast":
         spell = intent.get("spell_data", {}) or {}
         buff_ac = spell.get("buff_ac", 0)
-        if buff_ac > 0:
+        is_heal = result.get("is_heal") or spell.get("is_heal", False)
+        if is_heal:
+            outcome_line = (
+                f"Spell: {spell.get('name', 'Unknown')} ({spell.get('school', 'unknown school')}, healing touch)\n"
+                f"Healed: {damage} hp → {target_name}"
+            )
+        elif buff_ac > 0:
             outcome_line = (
                 f"Spell: {spell.get('name', 'Unknown')} ({spell.get('school', 'unknown school')}, "
                 f"self-buff: +{buff_ac} shield bonus to AC, 10 rounds)"

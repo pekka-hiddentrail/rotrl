@@ -41,9 +41,10 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 
 | [pc-combat-turn.feature](pc-combat-turn.feature) | Backend \| Frontend | `@combat` `@pc` `@action` `@turn` `@streaming` `@parsing` | 10 | `_extract_pc_combat_intent`, `stream_pc_turn`, `_stream_pc_turn_narration`, `_PC_TURN_SYSTEM`, `_build_pc_turn_system`, `POST /pc_turn`, `session._pending_pc_narration`, `pc_profiles.weapons`, App.tsx routing, `pcTurn()` in api.ts |
 | [magic-spell-system.feature](magic-spell-system.feature) | Backend \| Frontend | `@magic` `@spell` `@combat` `@pc` `@action` `@streaming` | 14 | `_build_pc_profiles` spell parsing, `_extract_pc_combat_intent` spell detection, `stream_pc_turn` `cast` branch, `PendingAttack.is_spell`, `damage_request` SSE, `AttackPhase` `spell_damage`, `DicePanel.tsx` spell banner, `MessageBubble.tsx` spell card |
+| [healing-spells.feature](healing-spells.feature) | Backend \| Frontend | `@magic` `@spell` `@heal` `@combat` `@pc` | 12 | `_build_pc_profiles` `healing_expr`/`is_heal`, `stream_pc_turn` heal branch, `PendingAttack.is_heal`, `heal_request` SSE, `AttackPhase` `spell_heal`, `DicePanel.tsx` heal banner, `MessageBubble.tsx` heal card, `resolve_damage_roll` positive delta, unconscious→active restore |
 | [ac-buffs.feature](ac-buffs.feature) | Backend \| Frontend | `@magic` `@spell` `@buff` `@combat` `@ac` | 13 | `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects`, `_build_pc_profiles` `buff_ac`, `stream_pc_turn` buff branch, `advance_combat_turn` effect expiry, `_serialize_combat_state` `effective_ac`, `CombatPanel.tsx` ✦ indicator. Covers shield, deflection, luck, natural, dodge (future) |
 
-**Total: 323 acceptance criteria across 33 feature files**
+**Total: 335 acceptance criteria across 34 feature files**
 
 ---
 

@@ -40,6 +40,7 @@ export interface AttackResult {
   is_pc: boolean
   is_spell?: boolean
   spell_name?: string | null
+  is_heal?: boolean
 }
 
 export type AttackPhase =
@@ -47,6 +48,7 @@ export type AttackPhase =
   | { phase: 'to_hit'; attacker: string; target: string; bonus: number; ac: number; damage_expr: string; attack_type: string }
   | { phase: 'damage'; attacker: string; target: string; damage_expr: string; hit_total: number; attack_type: string }
   | { phase: 'spell_damage'; caster: string; target: string; damage_expr: string; spell_name: string }
+  | { phase: 'spell_heal';   caster: string; target: string; damage_expr: string; spell_name: string }
 
 export interface CombatState {
   round: number

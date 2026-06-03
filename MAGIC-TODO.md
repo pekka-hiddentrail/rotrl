@@ -162,6 +162,8 @@ Spells that take a standard action and resolve immediately: auto-hit damage (Mag
 
 - [ ] **S2-2 — Cantrip / at-will handling** — cantrips (`per_day = -1`) require no slot. At-will innate spells use their own `per_day` counter (Tier S3 tracks these). For S2 treat all as free.
 
+- [x] **S2-4 — Healing spell resolution (Cure Light Wounds)** — `healing_expr` parsed from "Heals Xd8+Y" in effect text; `is_heal` flag on spell profile. `stream_pc_turn` heal branch queues `PendingAttack(is_heal=True, hit=True)`; emits `heal_request` SSE. Target resolution: all PCs (including unconscious) — most wounded PC default. `resolve_damage_roll`: positive HP delta; unconscious → active when healed above 0. Frontend: `spell_heal` AttackPhase; green DicePanel banner ("Roll Healing"); green MessageBubble heal card; CSS heal colours. 23 tests (test_healing_spells.py). Cure Light Wounds added to Ani's spell list (player_03.json, 2/day, 1d8+1).
+
 - [x] **S2-3 — Self-buff resolution (Shield)** — `buff_ac` extracted from effect text via regex (`+N shield bonus to AC`). `Combatant.active_effects` list added; `_effective_ac()` sums base AC + effect bonuses; `_apply_ac_effect()` enforces no-stack rule (same bonus_type replaces); `_tick_effects()` called from `advance_combat_turn` for the outgoing actor. `stream_pc_turn` buff branch: applies effect, emits `combat_update` immediately, narrates inline, advances turn. `_serialize_combat_state` includes `effective_ac` and `active_effects`. CombatPanel shows effective AC with ✦ indicator + tooltip listing active effects. Rules-agnostic: any spell with `+N shield bonus to AC` in effect text is handled automatically.
 
 - [ ] **S2-4 — AoO warning in briefing** — `_build_pc_turn_system` checks if any enemy is in melee range of the caster. If so, adds: `⚠ Casting in melee — enemy may attack of opportunity before spell resolves.` No mechanics yet; just narrative awareness.
@@ -190,7 +192,13 @@ Adds resource management. Yanyeeku has 5 first-level spell slots per day. Each c
 
 - [ ] **S3-5 — Slot count in InputBar hint** — `✦ Magic Missile (4/5) · Shield (5/5)`.
 
-- [ ] **S3-T — Tests** — slot decrements; cantrips never decrement; error on exhaustion; long rest restores.
+- [ ] **S3-6 — Warpriest Spontaneous Casting** — Ani (Warpriest, good alignment) can expend *any* prepared 1st-level spell slot to cast any cure spell of equal or lower level instead. This means casting Cure Light Wounds should consume one of her prepared slots (Shield of Faith or Protection from Evil), not a separate CLW counter. The current `per_day: "2/day"` on CLW is a placeholder approximation matching her 2 prepared slots. Proper implementation when S3 lands:
+  - `pc_profiles["spontaneous_casting"]`: `{"type": "cure", "level": 1, "source_slots": ["Shield of Faith", "Protection from Evil"]}`
+  - When CLW is cast, decrement one of the `source_slots` counters instead of a CLW-specific counter. If all source slots are exhausted, CLW is unavailable.
+  - Powerful Healer (Su) class feature: casting any cure spell as a swift action empowers it (+50% healing). Trigger on swift-action cast detection.
+  - Affects: Ani. Other Warpriests, Clerics, and Oracles have the same mechanic.
+
+- [ ] **S3-T — Tests** — slot decrements; cantrips never decrement; error on exhaustion; long rest restores; Warpriest spontaneous cast decrements source slot, not CLW counter.
 
 ---
 

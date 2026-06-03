@@ -203,6 +203,7 @@ export default function App() {
         }
         if (event.type === 'attack_request') setAttackPhaseSync({ phase: 'to_hit', attacker: event.attacker, target: event.target, bonus: event.bonus, ac: event.ac, damage_expr: event.damage_expr, attack_type: event.attack_type })
         if (event.type === 'damage_request') setAttackPhaseSync({ phase: 'spell_damage', caster: event.caster, target: event.target, damage_expr: event.damage_expr, spell_name: event.spell_name })
+        if (event.type === 'heal_request')   setAttackPhaseSync({ phase: 'spell_heal',   caster: event.caster, target: event.target, damage_expr: event.damage_expr, spell_name: event.spell_name })
         if (event.type === 'attack_result') setAttackLogSync(prev => [event, ...prev])
         if (event.type === 'error') throw new Error(event.message)
       }
@@ -327,10 +328,10 @@ export default function App() {
   const handleDamageRoll = async (rolls: number[], total: number) => {
     const phase = attackPhaseRef.current
     if (!session || !phase) return
-    if (phase.phase !== 'damage' && phase.phase !== 'spell_damage') return
-    const attacker = phase.phase === 'spell_damage' ? phase.caster : phase.attacker
+    if (phase.phase !== 'damage' && phase.phase !== 'spell_damage' && phase.phase !== 'spell_heal') return
+    const attacker = (phase.phase === 'spell_damage' || phase.phase === 'spell_heal') ? phase.caster : phase.attacker
     const target   = phase.target
-    const attack_type = phase.phase === 'spell_damage' ? 'spell' : phase.attack_type
+    const attack_type = (phase.phase === 'spell_damage' || phase.phase === 'spell_heal') ? phase.phase === 'spell_heal' ? 'heal' : 'spell' : phase.attack_type
     try {
       const result = await resolveDamageRoll(session.id, rolls, total)
       const resultEntry: AttackResult = {
