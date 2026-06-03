@@ -571,7 +571,11 @@ Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn 
 
   **Note:** The user-message half (`_build_combat_close_directive`) already provides the combatant snapshot — keep it, just fix the system message half.
 
-- [ ] **CB1.12-3 — Attacks of opportunity** — triggered when a combatant moves out of a zone while in melee (same zone as an enemy). See MOVEMENT-TODO.md Future section for full design.
+- [ ] **CB1.12-3 — Weapon fallback prefers first melee weapon for melee intent** — ✅ fixed. When the player's input contains melee-intent words (strike, swing, stab, etc.) and no specific weapon name is found, `_extract_pc_combat_intent` now falls back to the first *melee* weapon in the profile rather than the first weapon overall. Prevents a character whose first listed weapon is a crossbow (like Vanx) from defaulting to a ranged attack when the player clearly means melee.
+
+- [ ] **CB1.12-4 — Ani's equipped weapon in flavor text** — the LLM narration for Ani's attacks occasionally names a "sword" despite her not having one. The `[PC TURN BRIEFING]` correctly states the weapon used (e.g. "Unarmed Attack"), but the LLM hallucinates flavor. Fix: add a prohibition line to `_PC_TURN_SYSTEM` and `_build_pc_turn_system` — "Weapon used: {weapon_name}. Do not name any other weapon in the narrative." Alternatively, inject the weapon name more prominently at the top of the briefing so the LLM cannot miss it.
+
+- [ ] **CB1.12-5 — Attacks of opportunity** — triggered when a combatant moves out of a zone while in melee (same zone as an enemy). See MOVEMENT-TODO.md Future section for full design.
 
 ### Tier 2 — Server-Authoritative State
 
@@ -664,6 +668,8 @@ exist.
 
 #### SA-3 — State read endpoint
 
+- [ ] (maybe not in this position) **XXXX** - Attach a combatant to another. They must make a move action to move to another enemy.
+- [ ] (maybe not in this position) **XXXX** - Show somewhere near the character name what weapon is equipped at what point.
 - [ ] **CB2-SA3 — `GET /api/sessions/{id}/state`** — returns the full current `state.json` content as JSON. Frontend polls this or uses it to hydrate after a reconnect. Returns 404 on unknown session. Returns the on-disk file if `session.combat_state` is None (social mode). Does NOT trigger a file write — reads from the in-memory `GameSession` serialised on the fly, same structure as `state.json`.
 
 #### SA-4 — Frontend reads state from backend

@@ -7,14 +7,23 @@ export interface MessageSpeaker {
   rune: string
 }
 
+export interface ActiveEffect {
+  name: string
+  bonus_type: string
+  ac_bonus: number
+  rounds_remaining: number
+}
+
 export interface Combatant {
   name: string
   hp_current: number
   hp_max: number
   ac: number
+  effective_ac: number
   initiative: number
   status: 'active' | 'unconscious' | 'fled' | 'dead'
   conditions?: string[]
+  active_effects?: ActiveEffect[]
 }
 
 export interface AttackResult {

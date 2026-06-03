@@ -128,6 +128,8 @@ Items that span multiple tiers or require coordination with other systems.
 
 - [ ] **Spells shown in InputBar hint** — extend the weapon hint (`⚔ morningstar · crossbow`) to also show known spells: `✦ Magic Missile · Shield`. Show slot count when tracking is active. Pull from `character.spells` already in the frontend JSON.
 
+- [ ] **Active effects in enemy turn briefing** — when a target has active AC effects, inject them into `_build_enemy_turn_system` so the LLM knows the target is buffed. Example: "Yanyeeku: hp 8/11, AC 16 (Shield spell, 8r left)". This lets the LLM write flavour like "the blow glances off a shimmering wall of force" instead of generic hit/miss text. Pass `active_effects` list per combatant into the `[INITIATIVE ORDER]` block.
+
 ---
 
 ## Tier S1 — Spell Recognition
@@ -158,7 +160,7 @@ Spells that take a standard action and resolve immediately: auto-hit damage (Mag
 
 - [ ] **S2-2 — Cantrip / at-will handling** — cantrips (`per_day = -1`) require no slot. At-will innate spells use their own `per_day` counter (Tier S3 tracks these). For S2 treat all as free.
 
-- [ ] **S2-3 — Self-buff resolution (Shield)** — when `cast_time = "standard"` and `buff_ac > 0`: add an entry to caster's `active_effects` list (see Tier S5). No damage roll. Emit `combat_update` with updated AC. Narrate: "A shimmering barrier appears around {caster}."
+- [x] **S2-3 — Self-buff resolution (Shield)** — `buff_ac` extracted from effect text via regex (`+N shield bonus to AC`). `Combatant.active_effects` list added; `_effective_ac()` sums base AC + effect bonuses; `_apply_ac_effect()` enforces no-stack rule (same bonus_type replaces); `_tick_effects()` called from `advance_combat_turn` for the outgoing actor. `stream_pc_turn` buff branch: applies effect, emits `combat_update` immediately, narrates inline, advances turn. `_serialize_combat_state` includes `effective_ac` and `active_effects`. CombatPanel shows effective AC with ✦ indicator + tooltip listing active effects. Rules-agnostic: any spell with `+N shield bonus to AC` in effect text is handled automatically.
 
 - [ ] **S2-4 — AoO warning in briefing** — `_build_pc_turn_system` checks if any enemy is in melee range of the caster. If so, adds: `⚠ Casting in melee — enemy may attack of opportunity before spell resolves.` No mechanics yet; just narrative awareness.
 
