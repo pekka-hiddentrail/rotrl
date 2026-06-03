@@ -165,6 +165,14 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ---
 
+## Movement & Zone System
+
+> All zone-based combat movement work lives in **[MOVEMENT-TODO.md](MOVEMENT-TODO.md)**.
+> Named in-world zones, adjacency-based range, AoE by target count. No grid, no compass.
+> Current status: not yet started. Tier M1 next (zone data model + event file format).
+
+---
+
 ## Magic System
 
 > All spell and magic work lives in **[MAGIC-TODO.md](MAGIC-TODO.md)**.

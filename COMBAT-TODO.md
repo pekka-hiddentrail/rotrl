@@ -387,20 +387,6 @@ interaction model entirely.
 
 ---
 
-### Tier 1.11 — Death, Dying, and Healing
-
-Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn advancement and narrative accuracy: when a combatant drops to 0 HP or below, the backend derives their status automatically rather than relying on the LLM's `status:` field. Conditions with mechanical effects (attack/AC modifiers) depend on SA-2 authoritative stats and are tracked in Tier 2 SA-7.
-
-- [ ] **CB1.11-1 — Death and dying states** — current `status` field has `active / unconscious / fled / dead`. PF1e requires graduated states: 0 HP = Disabled (may take one action, then falls unconscious); negative HP above −CON = Dying (loses 1 HP/round unless stabilised); at or below −CON HP = Dead. Add `constitution: int` field to `Combatant` (default 10; seeded from `pc_profiles` for PCs and event/bestiary data for enemies when SA-2 lands). `_apply_hp_deltas` derives status automatically on every HP write: `active → disabled → dying → dead`. CombatPanel shows distinct badges for Disabled / Dying / Dead. Dying combatants automatically lose 1 HP per round at the start of their turn in `advance_combat_turn` unless stabilised.
-
-- [ ] **CB1.11-2 — Turn skip for out-of-action combatants** — `advance_combat_turn` already skips non-`active` combatants. Extend: `disabled` combatants act normally but flag the GM; `dying` combatants are skipped (auto-advance) and lose 1 HP; `dead` combatants are skipped silently. Emit a `combat_update` after each auto-advance so the UI stays in sync without a GM click.
-
-- [ ] **CB1.11-3 — Healing in combat** — `%%HP%%` delta blocks apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`, and re-derives status (e.g. Dying → Disabled if healed above 0). LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
-
-- [ ] **CB1.11-T — Tests** — `_apply_hp_deltas`: 0 HP → Disabled; −1 HP → Dying; −CON HP → Dead; heal from Dying to Disabled re-derives status. `advance_combat_turn`: skips Dying combatant and applies −1 HP; skips Dead combatant unchanged; Disabled combatant appears in turn order. `test_combat.py` existing HP clamp tests still pass.
-
----
-
 ### Tier 1.8 — Initiative Authority
 
 > **Bug:** B-C06 — LLM writes arbitrary initiative totals. Fixed. B-C06 marked obsolete in TODO.md.
@@ -521,6 +507,23 @@ When the current turn advances in the combat tracker, automatically update the a
   `InputBarHostile.test.tsx`.
 
 ---
+
+### Tier 1.11 — Death, Dying, and Healing
+
+Splits the former Tier 1.8. Covers the lifecycle states needed for correct turn advancement and narrative accuracy: when a combatant drops to 0 HP or below, the backend derives their status automatically rather than relying on the LLM's `status:` field. Conditions with mechanical effects (attack/AC modifiers) depend on SA-2 authoritative stats and are tracked in Tier 2 SA-7.
+
+- [ ] **CB1.11-1 — Death and dying states** — current `status` field has `active / unconscious / fled / dead`. PF1e requires graduated states: 0 HP = Disabled (may take one action, then falls unconscious); negative HP above −CON = Dying (loses 1 HP/round unless stabilised); at or below −CON HP = Dead. Add `constitution: int` field to `Combatant` (default 10; seeded from `pc_profiles` for PCs and event/bestiary data for enemies when SA-2 lands). `_apply_hp_deltas` derives status automatically on every HP write: `active → disabled → dying → dead`. CombatPanel shows distinct badges for Disabled / Dying / Dead. Dying combatants automatically lose 1 HP per round at the start of their turn in `advance_combat_turn` unless stabilised.
+
+- [ ] **CB1.11-2 — Turn skip for out-of-action combatants** — `advance_combat_turn` already skips non-`active` combatants. Extend: `disabled` combatants act normally but flag the GM; `dying` combatants are skipped (auto-advance) and lose 1 HP; `dead` combatants are skipped silently. Emit a `combat_update` after each auto-advance so the UI stays in sync without a GM click.
+
+- [ ] **CB1.11-3 — Healing in combat** — `%%HP%%` delta blocks apply negative deltas (damage). Add positive delta support: `(target, +N)` raises HP up to `hp_max`, and re-derives status (e.g. Dying → Disabled if healed above 0). LLM uses positive deltas for cure spells, channel energy, lay on hands, potion use. `_apply_hp_deltas` already clamps at 0 min; add clamp at `hp_max`.
+
+- [ ] **CB1.11-T — Tests** — `_apply_hp_deltas`: 0 HP → Disabled; −1 HP → Dying; −CON HP → Dead; heal from Dying to Disabled re-derives status. `advance_combat_turn`: skips Dying combatant and applies −1 HP; skips Dead combatant unchanged; Disabled combatant appears in turn order. `test_combat.py` existing HP clamp tests still pass.
+
+---
+
+### Tier 1.12 - Miscallenious
+- [ ] Attacks of opportunity 
 
 ### Tier 2 — Server-Authoritative State
 

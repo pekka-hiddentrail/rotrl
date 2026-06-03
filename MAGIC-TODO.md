@@ -37,52 +37,43 @@ All spell and magic-related work lives here. [TODO.md](TODO.md) links here.
 
 ## Theater of Mind range model
 
-> **Design decision (locked):** No grid, no compass directions, no coordinates.
-> All range and area resolution uses a four-zone system. The LLM uses narrative
-> context to determine area targets; the backend uses zones for range validation.
-
-### Zones
-
-| Zone | Distance | Meaning |
-|------|----------|---------|
-| **melee** | ~5 ft | Adjacent — touching distance. Required for touch spells and melee attacks |
-| **close** | ~30 ft | Standard combat engagement. Most combatants start here |
-| **medium** | ~100 ft | Back row, retreating, or ranged specialists staying out of melee |
-| **long** | 100+ ft | Fled, sniping from elevation, or keeping maximum distance |
+> **Design decision (locked):** No grid, no compass, no distance matrix.
+> Zones are named in-world locations. Adjacency is a boolean. See [MOVEMENT-TODO.md](MOVEMENT-TODO.md)
+> for the full zone system. This section covers the spell-specific mapping.
 
 ### Spell range → zone requirement
 
-| PF1e range | Valid target zones |
-|-----------|--------------------|
-| Personal | Self only (always valid) |
-| Touch | **melee** only |
-| Close (25 ft) | **melee** or **close** |
-| Medium (100 ft) | Any zone |
+| PF1e range | Valid targets |
+|-----------|--------------|
+| Personal | Caster only |
+| Touch | Same zone only (melee reach) |
+| Close (25 ft) | Same zone or adjacent zone |
+| Medium (100 ft) | Same zone or adjacent zone |
 | Long (400 ft) | Any zone |
 
-### Area spells → zone coverage (TotM interpretation)
+> **Note:** Close and Medium both resolve to "same or adjacent" in a typical
+> encounter (zones are ~30 ft across). Only Long reaches across non-adjacent zones.
+> If an encounter has very large zones (e.g. a canyon), the GM adjusts.
 
-| Burst / area size | Zones affected |
-|-------------------|---------------|
-| Small burst (10 ft radius) | All targets in **melee** |
-| Medium burst (20 ft radius) | All targets in **melee** + **close** |
-| Large burst (40 ft+ radius) | All targets in **melee** + **close** + **medium** |
-| Cone | All targets in **melee** + **close** (LLM picks the cluster based on scene) |
-| Line | Targets the LLM declares are in line from caster (narrative judgment) |
+### AoE resolution — count-based, not zone-based
 
-### Zone assignment
+| Size tag | Target count | PF1e equivalent |
+|----------|-------------|----------------|
+| small | 2 | 5–10 ft burst/cone |
+| medium | 3 | 15–20 ft burst |
+| large | 4 | 30 ft burst |
+| huge | 8+ | 40 ft+ or whole area |
 
-- **At combat start:** seeded from the event file `## Combatants` table — add `zone` column (`melee|close|medium|long`). Goblin Warriors → melee; Warchanter → close; Rooftop Archers → medium.
-- **During combat:** zone changes on declared move actions in `%%ACTION%%` (`movement: "closes to melee"` → zone becomes melee; `movement: "retreats to the doorway"` → bumps one zone back).
-- **Default for new combatants:** close.
+The LLM names which targets are in the area; the backend resolves up to `target_count`
+of them. The count adjusts ±1 based on clustering (GM judgment). See MOVEMENT-TODO.md
+Tier M6 for the full AoE mechanic.
 
-### Implementation
+### Zone data
 
-```
-Combatant.zone: str = "close"   # "melee" | "close" | "medium" | "long"
-```
-
-Seeded from the event file `## Combatants` table (new `zone` column alongside `melee`/`ranged`/`init_mod`). `stream_pc_turn` validates range before queuing the spell; yields error if target is out of range.
+Zone names, adjacency, and starting positions are defined in the event file `## Zones`
+section (see MOVEMENT-TODO.md Tier M1). Combatants have `Combatant.zone: str`.
+`stream_pc_turn` validates spell range by calling `_in_ranged_range()` or `_in_melee_range()`
+from MOVEMENT-TODO.md Tier M2.
 
 ---
 
@@ -131,7 +122,7 @@ Items that span multiple tiers or require coordination with other systems.
 
 - [ ] **Non-combat spells route through `/turn`** — out-of-combat spell use ("I cast Detect Magic on the room") routes through the normal turn endpoint. The LLM narrates. Backend does not resolve mechanics. Only in-combat spells with immediate effects need the `/pc_turn` path.
 
-- [ ] **`zone` column in event file `## Combatants` table** — add a `zone` column to the markdown table format (`melee|close|medium|long`). `_parse_event_combatants` reads it and stores on the combatant entry. `_seed_enemy_stats` sets `Combatant.zone` from this value. Default `close` when absent. Example: `| Goblin Warchanter | 8 | 14 | +3 | bite | shortbow | close |`.
+- [ ] **Zone system prerequisite** — spell range validation depends on `Combatant.zone` and the zone adjacency helpers (`_in_melee_range`, `_in_ranged_range`). These are defined in [MOVEMENT-TODO.md](MOVEMENT-TODO.md) Tiers M1 and M2. Implement those first before wiring spell range checks in Tier S2.
 
 - [ ] **Spell slot state persistence** — `session.spell_slots_remaining: dict[str, dict[str, int]]` — e.g. `{"yanyeeku": {"1st": 5}}`. Written to `state.json`. Decremented on cast. Restored on long rest (or `POST /sessions/{id}/long_rest`). Racial/innate tracked separately by spell name (`innate_uses_remaining`).
 
