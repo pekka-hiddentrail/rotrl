@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { ActiveSpeaker } from '../types'
 
@@ -46,45 +46,78 @@ function SkullIcon() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-type ActionType = 'standard' | 'move' | 'full'
+type ActionType = 'standard' | 'move' | 'full' | 'swift' | 'free'
 
-const ACTION_BUTTONS: { type: ActionType; label: string; title: string }[] = [
-  { type: 'standard', label: 'Standard',  title: 'Standard Action (attack, cast, use ability)' },
-  { type: 'move',     label: 'Move',      title: 'Move Action (movement, stand up, draw weapon)' },
-  { type: 'full',     label: 'Full-Round', title: 'Full-Round Action (full attack, charge, run)' },
+// Ordering used when building the hints array: primary first, move second, swift/free last.
+const ACTION_BUTTON_ORDER: ActionType[] = ['standard', 'full', 'move', 'swift', 'free']
+
+// Feature flag — set to true to re-enable action-type selection buttons.
+const ENABLE_ACTION_TYPES = false
+
+interface ActionButtonDef {
+  type: ActionType
+  label: string
+  title: string
+  /** Types that must be deselected when this button is selected. */
+  exclusive?: ActionType[]
+}
+
+const ACTION_BUTTONS: ActionButtonDef[] = [
+  { type: 'standard', label: 'Standard',   title: 'Standard Action (attack, cast, use ability)', exclusive: ['full'] },
+  { type: 'move',     label: 'Move',        title: 'Move Action (movement, stand up, draw weapon)', exclusive: ['full'] },
+  { type: 'full',     label: 'Full-Round',  title: 'Full-Round Action (full attack, charge, run)', exclusive: ['standard', 'move'] },
+  { type: 'swift',    label: 'Swift',       title: 'Swift Action (one per turn; quickened spell, swift aid, etc.)' },
+  { type: 'free',     label: 'Free',        title: 'Free Action (speak, drop item, etc.)' },
 ]
 
 interface Props {
-  onSend: (input: string, actionTypeHint?: string) => void
+  onSend: (input: string, actionTypeHints: ActionType[]) => void
   onEnemyTurn?: () => void
   disabled: boolean
   activeSpeaker?: ActiveSpeaker | null
   combatWeapons?: string[]  // shown as a hint strip when it's a PC's combat turn
   inPcCombatTurn?: boolean  // show action-type buttons when true
+  availableZones?: string[] // zone names to show as chips when Move is selected
 }
 
-export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker = null, combatWeapons, inPcCombatTurn = false }: Props) {
+export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker = null, combatWeapons, inPcCombatTurn = false, availableZones }: Props) {
   const [value, setValue] = useState('')
-  const [actionType, setActionType] = useState<ActionType | null>(null)
+  const [selectedActions, setSelectedActions] = useState<Set<ActionType>>(new Set())
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const isEnemy = activeSpeaker?.isEnemy ?? false
 
-  // Reset selected action type when the turn changes to a new actor
+  // Reset all action selections when the turn changes to a new actor
   useEffect(() => {
-    setActionType(null)
+    setSelectedActions(new Set())
   }, [activeSpeaker?.name])
+
+  const toggleAction = (type: ActionType) => {
+    setSelectedActions(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) {
+        next.delete(type)
+      } else {
+        // Remove mutually exclusive types before adding
+        const excl = ACTION_BUTTONS.find(b => b.type === type)?.exclusive ?? []
+        excl.forEach(e => next.delete(e as ActionType))
+        next.add(type)
+      }
+      return next
+    })
+  }
+
+  /** Build the ordered hints array from the current selection. */
+  const buildHints = (): ActionType[] =>
+    ACTION_BUTTON_ORDER.filter(t => selectedActions.has(t))
 
   const submit = () => {
     if (isEnemy) return  // enemy turn: Enter does nothing; use the Enemy Turn button
     const trimmed = value.trim()
     if (!trimmed || disabled) return
-    if (actionType) {
-      onSend(trimmed, actionType)
-    } else {
-      onSend(trimmed)
-    }
+    onSend(trimmed, buildHints())
     setValue('')
-    setActionType(null)
+    setSelectedActions(new Set())
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -101,13 +134,13 @@ export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker 
   return (
     <div className={`input-bar${isEnemy ? ' hostile' : ''}`}>
       <div className="input-main">
-        {inPcCombatTurn && !isEnemy && (
+        {ENABLE_ACTION_TYPES && inPcCombatTurn && !isEnemy && (
           <div className="action-type-row">
             {ACTION_BUTTONS.map(({ type, label, title }) => (
               <button
                 key={type}
-                className={`btn btn-action-type${actionType === type ? ' active' : ''}`}
-                onClick={() => setActionType(prev => prev === type ? null : type)}
+                className={`btn btn-action-type${selectedActions.has(type) ? ' active' : ''}`}
+                onClick={() => toggleAction(type)}
                 disabled={disabled}
                 title={title}
                 type="button"
@@ -135,6 +168,7 @@ export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker 
           </div>
         )}
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={e => setValue(e.target.value)}
           onKeyDown={onKeyDown}
@@ -144,6 +178,25 @@ export default function InputBar({ onSend, onEnemyTurn, disabled, activeSpeaker 
           rows={2}
           autoFocus
         />
+        {ENABLE_ACTION_TYPES && inPcCombatTurn && !isEnemy && selectedActions.has('move') && availableZones && availableZones.length > 0 && (
+          <div className="zone-chips">
+            <span className="zone-chips-label">Zones:</span>
+            {availableZones.map(zone => (
+              <button
+                key={zone}
+                type="button"
+                className="btn-zone-chip"
+                disabled={disabled}
+                onClick={() => {
+                  setValue(prev => prev ? `${prev.trimEnd()} ${zone}` : zone)
+                  textareaRef.current?.focus()
+                }}
+              >
+                {zone}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {isEnemy && onEnemyTurn ? (
         <button

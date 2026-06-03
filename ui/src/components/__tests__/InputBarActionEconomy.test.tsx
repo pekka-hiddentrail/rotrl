@@ -176,7 +176,7 @@ describe('InputBar action-economy — AC-006: action_type_hint forwarded to onSe
     await user.type(screen.getByRole('textbox'), 'I swing at the goblin')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(onSend).toHaveBeenCalledWith('I swing at the goblin', 'standard')
+    expect(onSend).toHaveBeenCalledWith('I swing at the goblin', ['standard'])
   })
 
   it('calls onSend with ("text", "move") when Move is selected', async () => {
@@ -188,7 +188,7 @@ describe('InputBar action-economy — AC-006: action_type_hint forwarded to onSe
     await user.type(screen.getByRole('textbox'), 'I run to cover')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(onSend).toHaveBeenCalledWith('I run to cover', 'move')
+    expect(onSend).toHaveBeenCalledWith('I run to cover', ['move'])
   })
 
   it('calls onSend with ("text", "full") when Full-Round is selected', async () => {
@@ -200,7 +200,7 @@ describe('InputBar action-economy — AC-006: action_type_hint forwarded to onSe
     await user.type(screen.getByRole('textbox'), 'Full attack!')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(onSend).toHaveBeenCalledWith('Full attack!', 'full')
+    expect(onSend).toHaveBeenCalledWith('Full attack!', ['full'])
   })
 
   it('calls onSend with only the text (no hint) when no button is selected', async () => {
@@ -211,8 +211,7 @@ describe('InputBar action-economy — AC-006: action_type_hint forwarded to onSe
     await user.type(screen.getByRole('textbox'), 'I observe the enemy')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(onSend).toHaveBeenCalledWith('I observe the enemy')
-    expect(onSend).not.toHaveBeenCalledWith(expect.anything(), expect.anything())
+    expect(onSend).toHaveBeenCalledWith('I observe the enemy', [])
   })
 
   it('also sends via Enter key with action_type_hint', async () => {
@@ -223,6 +222,6 @@ describe('InputBar action-economy — AC-006: action_type_hint forwarded to onSe
     fireEvent.click(screen.getByRole('button', { name: 'Move' }))
     await user.type(screen.getByRole('textbox'), 'I run{Enter}')
 
-    expect(onSend).toHaveBeenCalledWith('I run', 'move')
+    expect(onSend).toHaveBeenCalledWith('I run', ['move'])
   })
 })

@@ -207,13 +207,178 @@ Then  intent["action_type"] is determined by keyword inference  (not overridden)
 
 ---
 
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-010 — Standard + Move can be active simultaneously (multi-select)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** A player can declare both a Standard and a Move action in the same turn.
+
+```gherkin
+Given the action-type row is visible  (PC's turn)
+And   no button is selected
+
+When  the player clicks "Standard"
+Then  "Standard" has class "btn-action-type active"
+
+When  the player also clicks "Move"
+Then  "Standard" AND "Move" both have class "btn-action-type active"
+And   "Full-Round" does NOT have class "active"
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-011 — Full-Round is exclusive: deselects Standard and Move
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Clicking Full-Round clears Standard and Move (mutually exclusive).
+
+```gherkin
+Given "Standard" and "Move" are both active
+
+When  the player clicks "Full-Round"
+Then  "Full-Round" has class "active"
+And   "Standard" and "Move" do NOT have class "active"
+
+Given "Full-Round" is active
+When  the player clicks "Standard" or "Move"
+Then  the clicked button becomes active
+And   "Full-Round" loses class "active"
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-012 — Swift and Free can be added to any combination
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Swift and Free action buttons are non-exclusive modifiers.
+
+```gherkin
+Given "Full-Round" is selected
+
+When  the player also clicks "Swift"
+Then  "Full-Round" AND "Swift" are both active
+And   other buttons are unchanged
+
+Given "Standard" and "Move" are selected
+When  the player clicks "Free"
+Then  "Standard", "Move", AND "Free" are all active
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-013 — action_type_hints array sent in POST body (replaces single hint)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The full ordered list of selected action types is sent on submit.
+
+```gherkin
+Given "Standard" and "Move" are selected
+When  the player submits
+Then  POST /api/sessions/{id}/pc_turn is called with JSON body:
+        { "input": "…", "action_type_hints": ["standard", "move"], "action_type_hint": null }
+
+Given "Full-Round" and "Swift" are selected
+When  the player submits
+Then  the JSON body contains:
+        { "action_type_hints": ["full", "swift"], "action_type_hint": null }
+
+Given no action buttons are selected
+When  the player submits
+Then  the JSON body contains:
+        { "action_type_hints": [], "action_type_hint": null }
+```
+
+*Order within the array: primary (standard/full) first, move second, swift third, free last.*
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-014 — Backend: Standard+Move applies attack AND zone move together
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** When `action_type_hints` contains both "standard" (or "full") and "move", the
+backend processes both actions atomically.
+
+```gherkin
+Given action_type_hints == ["standard", "move"]
+And   player text = "I attack the goblin and move behind the pillar"
+And   "behind the pillar" is a known zone
+
+When  stream_pc_turn is called
+Then  an attack is queued (PendingAttack) for the Standard action
+And   the PC's zone is updated to "behind the pillar" immediately
+And   a combat_update SSE is emitted with the new zone
+And   an attack_request SSE is emitted for the to-hit dice roll
+And   the move is logged as "[Zone move: <actor> <old> → <new>]"
+```
+
+```gherkin
+Given action_type_hints == ["standard", "move"]
+And   player text does NOT name a known zone
+When  stream_pc_turn is called
+Then  the attack is still queued normally (move with unknown zone is silently skipped)
+And   NO attention SSE is emitted (unknown zone does not block a Standard+Move combo)
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-015 — Backend: action_type_hints takes priority over action_type_hint
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The multi-action hints list supersedes the legacy single-hint field when both
+are provided, ensuring the backend always uses the richer signal.
+
+```gherkin
+Given action_type_hints == ["move"]
+And   action_type_hint  == "standard"
+When  _extract_pc_combat_intent is called
+Then  intent["action_type"] == "move"   (action_type_hints wins)
+
+Given action_type_hints == []
+And   action_type_hint  == "standard"
+When  _extract_pc_combat_intent is called
+Then  intent["action_type"] falls back to keyword inference
+  (empty list treated as absent — legacy single hint is NOT used for the fallback)
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-016 — Swift and Free actions are informational context only
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Swift and Free selections are logged and passed to the LLM briefing as context,
+but do not trigger separate mechanical processing.
+
+```gherkin
+Given action_type_hints == ["standard", "swift"]
+When  stream_pc_turn is called
+Then  the attack is queued for the standard action
+And   the session log contains "swift" in the pc turn line
+And   NO extra attack_request or move event is emitted for the swift action
+
+Given action_type_hints == ["full", "free"]
+When  stream_pc_turn is called
+Then  the full-round attack is queued as normal
+And   the session log contains "free" in the pc turn line
+```
+
+---
+
 ## Out of Scope
 
-- **Swift and Free action buttons** — deferred pending per-turn action slot tracking
-  (see COMBAT-TODO.md Tier 2.5: "Swift and immediate actions", "Free actions").
-- **Visual graying of Swift after Full-Round** — no slot tracking exists yet.
-- **Click-to-target enemy** — separate Tier 2.5 item ("Click-to-target enemy in CombatPanel").
-- **`%%ACTION%%` block with `action_type` field** — enemy-turn action block extension is a
-  separate Tier 2.5 item and covered by [enemy-turn.feature](enemy-turn.feature).
+- **Click-to-target enemy** — separate Tier 2.5 item ("Click-to-target enemy in CombatPanel");
+  already implemented.
+- **`%%ACTION%%` block with `action_type` field** — covered by [enemy-turn.feature](enemy-turn.feature);
+  already implemented.
 - **Validation that a full-round action wasn't used with a swift action** — requires slot
   tracking, which is not yet implemented.
+- **5-foot step button** — exclusive of Move; deferred with the rest of Tier 2.5 conditions.
+- **Two-Move (double move / run)** — deferred; covered by selecting Move twice or a dedicated
+  button; not yet in scope.

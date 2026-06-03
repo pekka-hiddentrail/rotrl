@@ -55,6 +55,7 @@ export interface CombatState {
   round: number
   combatants: Combatant[]
   current_actor?: string | null  // name of whoever is acting this turn (AC-001)
+  zones?: string[]               // unique non-default zone names currently occupied
 }
 
 export interface ActiveSpeaker {

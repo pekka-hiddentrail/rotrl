@@ -798,9 +798,12 @@ type was spent. This tier adds awareness of the full action menu.
   *"I shout"* → Free; *"I reload"* → Move). This becomes the lookup table referenced in TODO.md
   **Action trigger-phrase reference**.
 
-- [ ] **`%%ACTION%%` block gains `action_type` field** — currently the enemy-turn `%%ACTION%%`
+- [x] **`%%ACTION%%` block gains `action_type` field** — currently the enemy-turn `%%ACTION%%`
   block carries `attack` or `delay`. Extend to carry `action_type: standard|move|full|swift|free`
   so the backend can validate that a full-round action isn't used on the same turn as a standard.
+  **Implemented:** `_parse_action_block` validates/infers `action_type`; `_build_enemy_turn_system`
+  includes it in the `%%ACTION%%` format; `stream_enemy_turn` emits it in the `action_card` SSE.
+  28 new pytest tests green (`tests/test_enemy_action_type.py`).
 
 - [ ] **Movement handling** — `%%ACTION%%` with `action_type: move` and optional `distance: 30`
   and `destination: "behind the pillar"`. Backend notes the movement in the session log and
@@ -828,17 +831,31 @@ type was spent. This tier adds awareness of the full action menu.
   Selecting the same button again deselects (toggle). Selection resets on turn advance and on send.
   Only visible when `inPcCombatTurn` prop is true (PC turn gate, same as speaker fix).
   CSS: `.action-type-row`, `.btn-action-type`, `.btn-action-type.active` (gold highlight).
-  **Deferred:** Swift and Free buttons — deferred pending action slot tracking (CB2.5-3/4 below).
-  **No spec file yet** — add ACs to `specs/pc-combat-turn.feature` or new spec.
 
-- [ ] **Click-to-target enemy in CombatPanel** — clicking a non-active combatant row in the
+- [x] **Multi-action PC turn (Standard + Move combo)** — the action picker now supports
+  selecting **multiple** action buttons simultaneously (Standard+Move, Standard+Swift, etc.).
+  Full-Round is mutually exclusive with Standard and Move. Swift and Free are non-exclusive.
+  InputBar state: `Set<ActionType>`; `toggleAction` deselects mutually exclusive types.
+  Submit builds an **ordered** `action_type_hints: string[]` array (order: standard, full, move,
+  swift, free) and sends it in the POST body alongside the legacy `action_type_hint: null`.
+  Backend: `PcTurnRequest.action_type_hints: list[str] | None`; `_extract_pc_combat_intent`
+  reads the array — first primary hint (standard/full/move) sets `action_type`; remaining hints
+  become `secondary_actions: list[dict]`. Any `{"type": "move"}` entry with a recognisable
+  destination zone updates the combatant's `.zone` and emits a `combat_update` SSE.
+  Swift/Free secondary actions are informational (logged only).
+  `action_type_hints` takes priority over legacy `action_type_hint`; empty array triggers
+  keyword inference. Spec: `specs/action-economy.feature` AC-010–AC-016.
+  Backend tests: `tests/test_multi_action_turn.py` (19 tests). Vitest: `MultiActionBar.test.tsx` (17 tests).
+
+- [x] **Click-to-target enemy in CombatPanel** — clicking a non-active combatant row in the
   CombatPanel marks them as the current target (`selectedTarget` state in App.tsx). The target
   name is shown as a small badge near the InputBar ("🎯 Goblin Warrior 2") and is automatically
-  appended to the outgoing message prefix (e.g. `[Standard action] @Vanx: "..." → target: Goblin Warrior 2`).
-  The LLM receives an unambiguous target so it can write the correct `%%ATTACK%%` or narrative
-  block without guessing from prose. Target is cleared when the turn advances or combat ends.
-  Visual: selected row gets a subtle highlight (e.g. `combatant-targeted` CSS class with a red
-  outline or crosshair icon). Clicking the same row again deselects.
+  sent as `target_hint` in the `/pc_turn` POST body. `_extract_pc_combat_intent` uses
+  `target_hint` to override the target before falling back to text inference. Target is cleared
+  on send and on `combat_update`. Visual: `combatant-targeted` (red outline) + `combatant-targetable`
+  (hover tint) CSS classes. Clicking the same row again deselects.
+  7 new pytest tests green (`tests/test_click_to_target.py`); 8 Vitest tests green
+  (`ui/src/components/__tests__/ClickToTarget.test.tsx`).
 
 ---
 

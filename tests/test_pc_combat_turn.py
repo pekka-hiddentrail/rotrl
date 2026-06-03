@@ -329,6 +329,16 @@ class TestPcTurnNarration:
         list(_stream_pc_turn_narration(s))
         assert s._pending_pc_narration is None
 
+    def test_advance_combat_turn_fires_after_narration(self, monkeypatch):
+        """AC-009 — advance_combat_turn is called; combat_update SSE emitted."""
+        s = self._session_with_pending()
+        monkeypatch.setattr(sm, "_call_blocking", lambda *_: "%%NARRATIVE%%\nAni strikes!\n")
+        events = _events(list(_stream_pc_turn_narration(s)))
+        update_events = [e for e in events if e["type"] == "combat_update"]
+        assert len(update_events) == 1, "exactly one combat_update should follow narration"
+        combat_state_payload = update_events[0].get("combat_state", {})
+        assert "current_actor" in combat_state_payload
+
     def test_stream_resume_combat_detects_flag(self, monkeypatch):
         s = self._session_with_pending()
         called = []

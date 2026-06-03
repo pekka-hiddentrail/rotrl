@@ -45,8 +45,10 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [ac-buffs.feature](ac-buffs.feature) | Backend \| Frontend | `@magic` `@spell` `@buff` `@combat` `@ac` | 13 | `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects`, `_build_pc_profiles` `buff_ac`, `stream_pc_turn` buff branch, `advance_combat_turn` effect expiry, `_serialize_combat_state` `effective_ac`, `CombatPanel.tsx` ✦ indicator. Covers shield, deflection, luck, natural, dodge (future) |
 | [action-economy.feature](action-economy.feature) | Backend \| Frontend | `@combat` `@pc` `@action` `@turn` `@input` `@economy` | 9 | `InputBar.tsx` action-type row (Standard/Move/Full-Round buttons), `inPcCombatTurn` prop, `actionType` state + toggle + reset on turn-advance, `action_type_hint` POST field, `PcTurnRequest` Pydantic model, `_HINT_TO_ACTION_TYPE`, `_extract_pc_combat_intent` hint override, `pcTurn()` in api.ts |
 | [zone-combat.feature](zone-combat.feature) | Backend \| Frontend | `@combat` `@zone` `@movement` | 8 | `Combatant.zone`, `_parse_event_combatants` Zone column, `(random)` fallback to `"default"`, `_seed_round1_combatants` zone seed, `_serialize_combat_state` zone field, `CombatPanel.tsx` `.zone-badge` below HP bar, `tests/test_combat.py TestZone`, `tests/test_roll_initiatives.py TestZoneColumnParsing` |
+| [click-to-target.feature](click-to-target.feature) | Frontend \| Backend | `@combat` `@pc` `@action` `@target` `@input` `@economy` | 9 | `selectedTarget` state in App.tsx, `combatant-targeted` CSS class, target badge near InputBar, `target_hint` POST field, `PcTurnRequest.target_hint`, `_extract_pc_combat_intent` target_hint override, `CombatPanel.tsx` row click handler |
+| [enemy-action-type.feature](enemy-action-type.feature) | Backend | `@combat` `@enemy` `@action` `@economy` `@parsing` `@session` | 7 | `_parse_action_block` `action_type` field, normalisation to canonical set, inference from `action` when absent, `_build_enemy_turn_system` prompt update, `action_card` SSE `action_type`, session log |
 
-**Total: 344 acceptance criteria across 36 feature files**
+**Total: 360 acceptance criteria across 38 feature files**
 
 ---
 

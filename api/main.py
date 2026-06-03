@@ -43,7 +43,9 @@ class TurnRequest(BaseModel):
 
 class PcTurnRequest(BaseModel):
     input: str
-    action_type_hint: str | None = None
+    action_type_hint: str | None = None          # legacy single-hint (kept for compat)
+    action_type_hints: list[str] | None = None   # multi-action hints (takes priority)
+    target_hint: str | None = None
 
 
 class RollRequest(BaseModel):
@@ -220,7 +222,7 @@ def post_pc_turn(session_id: str, req: PcTurnRequest):
         raise HTTPException(status_code=404, detail="Session not found")
     if session.combat_state is None:
         raise HTTPException(status_code=409, detail="No active combat")
-    return StreamingResponse(stream_pc_turn(session, req.input, req.action_type_hint), media_type="text/event-stream", headers=_SSE_HEADERS)
+    return StreamingResponse(stream_pc_turn(session, req.input, req.action_type_hint, req.target_hint, req.action_type_hints), media_type="text/event-stream", headers=_SSE_HEADERS)
 
 
 @app.post("/api/sessions/{session_id}/enemy_turn")
