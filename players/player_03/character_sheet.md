@@ -182,8 +182,18 @@ List trained skills (or usable untrained).
 
 # Feats
 
+1. **Improved Unarmed Strike:** (Core Rulebook, p.128) "You are considered to be armed even when unarmed — you do not provoke attacks of opportunity when you attack foes while unarmed. Your unarmed strikes can deal lethal or nonlethal damage, at your choice." *(Bonus feat granted by Sacred Fist archetype at level 1)*
+2. **Weapon Finesse:** (Core Rulebook, p.136) "With a light weapon, rapier, whip, or spiked chain made for a creature of your size category, you may use your Dexterity modifier instead of your Strength modifier on attack rolls."
+
+# Traits
+
+*(See also: Deft Dodger and Desert Child below — listed here because they were previously miscategorised as feats in this sheet.)*
+
 1. **Deft Dodger:** (Advanced Player Guide) " Growing up in a rough neighborhood or a dangerous environment has honed your senses. You gain a +1 trait bonus on Reflex saves"
-2. **Desert Child (desert):** (Advanced Player Guide) "You were born and raised in rocky deserts. You are accustomed to high temperatures, and gain a +4 trait bonus on any saving throws made to resist the effects of being in hot conditions and a +1 trait bonus on all saving throws against fire effects. "
+2. **Desert Child (desert):** (Advanced Player Guide) "You were born and raised in rocky deserts. You are accustomed to high temperatures, and gain a +4 trait bonus on any saving throws made to resist the effects of being in hot conditions and a +1 trait bonus on all saving throws against fire effects. "
+
+
+# Racial Features
 
 
 # Traits
