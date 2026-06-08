@@ -13,7 +13,7 @@
 **Homeland / Origin:** Osirion
 
 **Age:** 20
-**Gender:** Male
+**Gender:** Female
 **Height / Weight:** 6 ft. 1 in. / 178 lbs.
 **Appearance Summary (2–3 sentences):** Ani is a tall, muscular, tanned woman from Osirion, with facial features common to her homeland, vivid purple eyes, and white hair worn in long braids. She wears a flowing white puff-sleeved shirt over an off-white top that leaves her chest and abs visible, along with thigh-high shorts and sturdy sandals suited for long marches and combat. When excitement surges through her, her skin begins to glow as if fire burns just beneath it.
 
@@ -187,17 +187,6 @@ List trained skills (or usable untrained).
 
 # Traits
 
-*(See also: Deft Dodger and Desert Child below — listed here because they were previously miscategorised as feats in this sheet.)*
-
-1. **Deft Dodger:** (Advanced Player Guide) " Growing up in a rough neighborhood or a dangerous environment has honed your senses. You gain a +1 trait bonus on Reflex saves"
-2. **Desert Child (desert):** (Advanced Player Guide) "You were born and raised in rocky deserts. You are accustomed to high temperatures, and gain a +4 trait bonus on any saving throws made to resist the effects of being in hot conditions and a +1 trait bonus on all saving throws against fire effects. "
-
-
-# Racial Features
-
-
-# Traits
-
 1. **Deft Dodger:** (Advanced Player Guide) " Growing up in a rough neighborhood or a dangerous environment has honed your senses. You gain a +1 trait bonus on Reflex saves"
 2. **Desert Child (desert):** (Advanced Player Guide) "You were born and raised in rocky deserts. You are accustomed to high temperatures, and gain a +4 trait bonus on any saving throws made to resist the effects of being in hot conditions and a +1 trait bonus on all saving throws against fire effects. "
 
@@ -350,7 +339,7 @@ Name: Shield of Faith
 
 ## Weapons
 
-* Crossbow, Light
+* Crossbow, Heavy
 * Dagger
 * Quarterstaff
 
