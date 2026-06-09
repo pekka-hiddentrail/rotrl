@@ -9,6 +9,7 @@ import CharacterSheet from './components/CharacterSheet'
 import ApiLogPanel from './components/ApiLogPanel'
 import TokenBenchmarks from './components/TokenBenchmarks'
 import CoverageMatrix from './components/CoverageMatrix'
+import EventStatus from './components/EventStatus'
 import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
@@ -75,8 +76,9 @@ export default function App() {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
-  const [showBenchmarks, setShowBenchmarks] = useState(false)
-  const [showCoverage,    setShowCoverage]    = useState(false)
+  const [showBenchmarks,   setShowBenchmarks]   = useState(false)
+  const [showCoverage,     setShowCoverage]     = useState(false)
+  const [showEventStatus,  setShowEventStatus]  = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
   // Refs for reading current state inside async closures (stale closure guard)
@@ -634,6 +636,7 @@ export default function App() {
         onOpenApiLogs={() => setShowApiLogs(true)}
         onOpenBenchmarks={() => setShowBenchmarks(true)}
         onOpenCoverage={() => setShowCoverage(true)}
+        onOpenEventStatus={() => setShowEventStatus(true)}
         onPurgeNpcs={handlePurgeNpcs}
       />
 
@@ -804,6 +807,10 @@ export default function App() {
 
       {showCoverage && (
         <CoverageMatrix onClose={() => setShowCoverage(false)} />
+      )}
+
+      {showEventStatus && session && (
+        <EventStatus onClose={() => setShowEventStatus(false)} sessionId={session.id} />
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />

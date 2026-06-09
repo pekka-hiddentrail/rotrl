@@ -48,6 +48,7 @@ interface Props {
   onOpenApiLogs: () => void
   onOpenBenchmarks: () => void
   onOpenCoverage: () => void
+  onOpenEventStatus: () => void
   onPurgeNpcs: () => void
 }
 
@@ -65,7 +66,7 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 export default function Header({
   session, streaming, ending, sessionNumber, model, devMode, eventScheduler, provider, rateLimits,
   onSessionNumberChange, onModelChange, onDevModeChange, onEventSchedulerChange, onProviderChange,
-  onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onOpenBenchmarks, onOpenCoverage, onPurgeNpcs,
+  onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onOpenBenchmarks, onOpenCoverage, onOpenEventStatus, onPurgeNpcs,
 }: Props) {
   const [confirmingPurge, setConfirmingPurge] = useState(false)
   const [confirmingKill,  setConfirmingKill]  = useState(false)
@@ -250,6 +251,9 @@ export default function Header({
                     </button>
                     <button className="tools-item" onClick={() => openTool(onOpenApiLogs)} disabled={ending}>
                       🔌 API Logs
+                    </button>
+                    <button className="tools-item" onClick={() => openTool(onOpenEventStatus)}>
+                      🌡 Event Status
                     </button>
                     <div className="tools-separator" />
                   </>

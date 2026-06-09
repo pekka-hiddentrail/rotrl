@@ -124,6 +124,26 @@ def get_session_info(session_id: str):
     }
 
 
+@app.get("/api/sessions/{session_id}/event_status")
+def get_event_status(session_id: str):
+    """Return event scheduler runtime state for the Event Status debug panel."""
+    import dataclasses as _dc
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    rt = session.event_runtime
+    return JSONResponse({
+        "scheduler_enabled": session.event_scheduler,
+        "turn_number": session.turn_number,
+        "active_event_id": rt.active_event_id,
+        "warm_events": {
+            eid: _dc.asdict(we) for eid, we in rt.warm_events.items()
+        },
+        "completed_events": list(rt.completed_events),
+        "cooldowns": dict(rt.cooldowns),
+    })
+
+
 @app.get("/api/sessions/{session_id}/log")
 def get_log(session_id: str):
     session = get_session(session_id)

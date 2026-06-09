@@ -631,3 +631,91 @@ class TestLocationZoneIntegration:
         )
         self._call(session, loc_idx)
         assert session.event_runtime.warm_events["evt"].readiness == pytest.approx(11.0)
+
+
+# ── BUG-001 — frozen flag enforced in _trigger_phase ─────────────────────────
+
+class TestFrozenEventNotTriggered:
+    """BUG-001: a frozen event must not fire via roll or pity even when readiness >= threshold."""
+
+    def test_frozen_event_skipped_by_roll(self):
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=90.0, threshold=75.0, frozen=True,
+        )
+        with patch("api.session_manager.random.randint", return_value=1):
+            _trigger_phase(session)
+        assert session.event_runtime.active_event_id is None
+
+    def test_frozen_event_skipped_by_pity(self):
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=90.0, threshold=75.0, frozen=True, failed_rolls=6,
+        )
+        with patch("api.session_manager.random.randint") as mock_roll:
+            _trigger_phase(session)
+            mock_roll.assert_not_called()
+        assert session.event_runtime.active_event_id is None
+
+    def test_unfrozen_event_can_trigger(self):
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=90.0, threshold=75.0, frozen=False,
+        )
+        with patch("api.session_manager.random.randint", return_value=1):
+            _trigger_phase(session)
+        assert session.event_runtime.active_event_id == "evt"
+
+    def test_zone_entry_unfreezes_and_allows_trigger_same_tick(self):
+        """Entering the zone sets frozen=False then _trigger_phase can fire."""
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=90.0, threshold=75.0, frozen=True, zones=["festival_square"],
+        )
+        with patch("api.session_manager.random.randint", return_value=1):
+            _tick_event_scheduler(session, current_location="Festival Square", intent_tags=[])
+        assert session.event_runtime.active_event_id == "evt"
+
+
+# ── BUG-002 — cooldown ticks every calendar turn ─────────────────────────────
+
+class TestCooldownCalendarTick:
+    """BUG-002: cooldown must decrement every turn, not only when readiness >= threshold."""
+
+    def test_cooldown_ticks_when_below_threshold(self):
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=30.0, threshold=75.0, zones=["festival_square"],
+        )
+        session.event_runtime.cooldowns["evt"] = 3
+        _tick_event_scheduler(session, current_location="Festival Square", intent_tags=[])
+        assert session.event_runtime.cooldowns["evt"] == 2
+
+    def test_cooldown_ticks_when_out_of_zone(self):
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=80.0, threshold=75.0, frozen=True, zones=["festival_square"],
+        )
+        session.event_runtime.cooldowns["evt"] = 5
+        _tick_event_scheduler(session, current_location=None, intent_tags=[])
+        assert session.event_runtime.cooldowns["evt"] == 4
+
+    def test_cooldown_reaches_zero_and_event_becomes_eligible(self):
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=80.0, threshold=75.0, zones=["festival_square"],
+        )
+        session.event_runtime.cooldowns["evt"] = 1
+        with patch("api.session_manager.random.randint", return_value=1):
+            _tick_event_scheduler(session, current_location="Festival Square", intent_tags=[])
+        assert session.event_runtime.cooldowns["evt"] == 0
+        assert session.event_runtime.active_event_id == "evt"
+
+    def test_cooldown_not_decremented_below_zero(self):
+        session = _make_session()
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=30.0, threshold=75.0, zones=["festival_square"],
+        )
+        session.event_runtime.cooldowns["evt"] = 0
+        _tick_event_scheduler(session, current_location="Festival Square", intent_tags=[])
+        assert session.event_runtime.cooldowns["evt"] == 0

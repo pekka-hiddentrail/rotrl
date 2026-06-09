@@ -1324,6 +1324,8 @@ def _write_session_state(session: "GameSession") -> None:
             if session.combat_state is not None else []
         ),
         "pc_current_hp": session.pc_current_hp,
+        # event_runtime is written for external inspection (Event Status panel) only.
+        # It is NOT read back on session restore — see BUG-003 / EVENT-TODO E1-9.
         "event_runtime": _serialize_event_runtime(session.event_runtime),
     }
     try:
@@ -2129,6 +2131,8 @@ def create_session(
     )
 
     # Populate warm events from schedulable event definitions (when scheduler enabled).
+    # NOTE: readiness/failed_rolls/completed_events start at zero every boot — runtime
+    # state is not restored from state.json (BUG-003). See EVENT-TODO E1-9 for tracking.
     if event_scheduler:
         for _entry in _get_event_index().schedulable_entries():
             session.event_runtime.warm_events[_entry.event_id] = WarmEvent(
@@ -2700,12 +2704,13 @@ def _trigger_phase(session: GameSession) -> None:
     if rt.active_event_id:
         return
     for event_id, we in rt.warm_events.items():
+        if we.frozen:
+            continue
         if we.readiness < we.threshold:
             continue
         if event_id in rt.completed_events:
             continue
         if rt.cooldowns.get(event_id, 0) > 0:
-            rt.cooldowns[event_id] -= 1
             continue
         if we.failed_rolls >= _SCHEDULER_PITY_LIMIT:
             _fire_event(session, event_id, source="pity")
@@ -2749,6 +2754,11 @@ def _tick_event_scheduler(session: GameSession, current_location: Optional[str],
             if we.turns_remaining == 0:
                 _complete_active_event(session)
         return
+
+    # Tick all cooldowns down every turn regardless of readiness or zone (BUG-002).
+    for _eid, _cd in list(rt.cooldowns.items()):
+        if _cd > 0:
+            rt.cooldowns[_eid] = _cd - 1
 
     # Normalize current location to lowercase with spaces so both slug-style zone names
     # ("festival_square") and display-name canonicals ("Festival Square") match.

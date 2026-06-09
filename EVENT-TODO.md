@@ -77,6 +77,12 @@ Minimum useful implementation: one active event, warming events, threshold roll,
   - [x] Log TTL expiry on completion
   - [ ] Add a debug endpoint or log section to inspect event_runtime at runtime
 
+- [ ] **E1-9 - Restore event_runtime from state.json on session reload (BUG-003)**
+  - [ ] Add `_restore_event_runtime(session, state_dict)` called from `create_session` when state.json exists
+  - [ ] Reconstruct `WarmEvent` instances from stored dicts; restore readiness, failed_rolls, completed_events, cooldowns
+  - [ ] Merge with current event file definitions so newly-added schedulable events appear correctly
+  - [ ] Add round-trip integration test: boot → tick several turns → reload → assert readiness preserved
+
 - [x] **E1-T - Tests (must-have for MVP)**
   - [x] Unit: readiness gain when zone matches, freeze when not
   - [x] Unit: action_gain_map bonus applied only to matching event
@@ -152,9 +158,16 @@ Tooling and content quality features for larger campaigns.
 
 Useful UX and analytics, not required for core gameplay.
 
-- [ ] **E4-1 - GM event dashboard**
-  - [ ] Read-only panel showing active event, warming events, readiness values, and pending interrupts
+- [x] **E4-1a - Event Status debug panel (MVP read-only dashboard)**
+  - [x] GET /api/sessions/{id}/event_status endpoint — returns scheduler_enabled, turn_number, active_event_id, warm_events (full WarmEvent), completed_events, cooldowns
+  - [x] EventStatus.tsx — overlay panel in Tools dropdown (session-only); active event card with TTL bar; warm events table with readiness bars and threshold markers; status badges (ACTIVE/ELIGIBLE/FROZEN/WARMING/DONE); auto-refresh every 3 s; manual refresh button
+  - [x] Spec: specs/event-status-panel.feature (AC-001–AC-015)
+  - [x] Tests: tests/test_event_status.py (AC-001–AC-010 backend)
+  - [x] Exploratory test cases: docs/event_scheduler_exploratory_tests.md (ET-01–ET-14)
+
+- [ ] **E4-1b - GM event dashboard (controls)**
   - [ ] Optional GM controls: nudge readiness, force trigger, skip node
+  - [ ] Depends on E4-1a
 
 - [ ] **E4-2 - Event timeline export**
   - [ ] Write an event timeline artifact per session to outputs/

@@ -1,123 +1,100 @@
-# Known Bugs
+# Bug Tracker
 
-Consolidated bug tracker. All open bugs are listed here regardless of area. Fixed bugs are kept in the **Resolved** section for regression context.
+Open bugs found by code review. Use the same markup rules as TODO.md.
 
-**Markup rules**
-- `- [ ] **ID — title**` — open bug
-- `- [x] **ID — title**` — resolved bug
-- `- ~~[ ] **ID — title**~~` — obsolete / invalid
-
----
-
-## Open
-
-### Infrastructure
-
-- [ ] **B-I01 — `state.json` file lock crashes SSE stream on Windows** — `_write_session_state` calls `path.write_text(...)` without error handling. On Windows, if the file is open in another process (VS Code editor, Explorer preview, etc.) a `PermissionError` propagates through `stream_resume_combat` → `_stream_pc_turn_narration` → `advance_combat_turn` and kills the entire SSE response mid-stream.
-  **Immediate fix (shipped):** wrapped `write_text` in `try/except PermissionError`; logs a warning and continues — `state.json` is a convenience snapshot, not the live source of truth.
-  **Root cause:** `state.json` sits in the workspace and VS Code opens it in the editor, holding a read lock that blocks writes on Windows. Consider writing to a temp file and atomically renaming (`path.with_suffix('.tmp')` → `path.rename()`) which sidesteps the lock entirely.
-
-### Combat
-
-- [x] **B-C03b — PC HP shows as 0/0 in combat — pc_profiles not populated** — Even if the LLM
-  writes HP, PCs should start at their `hp_max` from `_build_pc_combat_roster`. The roster reads
-  `pc_profiles[*]["combat_stats"]["hp_max"]`. If this is 0, the JSON files are either missing
-  the `hp.max` field or the field path in `_build_pc_profiles` doesn't match.
-  **Fix:** Verify `player_*.json` files have `hp.max` populated and that `_build_pc_profiles`
-  reads the right path. Add a pytest assertion that a session built from the real player JSON
-  files has non-zero `hp_max` for each PC in `pc_profiles`.
-  *(spec: combat-hp.feature; api/session_manager.py `_build_pc_profiles`)*
-
-- [x] **B-C04 — Enemy turn LLM outputs unrecognized `%%` sections** — The LLM returns sections
-  like `%%COMBAT%%` and `%%ATTACK%%` inside the enemy turn response even though
-  `_ENEMY_TURN_SYSTEM` asks for only `%%NARRATIVE%%` + `%%ACTION%%`. The LLM has learned the
-  combat section pattern from regular turns and defaults to it.
-  **Fix:** Strengthen `_ENEMY_TURN_SYSTEM` with an explicit prohibition list: *"Write ONLY
-  %%NARRATIVE%% then %%ACTION%%. Do NOT write %%COMBAT%%, %%ATTACK%%, %%HP%%, %%ROLL%%,
-  %%GENERATE%%, %%DELTAS%%, or %%EVENT%%."* Add a dev-mode warning that logs the full LLM
-  response when unexpected sections are detected (complements B-C01).
-  *(spec: enemy-turn.feature AC-006; api/session_manager.py `_ENEMY_TURN_SYSTEM`)*
-
-- [x] **B-C05 — Combatants grouped instead of individual (e.g. "Goblin Warriors (4)")** — The
-  CombatPanel shows a single row `Goblin Warriors (4)` instead of four separate rows `Goblin 1`
-  through `Goblin 4`. The LLM uses group notation because `goblin_attack_starts.md` describes
-  them as "Goblin warriors (4–6)" in prose.
-  **Fix (two parts):**
-  - *Event file:* Add an explicit individual-entry `## Combatants` table to
-    `adventure_path/02_events/goblin_attack_starts.md` listing each goblin by name.
-  - *Prompt:* Add to `_COMBAT_SPEC_ROUND1`: *"List EVERY combatant as a SEPARATE line —
-    never use group notation like 'Goblin Warriors (3)'. Each individual gets its own
-    `- name: …` row."*
-  *(spec: combat-tracker.feature; enemy-turn.feature)*
-
-- [x] **B-C09 — Turn counter does not advance after PC attack resolves** — After a PC completes their attack (rolls to-hit + damage, `stream_resume_combat` narrates the outcome), the initiative tracker stays on the same combatant. The GM must click "Next Turn →" manually to move to the next actor. For enemy turns, `advance_combat_turn` already fires automatically at the end of `stream_enemy_turn`; the same behaviour is missing from the PC path.
-  **Fix:** At the end of `stream_resume_combat`, call `advance_combat_turn(session)` before emitting the final `combat_update` SSE, so the next combatant is highlighted without a manual click.
-  *(api/session_manager.py `stream_resume_combat`; mirrors the enemy-turn fix in `stream_enemy_turn`)*
+- [ ] Item text - open bug
+- [x] Item text - fixed
+- ~~[ ] Item text~~ - obsolete / won't fix
 
 ---
 
-### Code Quality
+## Event Scheduler (feat/characters branch)
 
-- [ ] **B-Q01 — Inline `import('./types')` in `rollInitiatives` return type** — `api.ts`
-  `rollInitiatives` uses an inline dynamic import in its return type annotation
-  (`Promise<{ combat_state: import('./types').CombatState }>`). Every other function in the file
-  uses a pre-imported type. Minor but inconsistent.
-  **Fix:** Add `CombatState` to the top-level `import type` in `ui/src/api.ts`.
-  *(ui/src/api.ts `rollInitiatives`)*
+Found by automated code review, 2026-06-09.
 
 ---
 
-## Resolved
+### BUG-001 — `frozen` flag not enforced in `_trigger_phase` *(FIXED)*
 
-- [x] **B-C01 — Enemy turn dev mode: raw LLM output not visible** — **Fixed:** `stream_enemy_turn` dev_mode path streams full raw response with `[HIT]`/`[MISS]` outcome annotation injected before `%%ACTION%%`. *(api/session_manager.py `stream_enemy_turn`; fixed June 2026)*
-- [x] **B-C02 — Speaker prefix uses session activeCharacter, not combat initiative speaker** — **Fixed:** `handleSend` in `App.tsx` uses `currentCombatantName` (initiative actor) as speaker when combat is active and the actor is a PC. *(ui/src/App.tsx `handleSend`; fixed June 2026)*
-- [x] **B-R01 — Combatants not sorted by initiative in `roll_initiatives` response** — After
-  rolling, `_serialize_combat_state` returned `state.combatants` in insertion order. Spec AC-007
-  requires the list sorted descending by initiative.
-  **Fixed:** `session.combat_state.combatants.sort(key=lambda c: c.initiative, reverse=True)`
-  added before `_write_session_state` in `roll_combat_initiatives`.
-  *(api/session_manager.py; fixed June 2026)*
+- [x] **Severity: High** — events fire out-of-zone, violating the freeze contract
+- **File:** `api/session_manager.py` — `_trigger_phase`
+- **Symptom:** An event that accumulated `readiness >= threshold` while in-zone will still
+  be triggered by roll or pity on a turn the player is not in the required zone.
+  `_tick_event_scheduler` sets `we.frozen = True` then unconditionally calls
+  `_trigger_phase`, which checks `readiness`, `completed_events`, `cooldowns`, and
+  `failed_rolls` — but never `we.frozen`. The freeze flag was cosmetic state only.
+- **Fix:** Add `if we.frozen: continue` at the top of the eligible-event loop in
+  `_trigger_phase`, before the pity and roll checks.
 
-- [x] **B-R02 — `btn-xs` CSS class undefined** — `CombatPanel.tsx` applied class
-  `btn btn-secondary btn-xs` to the Roll Initiatives button, but `index.css` had no `.btn-xs`
-  rule, causing the button to render at unstyled size.
-  **Fixed:** `.btn-xs { padding: 0.1rem 0.4rem; font-size: 0.72rem; }` added to `index.css`.
-  *(ui/src/index.css; fixed June 2026)*
+---
 
-- [x] **B-C03a — All combatant HP shows as 0/0 after combat starts** — `_build_combat_system_prompt`
-  contained *"Never write hp: for existing combatants"* baked into the base prompt for ALL rounds.
-  The LLM obeyed it on round 1 too, producing every combatant at 0/0.
-  **Fixed:** HP conduct rule made round-conditional: "Round 1 ONLY: MUST include `hp: cur/max`
-  — backend seeds HP from these values. Round 2+: NEVER write `hp:`." Tests added in
-  `TestCombatPromptHPConductRule` (4 tests).
-  *(api/session_manager.py `_build_combat_system_prompt`; spec: combat-system-prompt.feature)*
+### BUG-002 — Cooldown only decrements when `readiness >= threshold` *(FIXED)*
 
-- [x] **B-C07 — `POST /enemy_turn` returns 409 during active combat** — When the LLM wrote
-  `%%ATTACK%%` blocks inside `stream_resume_combat` narration, PC attacks were added to
-  `session.attack_queue` but the `attack_request` SSE events were ignored by `doResumeCombat`,
-  leaving `attackPhase` null while the backend queue was non-empty.
-  **Fixed (two parts):** Backend clears `session.attack_queue` before the LLM call in
-  `stream_resume_combat`; frontend `doResumeCombat` now handles `attack_request` and
-  `attack_result` events. Tests: `TestResumeCombatClearsStaleQueue` (3 pytest),
-  `TestEnemyTurnStaleQueue` (2 pytest), regression test in `App.test.tsx` (2 Vitest).
-  *(spec: enemy-turn.feature AC-010)*
+- [x] **Severity: High** — cooldown semantics are wrong; a cooldown below threshold never ticks
+- **File:** `api/session_manager.py` — `_trigger_phase`
+- **Symptom:** `rt.cooldowns[event_id] -= 1` is inside the block guarded by
+  `if we.readiness < we.threshold: continue`. An event whose readiness drops (or was
+  never raised) below threshold while a cooldown is active will never have its cooldown
+  decremented — it becomes permanent until readiness rises again. A designer who sets a
+  cooldown expecting "re-fires after N turns" gets "re-fires after N above-threshold turns".
+- **Fix:** Move cooldown decrement to a dedicated pass in `_tick_event_scheduler` that
+  runs unconditionally every turn (before the readiness-gain loop). Remove the decrement
+  from `_trigger_phase`; keep only the `> 0` skip guard there.
 
-- [x] **B-C08 — `App.enemy-turn.test.tsx` `bootIntoCombat` helper times out** — `closeCombat`
-  and `resumeCombat` mocks returned `undefined`; `for await (... of undefined)` threw TypeError
-  and corrupted component state.
-  **Fixed:** Both mocks now return `(async function* () {})()`. Three tests wrapped in `waitFor`.
-  *(ui/src/__tests__/App.enemy-turn.test.tsx)*
+---
 
-- [x] **B-C06 — Initiatives are LLM-invented totals, not rolled from modifiers** — LLM wrote
-  arbitrary initiative totals (e.g. every goblin at 12) rather than rolling d20 + modifier.
-  **Fixed:** Fully replaced by Tier 1.8 initiative roller — `roll_combat_initiatives()` backend
-  function + `POST /combat/roll_initiatives` endpoint + 🎲 Roll Initiatives button in
-  CombatPanel. LLM-written initiatives are no longer authoritative.
-  *(api/session_manager.py; spec: roll-initiatives.feature)*
+### BUG-003 — `event_runtime` written to `state.json` but never restored *(FIXED — documented)*
 
-- [x] **B-DX01 — `handleDamageRollClick` passes die sides instead of rolled values** — `pending`
-  stores die sides (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passed
-  `pending` directly as `rolls`, so `onDamageRoll([8], 8)` was called instead of the actual
-  d8 result.
-  **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. Vitest test added.
-  *(ui/src/components/DicePanel.tsx `handleDamageRollClick`)*
+- [x] **Severity: Medium** — scheduler progress (readiness, completed_events, cooldowns)
+  is silently lost on server restart
+- **File:** `api/session_manager.py` — `_write_session_state` / `create_session`
+- **Symptom:** `_serialize_event_runtime` writes the full `EventRuntime` to `state.json`
+  every turn. There is no `_load_session_state` or equivalent read path anywhere in the
+  codebase. `create_session` always initialises `event_runtime` from scratch (zeroed
+  readiness, empty completed_events) using only static definitions from event files.
+  The persisted data is dead weight.
+- **Fix (interim):** Added explicit comments to `_write_session_state` and `create_session`
+  documenting that `event_runtime` in `state.json` is written for external inspection only
+  and is not read back on restart. Proper state restoration is tracked as `E1-9` in
+  `EVENT-TODO.md`.
+
+---
+
+### BUG-004 — `_SCHEDULER_DEFAULT_TTL` duplicated across Python and TypeScript
+
+- [ ] **Severity: Low** — visual TTL bar shows wrong scale if backend constant changes
+- **File:** `api/session_manager.py:2678`, `ui/src/components/EventStatus.tsx:5`
+- **Symptom:** Both files independently define the same constant as `5`. `EventStatus.tsx`
+  uses it as the denominator for the `TtlBar` width calculation. If the Python value is
+  changed (e.g. to 8 for longer event arcs), the bar overflows or clips with no warning.
+- **Fix:** Expose the value via the `/api/sessions/{id}/event_status` response (add a
+  `default_ttl` field) and derive the bar scale from the API rather than a hardcoded local
+  constant.
+
+---
+
+### BUG-005 — `completed_events` is a `list`, not a `set` — O(n) membership per turn
+
+- [ ] **Severity: Low** — negligible at current session scale; structural inconsistency
+- **File:** `api/session_manager.py:1152`
+- **Symptom:** `event_id in rt.completed_events` is checked inside the warm_events loop
+  in both `_tick_event_scheduler` (line ~2757) and `_trigger_phase` (line ~2705) — two
+  O(n) list scans per warm event per turn. As completed_events grows the loop degrades.
+- **Fix:** Change `completed_events: list = field(default_factory=list)` to
+  `completed_events: set = field(default_factory=set)`. Change the one write site
+  (`.append` → `.add`). Wrap in `list()` in `_serialize_event_runtime` and confirm the
+  explicit `list(rt.completed_events)` in `get_event_status` still works.
+
+---
+
+### BUG-006 — `_serialize_event_runtime` and `get_event_status` serialize `WarmEvent` independently
+
+- [ ] **Severity: Low** — maintenance risk; serialization paths can diverge silently
+- **File:** `api/session_manager.py:1289`, `api/main.py:136`
+- **Symptom:** `_serialize_event_runtime` calls `dataclasses.asdict(rt)` (serializes the
+  whole `EventRuntime` for `state.json`). `get_event_status` in `main.py` calls
+  `_dc.asdict(we)` inline for each `WarmEvent` in the API response. These are independent
+  code paths. A field rename or transformation applied to one will not propagate to the
+  other, causing `state.json` and the debug panel to show different shapes.
+- **Fix:** Extract a `_serialize_warm_event(we: WarmEvent) -> dict` helper and use it in
+  both `_serialize_event_runtime` and `get_event_status`.
