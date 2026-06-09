@@ -1,6 +1,6 @@
 # Knowledge (Local)
 
-**Triggers:** knowledge local, know local, local knowledge, who is, do i know, have i heard, heard of, know about, know anything about, know of, familiar with, background on, history of, reputation of, what do i know about, what do we know about, where is, where would i find, who runs, who owns, is there a, any rumours, any rumors, what happened, what's the story
+**Triggers:** knowledge local, know local, local knowledge, who is, do i know, have i heard, heard of, know about, know anything about, know of, familiar with, background on, reputation of, what do i know about, what do we know about, where is, where would i find, who runs, who owns, is there a, any rumours, any rumors, about the city
 
 ## Resolution
 

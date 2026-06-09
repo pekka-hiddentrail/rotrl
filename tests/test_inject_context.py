@@ -48,6 +48,7 @@ def _make_session(**kwargs) -> GameSession:
 def _no_npc_index():
     idx = MagicMock()
     idx.detect.return_value = None
+    idx.lookup.return_value = None
     idx.detect_by_location.return_value = []
     return idx
 

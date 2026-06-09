@@ -58,7 +58,6 @@ export default function EventStatus({ onClose, sessionId }: Props) {
   const [data, setData]       = useState<EventStatusData | null>(null)
   const [error, setError]     = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [autoRefresh, setAutoRefresh] = useState(true)
 
   const refresh = useCallback(() => {
     fetchEventStatus(sessionId)
@@ -68,12 +67,6 @@ export default function EventStatus({ onClose, sessionId }: Props) {
   }, [sessionId])
 
   useEffect(() => { refresh() }, [refresh])
-
-  useEffect(() => {
-    if (!autoRefresh) return
-    const id = setInterval(refresh, 3000)
-    return () => clearInterval(id)
-  }, [autoRefresh, refresh])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -109,10 +102,6 @@ export default function EventStatus({ onClose, sessionId }: Props) {
                 <span className="es-turn-badge">Turn {data.turn_number}</span>
               </>
             )}
-            <label className="es-auto-label" title="Auto-refresh every 3 s">
-              <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
-              Auto
-            </label>
             <button className="es-refresh-btn" onClick={refresh} title="Refresh now">↺</button>
           </div>
           <button className="sheet-close" onClick={onClose} title="Close (Esc)">✕</button>

@@ -240,6 +240,13 @@ _BRACKET_BLOCK_RE = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 
+# Fallback: LLM sometimes writes all fields on a single line:
+# [ npc: X  disposition: old→new  key: value ]
+_BRACKET_BLOCK_INLINE_RE = re.compile(
+    r'^\[[ \t]+(.+?)[ \t]+\][ \t]*$',
+    re.MULTILINE,
+)
+
 # Detect whether the response uses section markers at all (vs old flat format).
 _HAS_SECTION_MARKERS_RE = re.compile(r'^%%(?:NARRATIVE|ROLL|DELTAS|GENERATE|EVENT)%%', re.MULTILINE)
 
@@ -526,13 +533,33 @@ def _parse_response_sections(text: str) -> dict[str, str]:
     return sections
 
 
+def _parse_inline_block_fields(content: str) -> dict:
+    """Parse a single-line bracket-block interior into key→value pairs.
+
+    Splits on ``word:`` boundary tokens so multi-word values (e.g. NPC names,
+    disposition arrows, long summaries) are captured correctly.
+    """
+    fields: dict = {}
+    key_spans = [(m.start(), m.group(1)) for m in re.finditer(r'\b(\w+):', content)]
+    for i, (pos, key) in enumerate(key_spans):
+        val_start = pos + len(key) + 1  # skip "key:"
+        val_end = key_spans[i + 1][0] if i + 1 < len(key_spans) else len(content)
+        val = content[val_start:val_end].strip()
+        if val:
+            fields[key.lower()] = val
+    return fields
+
+
 def _parse_bracket_blocks(text: str) -> list[dict]:
     """Extract [ … ] blocks from section text and parse each as key:value fields.
 
-    Opening ``[`` and closing ``]`` must each appear on their own line.
-    Multiple ``knowledge:`` lines within a block are collected into a list so
-    that all knowledge items are preserved (the field dict maps "knowledge" →
-    list[str] rather than a single string).
+    Supports both multi-line blocks (``[`` on its own line) and single-line
+    blocks (``[ key: val  key: val ]`` all on one line).  Multi-line blocks are
+    tried first; single-line is the fallback when no multi-line blocks are found.
+
+    Multiple ``knowledge:`` lines within a multi-line block are collected into a
+    list so that all knowledge items are preserved (the field dict maps
+    "knowledge" → list[str] rather than a single string).
     """
     blocks: list[dict] = []
     for m in _BRACKET_BLOCK_RE.finditer(text):
@@ -548,6 +575,11 @@ def _parse_bracket_blocks(text: str) -> list[dict]:
                     fields[key] = val
         if fields:
             blocks.append(fields)
+    if not blocks:
+        for m in _BRACKET_BLOCK_INLINE_RE.finditer(text):
+            fields = _parse_inline_block_fields(m.group(1))
+            if fields:
+                blocks.append(fields)
     return blocks
 
 
@@ -2142,6 +2174,19 @@ def create_session(
                 action_gain_map=dict(_entry.action_gain_map),
             )
 
+    # Seed scene_locations from the session boot file so the scheduler has a zone
+    # from turn 1 even if the player never explicitly names the location.
+    _boot_path = _REPO_ROOT / "sessions" / f"session_{session_number:03d}" / "boot.md"
+    if _boot_path.exists():
+        import re as _re
+        for _line in _boot_path.read_text(encoding="utf-8").splitlines():
+            _loc_m = _re.match(r"^-?\s*Location:\s*(.+)", _line)
+            if _loc_m:
+                _boot_loc_match = _get_location_index().detect(_loc_m.group(1))
+                if _boot_loc_match and _boot_loc_match.canonical_name not in session.scene_locations:
+                    session.scene_locations.append(_boot_loc_match.canonical_name)
+                break
+
     # Initialise session state file from template (resets mode to 'social' each boot).
     _template = _REPO_ROOT / "sessions" / "state.template.json"
     _state_path = _session_state_path(session)
@@ -2769,15 +2814,18 @@ def _tick_event_scheduler(session: GameSession, current_location: Optional[str],
         in_zone = bool(loc_lower and any(loc_lower == z.lower().replace("_", " ") for z in we.zones))
         if in_zone:
             gain = we.base_gain
+            matched_actions: list[str] = []
             for tag, extra in we.action_gain_map.items():
                 if tag in intent_tags:
                     gain += extra
+                    matched_actions.append(f"{tag}+{extra:.0f}")
             old = we.readiness
             we.readiness = min(100.0, we.readiness + gain)
             we.frozen = False
             we.last_zone_match_turn = session.turn_number
             if we.readiness != old:
-                _log(session, f"\n> *[Scheduler: {event_id} readiness {old:.0f}→{we.readiness:.0f} (+{gain:.0f} @ {current_location})]*\n")
+                _action_str = ("; actions: " + ", ".join(matched_actions)) if matched_actions else ""
+                _log(session, f"\n> *[Scheduler: {event_id} readiness {old:.0f}→{we.readiness:.0f} (+{gain:.0f} @ {current_location}{_action_str})]*\n")
         else:
             we.frozen = True
 
@@ -2981,6 +3029,20 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
             injected.append(_get_npc_index().format_short_context(npc_match))
             _log(session, f"\n> *[NPC context injected: {npc_match.canonical_name} (short, alias: \"{npc_match.matched_alias}\")]*\n")
 
+    # If no NPC was named by the player but one is active in the scene (they just
+    # responded on the previous turn), inject their profile so the GM has the right
+    # context — e.g. when the player continues a conversation without repeating the name.
+    _scene_npc_match = None
+    if not npc_match and session.scene_npcs:
+        _scene_npc_match = _get_npc_index().lookup(session.scene_npcs[-1])
+        if _scene_npc_match:
+            if skill_match:
+                injected.append(_get_npc_index().format_context(_scene_npc_match))
+                _log(session, f"\n> *[NPC context injected: {_scene_npc_match.canonical_name} (full — skill active, implicit from scene)]*\n")
+            else:
+                injected.append(_get_npc_index().format_short_context(_scene_npc_match))
+                _log(session, f"\n> *[NPC context injected: {_scene_npc_match.canonical_name} (short, implicit from scene)]*\n")
+
     # Location-based NPC injection removed — only inject NPCs the player
     # explicitly named or directly interacted with (not all NPCs at a location).
     location_matches: list = []
@@ -3080,7 +3142,7 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
 
     if injected:
         block = "\n\n---\n".join(injected)
-        directive = _build_turn_directive(npc_match, skill_match, location_matches, session.scene_npcs)
+        directive = _build_turn_directive(npc_match or _scene_npc_match, skill_match, location_matches, session.scene_npcs)
         system_content = (
             system_content
             + f"\n\n---\n[CONTEXT FOR THIS TURN]\n{block}"

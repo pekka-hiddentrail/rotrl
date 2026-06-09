@@ -146,6 +146,60 @@ def test_bracket_blocks_location_type():
     assert blocks[0]["name"] == "Bottled Solutions"
 
 
+# ── _parse_bracket_blocks — single-line (inline) format ──────────────────────
+
+def test_bracket_blocks_inline_basic():
+    text = "[ npc: Ameiko Kaijitsu  disposition: neutral→interested  summary: Engaging cautiously. ]"
+    blocks = _parse_bracket_blocks(text)
+    assert len(blocks) == 1
+    assert blocks[0]["npc"] == "Ameiko Kaijitsu"
+    assert "interested" in blocks[0]["disposition"]
+    assert "Engaging" in blocks[0]["summary"]
+
+
+def test_bracket_blocks_inline_full_ameiko():
+    """Exact single-line format produced by the LLM for Ameiko (real regression case)."""
+    text = (
+        "[ npc: Ameiko Kaijitsu  disposition: neutral→interested"
+        "  location: Rusty Dragon serving station"
+        "  knowledge: [pcs] Ani is a traveler seeking history of the Lost Coast;"
+        " [world] Ancient ruins dot the Lost Coast; most people avoid them"
+        "  summary: Ameiko recognizes the question as serious. ]"
+    )
+    blocks = _parse_bracket_blocks(text)
+    assert len(blocks) == 1
+    b = blocks[0]
+    assert b["npc"] == "Ameiko Kaijitsu"
+    assert "Rusty Dragon" in b["location"]
+    assert "[pcs]" in b["knowledge"]
+    assert "serious" in b["summary"]
+
+
+def test_bracket_blocks_inline_multiple():
+    text = (
+        "[ npc: Ameiko  disposition: neutral→friendly  summary: Warming up. ]\n"
+        "[ npc: Zantus  disposition: neutral  summary: Calm. ]"
+    )
+    blocks = _parse_bracket_blocks(text)
+    assert len(blocks) == 2
+    assert blocks[0]["npc"] == "Ameiko"
+    assert blocks[1]["npc"] == "Zantus"
+
+
+def test_bracket_blocks_inline_empty_text():
+    assert _parse_bracket_blocks("") == []
+
+
+def test_bracket_blocks_multiline_takes_priority():
+    """Multi-line blocks should be returned even when inline blocks are also present."""
+    multiline = "[\nnpc: Kendra\nsummary: First.\n]"
+    inline = "[ npc: Belor  summary: Ignored. ]"
+    blocks = _parse_bracket_blocks(multiline + "\n" + inline)
+    # Multi-line wins; inline fallback is not tried
+    assert len(blocks) == 1
+    assert blocks[0]["npc"] == "Kendra"
+
+
 # ── _extract_knowledge_items ──────────────────────────────────────────────────
 
 def test_extract_knowledge_single():

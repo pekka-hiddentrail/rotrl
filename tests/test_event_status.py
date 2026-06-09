@@ -269,3 +269,22 @@ class TestTurnNumber:
         session.turn_number = 7
         data = _get_status(client, sid)
         assert data["turn_number"] == 7
+
+
+# ── Boot location seeding ─────────────────────────────────────────────────────
+
+class TestBootLocationSeeding:
+    """create_session seeds scene_locations from boot.md so the scheduler has a zone on turn 1."""
+
+    def test_scene_locations_seeded_on_boot(self, client):
+        import api.session_manager as sm
+        sid = _boot(client, event_scheduler=True)
+        session = sm.get_session(sid)
+        # session_001/boot.md has "Location: Festival Square, ..."
+        assert len(session.scene_locations) > 0
+
+    def test_festival_square_in_scene_locations(self, client):
+        import api.session_manager as sm
+        sid = _boot(client, event_scheduler=True)
+        session = sm.get_session(sid)
+        assert "Festival Square" in session.scene_locations
