@@ -39,6 +39,7 @@ export default function App() {
   const [sessionNumber, setSessionNumber] = useState(1)
   const [model, setModel] = useState('llama-3.3-70b-versatile')
   const [devMode, setDevMode] = useState(false)
+  const [eventScheduler, setEventScheduler] = useState(false)
   const [provider, setProvider] = useState<'ollama' | 'groq' | 'anthropic'>('groq')
   const [error, setError] = useState<string | null>(null)
   const [attention, setAttention] = useState<string | null>(null)
@@ -130,7 +131,7 @@ export default function App() {
     // 2. Create the session (primes context, returns done instantly — no LLM call at boot)
     try {
       let sessionId: string | undefined
-      for await (const event of bootSession(sessionNumber, model, devMode, provider)) {
+      for await (const event of bootSession(sessionNumber, model, devMode, provider, eventScheduler)) {
         if (event.type === 'error') throw new Error(event.message)
         if (event.type === 'done') sessionId = event.session_id
       }
@@ -613,10 +614,12 @@ export default function App() {
         sessionNumber={sessionNumber}
         model={model}
         devMode={devMode}
+        eventScheduler={eventScheduler}
         provider={provider}
         onSessionNumberChange={setSessionNumber}
         onModelChange={setModel}
         onDevModeChange={setDevMode}
+        onEventSchedulerChange={setEventScheduler}
         onProviderChange={(p) => {
           setProvider(p)
           if (p === 'groq') setModel('llama-3.3-70b-versatile')

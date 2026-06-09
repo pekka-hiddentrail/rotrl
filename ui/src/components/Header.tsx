@@ -33,11 +33,13 @@ interface Props {
   sessionNumber: number
   model: string
   devMode: boolean
+  eventScheduler: boolean
   provider: 'ollama' | 'groq' | 'anthropic'
   rateLimits: RateLimits | null
   onSessionNumberChange: (n: number) => void
   onModelChange: (m: string) => void
   onDevModeChange: (v: boolean) => void
+  onEventSchedulerChange: (v: boolean) => void
   onProviderChange: (p: 'ollama' | 'groq' | 'anthropic') => void
   onBoot: () => void
   onEnd: () => void
@@ -61,8 +63,8 @@ const BG_RUNES = Array.from({ length: 32 }, (_, i) => ({
 }))
 
 export default function Header({
-  session, streaming, ending, sessionNumber, model, devMode, provider, rateLimits,
-  onSessionNumberChange, onModelChange, onDevModeChange, onProviderChange,
+  session, streaming, ending, sessionNumber, model, devMode, eventScheduler, provider, rateLimits,
+  onSessionNumberChange, onModelChange, onDevModeChange, onEventSchedulerChange, onProviderChange,
   onBoot, onEnd, onKillEnd, onViewLog, onOpenApiLogs, onOpenBenchmarks, onOpenCoverage, onPurgeNpcs,
 }: Props) {
   const [confirmingPurge, setConfirmingPurge] = useState(false)
@@ -163,6 +165,10 @@ export default function Header({
             <label className="control-label dev-toggle" title="Dev mode: shows raw %%section%% markers in the stream. With Ollama also caps tokens for speed.">
               <input type="checkbox" checked={devMode} onChange={e => onDevModeChange(e.target.checked)} disabled={locked} />
               Dev
+            </label>
+            <label className="control-label dev-toggle" title="Event scheduler: enables the temperature-based event scheduler (E1 MVP). The %%EVENT%% LLM path stays active alongside it.">
+              <input type="checkbox" checked={eventScheduler} onChange={e => onEventSchedulerChange(e.target.checked)} disabled={locked} />
+              Scheduler
             </label>
             <button onClick={onBoot} disabled={locked} className="btn btn-primary">
               {streaming ? 'Booting…' : 'Boot Session'}

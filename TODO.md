@@ -190,6 +190,14 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ---
 
+## Event System
+
+> All event triggering and event-chain work lives in **[EVENT-TODO.md](EVENT-TODO.md)**.
+> Tiers E1-E4: MVP soft-trigger scheduler + hard-chain progression first, then stability, authoring scale, and optional UX.
+> Current status: planned. Tier E1 MVP next.
+
+---
+
 ## Combat System
 
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.

@@ -1190,6 +1190,7 @@ class GameSession:
     host: str
     temperature: float
     dev_mode: bool = False
+    event_scheduler: bool = False
     provider: str = "ollama"   # "ollama" | "groq" | "anthropic"
     num_ctx: int = 2048
     num_gpu: int = 999
@@ -2067,6 +2068,7 @@ def create_session(
     num_ctx: int = 2048,
     num_gpu: int = 999,
     provider: str = "ollama",
+    event_scheduler: bool = False,
 ) -> GameSession:
     system_prompt = _build_slim_system_prompt(session_number)
 
@@ -2081,6 +2083,7 @@ def create_session(
         host=host,
         temperature=temperature,
         dev_mode=dev_mode,
+        event_scheduler=event_scheduler,
         provider=provider,
         num_ctx=num_ctx,
         num_gpu=num_gpu,

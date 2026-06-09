@@ -26,6 +26,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [system-prompt.feature](system-prompt.feature) | Backend | `@prompt` `@injection` `@boot` `@per-turn` `@groq` | 10 | `_build_slim_system_prompt()`, per-turn copy, Groq cap, `_FORMAT_EXAMPLE`, `_COMBAT_FULL_SPEC`, `_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC`, `_build_pc_profiles()` |
 | [startup-hardening.feature](startup-hardening.feature) | Runtime / Tooling | `@startup` `@windows` `@dev-tooling` `@process-cleanup` | 7 | `dev.py` `_free_port()` `_kill_tree()`, `start_backend.ps1`, `start_ui.ps1` |
 | [event-injection.feature](event-injection.feature) | Backend | `@event` `@injection` `@context` `@parsing` `@session` | 9 | `EventIndex`, `active_events`, `%%EVENT%%` parser, event map in system prompt, `EventEntry.event_type` metadata |
+| [event-temperature-mvp.feature](event-temperature-mvp.feature) | Backend | `@event` `@temperature` `@scheduler` `@session` `@state` | 11 | `event_runtime` state snapshot, readiness tick, threshold roll, pity trigger, active lockout, prompt [ACTIVE EVENT] context |
+| [event-chain-runtime.feature](event-chain-runtime.feature) | Backend | `@event` `@chain` `@runtime` `@session` `@state` | 8 | `active_chain_id`/`active_node_id`, hard transitions, chain lock, chain persistence, prompt [CHAIN STATE] context |
+| [event-temperature-stability.feature](event-temperature-stability.feature) | Backend | `@event` `@temperature` `@stability` `@interrupt` `@cooldown` | 8 | readiness vs urgency, interrupt policy, pending_interrupt queue, multi-event arbitration, cooldowns, max-fires, optional decay |
 | [combat-tracker.feature](combat-tracker.feature) | Backend \| Frontend | `@combat` `@parsing` `@session` `@streaming` `@layout` | 18 | `CombatState`, `Combatant`, `_parse_combat_block`, `CombatPanel.tsx`, `HpBar.tsx`, `combat_update` SSE, `DELETE /combat`, per-turn combat reminder, `CombatRulesIndex`, condition chips, `currentCombatantName`, highlight advance, enemy-turn controls |
 | [combat-hp.feature](combat-hp.feature) | Backend | `@combat` `@hp` `@session` `@parsing` | 10 | `_parse_combat_block(existing_state)`, `_parse_hp_deltas`, `_apply_hp_deltas`, `%%HP%%` block, `[CURRENT HP]` context injection, `_COMBAT_SPEC_ROUND1`, `_COMBAT_SPEC_ONGOING`, HP-status guard |
 | [attack-resolution.feature](attack-resolution.feature) | Backend \| Frontend | `@combat` `@attack` `@dice` `@session` `@streaming` `@parsing` | 9 | `_parse_attack_block`, `_roll_dice`, `PendingAttack`, `_resolve_npc_attack`, `resolve_attack_roll`, `resolve_damage_roll`, `stream_resume_combat`, `attack_request`/`attack_result` SSE, `AttackPhase`, `DicePanel` attack banners |
@@ -48,7 +51,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [click-to-target.feature](click-to-target.feature) | Frontend \| Backend | `@combat` `@pc` `@action` `@target` `@input` `@economy` | 9 | `selectedTarget` state in App.tsx, `combatant-targeted` CSS class, target badge near InputBar, `target_hint` POST field, `PcTurnRequest.target_hint`, `_extract_pc_combat_intent` target_hint override, `CombatPanel.tsx` row click handler |
 | [enemy-action-type.feature](enemy-action-type.feature) | Backend | `@combat` `@enemy` `@action` `@economy` `@parsing` `@session` | 7 | `_parse_action_block` `action_type` field, normalisation to canonical set, inference from `action` when absent, `_build_enemy_turn_system` prompt update, `action_card` SSE `action_type`, session log |
 
-**Total: 360 acceptance criteria across 38 feature files**
+**Total: 387 acceptance criteria across 41 feature files**
 
 ---
 
@@ -92,6 +95,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@startup` | Dev startup process cleanup | `dev.py`, `start_backend.ps1`, `start_ui.ps1` |
 | `@streaming` | SSE token streaming | `StreamingResponse`, token/done/error/patch_last events |
 | `@event` | Scene-triggered event injection | `api/context/event_index.py`, `adventure_path/02_events/`, `active_events`, `%%EVENT%%` |
+| `@temperature` | Readiness-based event warming and trigger chance | `event_runtime`, scheduler tick, threshold/pity logic |
+| `@chain` | Deterministic event node progression | `active_chain_id`, `active_node_id`, hard transitions |
+| `@stability` | Event pacing conflict controls | readiness vs urgency, arbitration, cooldown protections |
 | `@combat` | Combat tracker panel and state | `api/session_manager.py` `CombatState`, `CombatPanel.tsx`, `HpBar.tsx`, `%%COMBAT%%` block, `api/context/combat_lookup.py` `CombatRulesIndex` |
 | `@layout` | UI column layout switching | `ui/src/index.css` `.main-content.combat-active`, flex `order` rules |
 | `@persistence` | State files written to disk mid-session | `sessions/session_NNN/state.json`, `_write_session_state()` |
