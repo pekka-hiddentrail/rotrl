@@ -25,11 +25,12 @@ export async function* bootSession(
   model: string,
   devMode: boolean = false,
   provider: string = 'ollama',
+  eventScheduler: boolean = false,
 ): AsyncGenerator<SseEvent> {
   const res = await fetch(`${BASE}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_number: sessionNumber, model, dev_mode: devMode, provider }),
+    body: JSON.stringify({ session_number: sessionNumber, model, dev_mode: devMode, provider, event_scheduler: eventScheduler }),
   })
   if (!res.ok) {
     const body = await res.text()
@@ -289,6 +290,33 @@ export async function fetchApiLogEntry(filename: string): Promise<unknown> {
   const res = await fetch(`${BASE}/log/api/${encodeURIComponent(filename)}`)
   if (!res.ok) throw new Error(`API log fetch failed (${res.status})`)
   return res.json()
+}
+
+export interface WarmEventData {
+  readiness: number
+  threshold: number
+  base_gain: number
+  failed_rolls: number
+  frozen: boolean
+  last_zone_match_turn: number
+  turns_remaining: number
+  zones: string[]
+  action_gain_map: Record<string, number>
+}
+
+export interface EventStatusData {
+  scheduler_enabled: boolean
+  turn_number: number
+  active_event_id: string | null
+  warm_events: Record<string, WarmEventData>
+  completed_events: string[]
+  cooldowns: Record<string, number>
+}
+
+export async function fetchEventStatus(sessionId: string): Promise<EventStatusData> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/event_status`)
+  if (!res.ok) throw new Error(`Event status fetch failed (${res.status})`)
+  return res.json() as Promise<EventStatusData>
 }
 
 async function* parseSseStream(response: Response, signal?: AbortSignal): AsyncGenerator<SseEvent> {

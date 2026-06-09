@@ -3368,3 +3368,221 @@ body {
 .cm-badge--mid   { background: rgba(192,128,64,0.20); color: #c08040; border: 1px solid rgba(192,128,64,0.4); }
 .cm-badge--low   { background: rgba(176,48,48,0.25);  color: #c06060; border: 1px solid rgba(176,48,48,0.5); }
 .cm-badge--empty { background: rgba(80,80,80,0.20);   color: #888;    border: 1px solid rgba(80,80,80,0.4); }
+
+/* ── Event Status panel ─────────────────────────────────────────────────── */
+.es-overlay {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 32px;
+}
+.es-panel {
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 10px;
+  width: min(900px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 24px 28px 28px;
+  position: relative;
+}
+.es-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.es-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #e8d5a0;
+  margin: 0;
+  flex: 1;
+  letter-spacing: 0.03em;
+}
+.es-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 32px;
+}
+.es-turn-badge {
+  font-size: 0.75rem;
+  color: #888;
+  font-family: monospace;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+.es-auto-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #888;
+  cursor: pointer;
+  user-select: none;
+}
+.es-refresh-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: background 0.15s;
+}
+.es-refresh-btn:hover { background: rgba(255,255,255,0.12); color: #e8d5a0; }
+.es-loading { color: #888; font-size: 0.9rem; margin: 12px 0; }
+.es-error   { color: #c06060; font-size: 0.9rem; margin: 12px 0; }
+.es-empty   { color: #666; font-size: 0.85rem; font-style: italic; padding: 8px 0; }
+
+/* Badges */
+.es-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: monospace;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+}
+.es-badge--active   { background: rgba(74,144,104,0.25);  color: #5ab87c; border: 1px solid rgba(74,144,104,0.6); }
+.es-badge--eligible { background: rgba(200,140,40,0.25);  color: #e0a840; border: 1px solid rgba(200,140,40,0.6); }
+.es-badge--frozen   { background: rgba(60,100,180,0.25);  color: #7090e0; border: 1px solid rgba(60,100,180,0.5); }
+.es-badge--warming  { background: rgba(80,80,80,0.20);    color: #999;    border: 1px solid rgba(80,80,80,0.4); }
+.es-badge--done     { background: rgba(50,50,50,0.30);    color: #666;    border: 1px solid rgba(50,50,50,0.5); }
+
+/* Active event card */
+.es-active-card {
+  background: rgba(74,144,104,0.08);
+  border: 1px solid rgba(74,144,104,0.35);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.es-active-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.es-active-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #5ab87c;
+  font-family: monospace;
+}
+.es-active-id {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e8d5a0;
+  font-family: monospace;
+}
+.es-active-body { display: flex; flex-direction: column; gap: 6px; }
+.es-active-row  { display: flex; align-items: center; gap: 12px; }
+.es-active-key  { font-size: 0.78rem; color: #888; min-width: 130px; }
+.es-active-val  { font-size: 0.85rem; color: #ccc; font-family: monospace; }
+.es-no-active   { color: #555; font-size: 0.85rem; font-style: italic; margin-bottom: 20px; }
+
+/* Section */
+.es-section       { margin-bottom: 20px; }
+.es-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+/* Readiness / TTL bars */
+.es-bar-wrap {
+  position: relative;
+  width: 120px;
+  height: 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid #2e2e2e;
+  border-radius: 4px;
+  overflow: visible;
+  flex-shrink: 0;
+}
+.es-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.es-bar-fill--warming  { background: #4a5568; }
+.es-bar-fill--eligible { background: #b07820; }
+.es-bar-fill--active   { background: #2d6e4e; }
+.es-bar-fill--frozen   { background: #2a3d6a; }
+.es-bar-fill--ttl-high { background: #2d6e4e; }
+.es-bar-fill--ttl-mid  { background: #b07820; }
+.es-bar-fill--ttl-low  { background: #8b2020; }
+.es-bar-threshold {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: rgba(220,180,60,0.7);
+  border-radius: 1px;
+  transform: translateX(-1px);
+}
+.es-bar-label {
+  position: absolute;
+  right: -36px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: #aaa;
+  white-space: nowrap;
+}
+.es-ttl-bar .es-bar-label { right: -52px; }
+
+/* Table */
+.es-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.es-table th {
+  text-align: left;
+  padding: 5px 10px 5px 0;
+  color: #666;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #2e2e2e;
+  white-space: nowrap;
+}
+.es-th-num { text-align: right; }
+.es-table td { padding: 7px 10px 7px 0; border-bottom: 1px solid #1e1e1e; vertical-align: middle; }
+.es-row--active td { background: rgba(74,144,104,0.05); }
+.es-td-id    { font-family: monospace; color: #c8b878; font-size: 0.8rem; white-space: nowrap; }
+.es-td-bar   { padding-right: 48px; }
+.es-td-num   { text-align: right; font-family: monospace; color: #aaa; white-space: nowrap; }
+.es-td-zones { font-size: 0.75rem; color: #888; font-family: monospace; }
+.es-td-gains { font-size: 0.75rem; color: #888; white-space: nowrap; }
+.es-gain-base    { color: #666; margin-right: 6px; }
+.es-gain-actions { color: #7890c0; }
+
+/* Completed list */
+.es-completed-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.es-completed-item {
+  font-family: monospace;
+  font-size: 0.78rem;
+  color: #555;
+  background: rgba(50,50,50,0.3);
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 2px 8px;
+  text-decoration: line-through;
+}

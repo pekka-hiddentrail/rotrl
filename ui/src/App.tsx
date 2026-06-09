@@ -9,6 +9,7 @@ import CharacterSheet from './components/CharacterSheet'
 import ApiLogPanel from './components/ApiLogPanel'
 import TokenBenchmarks from './components/TokenBenchmarks'
 import CoverageMatrix from './components/CoverageMatrix'
+import EventStatus from './components/EventStatus'
 import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
@@ -39,6 +40,7 @@ export default function App() {
   const [sessionNumber, setSessionNumber] = useState(1)
   const [model, setModel] = useState('llama-3.3-70b-versatile')
   const [devMode, setDevMode] = useState(false)
+  const [eventScheduler, setEventScheduler] = useState(false)
   const [provider, setProvider] = useState<'ollama' | 'groq' | 'anthropic'>('groq')
   const [error, setError] = useState<string | null>(null)
   const [attention, setAttention] = useState<string | null>(null)
@@ -74,8 +76,9 @@ export default function App() {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [showApiLogs, setShowApiLogs] = useState(false)
-  const [showBenchmarks, setShowBenchmarks] = useState(false)
-  const [showCoverage,    setShowCoverage]    = useState(false)
+  const [showBenchmarks,   setShowBenchmarks]   = useState(false)
+  const [showCoverage,     setShowCoverage]     = useState(false)
+  const [showEventStatus,  setShowEventStatus]  = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
   // Refs for reading current state inside async closures (stale closure guard)
@@ -130,7 +133,7 @@ export default function App() {
     // 2. Create the session (primes context, returns done instantly — no LLM call at boot)
     try {
       let sessionId: string | undefined
-      for await (const event of bootSession(sessionNumber, model, devMode, provider)) {
+      for await (const event of bootSession(sessionNumber, model, devMode, provider, eventScheduler)) {
         if (event.type === 'error') throw new Error(event.message)
         if (event.type === 'done') sessionId = event.session_id
       }
@@ -613,10 +616,12 @@ export default function App() {
         sessionNumber={sessionNumber}
         model={model}
         devMode={devMode}
+        eventScheduler={eventScheduler}
         provider={provider}
         onSessionNumberChange={setSessionNumber}
         onModelChange={setModel}
         onDevModeChange={setDevMode}
+        onEventSchedulerChange={setEventScheduler}
         onProviderChange={(p) => {
           setProvider(p)
           if (p === 'groq') setModel('llama-3.3-70b-versatile')
@@ -631,6 +636,7 @@ export default function App() {
         onOpenApiLogs={() => setShowApiLogs(true)}
         onOpenBenchmarks={() => setShowBenchmarks(true)}
         onOpenCoverage={() => setShowCoverage(true)}
+        onOpenEventStatus={() => setShowEventStatus(true)}
         onPurgeNpcs={handlePurgeNpcs}
       />
 
@@ -801,6 +807,10 @@ export default function App() {
 
       {showCoverage && (
         <CoverageMatrix onClose={() => setShowCoverage(false)} />
+      )}
+
+      {showEventStatus && session && (
+        <EventStatus onClose={() => setShowEventStatus(false)} sessionId={session.id} />
       )}
 
       <IntentBar intent={intent} lastInput={lastInput} streaming={streaming} />

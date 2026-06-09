@@ -32,6 +32,7 @@ class BootRequest(BaseModel):
     host: str = "http://localhost:11434"
     temperature: float = 0.3
     dev_mode: bool = False
+    event_scheduler: bool = False
     provider: str = "ollama"  # "ollama" | "groq" | "anthropic"
     num_ctx: int = 2048       # context window — smaller = faster (Ollama only)
     num_gpu: int = 999        # GPU layers — 999 = push everything to GPU (Ollama only)
@@ -96,7 +97,7 @@ def post_sessions(req: BootRequest):
                        f"or sessions/session_{req.session_number - 1:03d}/recap.md.",
             )
     try:
-        session = create_session(req.session_number, req.model, req.host, req.temperature, req.dev_mode, req.num_ctx, req.num_gpu, req.provider)
+        session = create_session(req.session_number, req.model, req.host, req.temperature, req.dev_mode, req.num_ctx, req.num_gpu, req.provider, req.event_scheduler)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return StreamingResponse(stream_boot(session), media_type="text/event-stream", headers=_SSE_HEADERS)
@@ -121,6 +122,26 @@ def get_session_info(session_id: str):
         "model": session.model,
         "message_count": len(session.messages),
     }
+
+
+@app.get("/api/sessions/{session_id}/event_status")
+def get_event_status(session_id: str):
+    """Return event scheduler runtime state for the Event Status debug panel."""
+    import dataclasses as _dc
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    rt = session.event_runtime
+    return JSONResponse({
+        "scheduler_enabled": session.event_scheduler,
+        "turn_number": session.turn_number,
+        "active_event_id": rt.active_event_id,
+        "warm_events": {
+            eid: _dc.asdict(we) for eid, we in rt.warm_events.items()
+        },
+        "completed_events": list(rt.completed_events),
+        "cooldowns": dict(rt.cooldowns),
+    })
 
 
 @app.get("/api/sessions/{session_id}/log")

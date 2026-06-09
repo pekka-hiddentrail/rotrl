@@ -38,6 +38,14 @@ class EventEntry:
     trigger: str        # human/LLM-readable condition description
     content: str        # injectable markdown, everything below <!-- INJECT -->
     event_type: str = ""  # backend metadata: "combat", "aftermath", etc. Not shown to LLM.
+    # Temperature scheduler fields — populated from ## Schedule section.
+    # Events without this section are LLM-triggered only (is_schedulable=False).
+    is_schedulable: bool = False
+    zones: list = field(default_factory=list)        # location canonical names
+    threshold: float = 75.0
+    base_gain: float = 1.0
+    action_gain_map: dict = field(default_factory=dict)  # intent_tag → extra gain
+    priority: int = 1
 
 
 @dataclass
@@ -97,6 +105,11 @@ class EventIndex:
         self._ensure_loaded()
         return list(self._entries.keys())
 
+    def schedulable_entries(self) -> list[EventEntry]:
+        """Return all entries that have a ## Schedule section (is_schedulable=True)."""
+        self._ensure_loaded()
+        return [e for e in self._entries.values() if e.is_schedulable]
+
 
 # ── File parser ───────────────────────────────────────────────────────────────
 
@@ -112,6 +125,8 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
     event_type = ""
     content_lines: list[str] = []
     in_content = False
+    in_schedule = False
+    schedule: dict = {}
 
     for line in text.splitlines():
         if in_content:
@@ -120,6 +135,20 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
 
         if line.strip() == "<!-- INJECT -->":
             in_content = True
+            in_schedule = False
+            continue
+
+        if re.match(r"^##\s+Schedule\s*$", line, re.IGNORECASE):
+            in_schedule = True
+            continue
+
+        if re.match(r"^##\s+", line) and in_schedule:
+            in_schedule = False
+
+        if in_schedule:
+            kv = re.match(r"^(\w[\w\s]*?):\s*(.+)$", line)
+            if kv:
+                schedule[kv.group(1).strip().lower()] = kv.group(2).strip()
             continue
 
         m = re.match(r"\*\*Event:\*\*\s*(.+)", line, re.IGNORECASE)
@@ -141,4 +170,41 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
         return None
 
     content = "\n".join(content_lines).strip()
-    return EventEntry(event_id=event_id, trigger=trigger, content=content, event_type=event_type)
+
+    # Parse schedule fields when present
+    is_schedulable = bool(schedule)
+    zones = [z.strip() for z in schedule.get("zones", "").split(",") if z.strip()]
+    try:
+        threshold = float(schedule.get("threshold", 75))
+    except ValueError:
+        threshold = 75.0
+    try:
+        base_gain = float(schedule.get("base gain", schedule.get("base_gain", 1)))
+    except ValueError:
+        base_gain = 1.0
+    try:
+        priority = int(schedule.get("priority", 1))
+    except ValueError:
+        priority = 1
+    action_gain_map: dict = {}
+    for pair in schedule.get("action gain", schedule.get("action_gain", "")).split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            tag, val = pair.split(":", 1)
+            try:
+                action_gain_map[tag.strip()] = float(val.strip())
+            except ValueError:
+                pass
+
+    return EventEntry(
+        event_id=event_id,
+        trigger=trigger,
+        content=content,
+        event_type=event_type,
+        is_schedulable=is_schedulable,
+        zones=zones,
+        threshold=threshold,
+        base_gain=base_gain,
+        action_gain_map=action_gain_map,
+        priority=priority,
+    )

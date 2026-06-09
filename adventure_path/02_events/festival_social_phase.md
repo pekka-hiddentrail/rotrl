@@ -2,6 +2,13 @@
 **Type:** social
 **Trigger:** Father Zantus declares the festival open — after welcoming_speeches
 
+## Schedule
+zones: festival_square, sandpoint_cathedral
+threshold: 60
+base gain: 2
+action gain: socialize:3, explore:2
+priority: 1
+
 <!-- INJECT -->
 
 ## Scene
