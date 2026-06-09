@@ -1129,6 +1129,31 @@ class ActiveEvent:
 
 
 @dataclass
+class WarmEvent:
+    """Runtime state for one schedulable event tracked by the temperature scheduler."""
+    readiness: float = 0.0
+    threshold: float = 75.0
+    base_gain: float = 1.0
+    failed_rolls: int = 0
+    frozen: bool = False
+    last_zone_match_turn: int = 0
+    turns_remaining: int = 0          # >0 while this event is the active_event_id
+    zones: list = field(default_factory=list)        # location canonical names that grant gain
+    action_gain_map: dict = field(default_factory=dict)  # intent_tag → extra gain
+
+
+@dataclass
+class EventRuntime:
+    """Scheduler state persisted to state.json each turn."""
+    active_event_id: Optional[str] = None
+    active_chain_id: Optional[str] = None
+    active_node_id: Optional[str] = None
+    warm_events: dict = field(default_factory=dict)   # event_id → WarmEvent
+    completed_events: list = field(default_factory=list)
+    cooldowns: dict = field(default_factory=dict)     # event_id → turns_remaining
+
+
+@dataclass
 class Combatant:
     """A single combatant in the active combat tracker."""
     name: str
@@ -1250,6 +1275,8 @@ class GameSession:
     # Keys are lowercase PC names. Updated from combat_state on every _write_session_state call.
     # Used instead of hp_max when seeding a new combat so healed-only recovery is respected.
     pc_current_hp: dict = field(default_factory=dict)
+    # Temperature scheduler runtime — only active when session.event_scheduler is True.
+    event_runtime: EventRuntime = field(default_factory=EventRuntime)
 
 
 _sessions: dict[str, GameSession] = {}
@@ -1257,6 +1284,14 @@ _sessions: dict[str, GameSession] = {}
 
 def _session_state_path(session: "GameSession") -> Path:
     return _REPO_ROOT / "sessions" / f"session_{session.session_number:03d}" / "state.json"
+
+
+def _serialize_event_runtime(rt: "EventRuntime") -> dict:
+    """Serialize EventRuntime to a JSON-safe dict for state.json."""
+    import dataclasses as _dc
+    d = _dc.asdict(rt)
+    # warm_events keys are event_id strings; asdict converts WarmEvent instances to dicts automatically.
+    return d
 
 
 def _write_session_state(session: "GameSession") -> None:
@@ -1289,6 +1324,7 @@ def _write_session_state(session: "GameSession") -> None:
             if session.combat_state is not None else []
         ),
         "pc_current_hp": session.pc_current_hp,
+        "event_runtime": _serialize_event_runtime(session.event_runtime),
     }
     try:
         path.write_text(_json.dumps(state, indent=2), encoding="utf-8")
@@ -2092,6 +2128,16 @@ def create_session(
         pc_profiles=_build_pc_profiles(_REPO_ROOT / "ui" / "public" / "data"),
     )
 
+    # Populate warm events from schedulable event definitions (when scheduler enabled).
+    if event_scheduler:
+        for _entry in _get_event_index().schedulable_entries():
+            session.event_runtime.warm_events[_entry.event_id] = WarmEvent(
+                threshold=_entry.threshold,
+                base_gain=_entry.base_gain,
+                zones=list(_entry.zones),
+                action_gain_map=dict(_entry.action_gain_map),
+            )
+
     # Initialise session state file from template (resets mode to 'social' each boot).
     _template = _REPO_ROOT / "sessions" / "state.template.json"
     _state_path = _session_state_path(session)
@@ -2628,6 +2674,106 @@ def _build_pc_combat_roster(session: "GameSession") -> str:
     return "\n".join(lines)
 
 
+_SCHEDULER_PITY_LIMIT = 6
+_SCHEDULER_DEFAULT_TTL = 5
+
+
+def _complete_active_event(session: GameSession) -> None:
+    rt = session.event_runtime
+    eid = rt.active_event_id
+    if eid:
+        rt.completed_events.append(eid)
+        rt.active_event_id = None
+        _log(session, f"\n> *[Scheduler: {eid} EXPIRED (TTL exhausted)]*\n")
+
+
+def _fire_event(session: GameSession, event_id: str, source: str) -> None:
+    rt = session.event_runtime
+    rt.active_event_id = event_id
+    we = rt.warm_events[event_id]
+    we.turns_remaining = _SCHEDULER_DEFAULT_TTL
+    _log(session, f"\n> *[Scheduler: {event_id} TRIGGERED via {source} — readiness={we.readiness:.0f}, failed_rolls={we.failed_rolls}]*\n")
+
+
+def _trigger_phase(session: GameSession) -> None:
+    rt = session.event_runtime
+    if rt.active_event_id:
+        return
+    for event_id, we in rt.warm_events.items():
+        if we.readiness < we.threshold:
+            continue
+        if event_id in rt.completed_events:
+            continue
+        if rt.cooldowns.get(event_id, 0) > 0:
+            rt.cooldowns[event_id] -= 1
+            continue
+        if we.failed_rolls >= _SCHEDULER_PITY_LIMIT:
+            _fire_event(session, event_id, source="pity")
+            return
+        roll = random.randint(1, 100)
+        if roll <= we.readiness:
+            _fire_event(session, event_id, source=f"roll({roll})")
+            return
+        we.failed_rolls += 1
+        _log(session, f"\n> *[Scheduler: {event_id} miss — roll {roll} vs {we.readiness:.0f} (failed={we.failed_rolls})]*\n")
+
+
+def _format_active_event_context(rt: "EventRuntime") -> Optional[str]:
+    """Return a compact [ACTIVE EVENT] context block for the system prompt, or None."""
+    if not rt.active_event_id:
+        return None
+    we = rt.warm_events.get(rt.active_event_id)
+    lines = ["[ACTIVE EVENT]", f"Event: {rt.active_event_id}"]
+    if we:
+        lines += [
+            f"Readiness at trigger: {we.readiness:.0f}",
+            f"Turns remaining: {we.turns_remaining}",
+        ]
+    return "\n".join(lines)
+
+
+def _tick_event_scheduler(session: GameSession, current_location: Optional[str], intent_tags: list) -> None:
+    """Update readiness for all warm events. Called from _inject_context after zone detection.
+
+    When session.event_scheduler is False this is a no-op.
+    """
+    if not session.event_scheduler:
+        return
+    rt = session.event_runtime
+
+    # If an event is active, just tick its TTL and return — no new triggers.
+    if rt.active_event_id:
+        we = rt.warm_events.get(rt.active_event_id)
+        if we and we.turns_remaining > 0:
+            we.turns_remaining -= 1
+            if we.turns_remaining == 0:
+                _complete_active_event(session)
+        return
+
+    # Normalize current location to lowercase with spaces so both slug-style zone names
+    # ("festival_square") and display-name canonicals ("Festival Square") match.
+    loc_lower = current_location.lower().replace("_", " ") if current_location else ""
+    for event_id, we in rt.warm_events.items():
+        if event_id in rt.completed_events:
+            continue
+        in_zone = bool(loc_lower and any(loc_lower == z.lower().replace("_", " ") for z in we.zones))
+        if in_zone:
+            gain = we.base_gain
+            for tag, extra in we.action_gain_map.items():
+                if tag in intent_tags:
+                    gain += extra
+            old = we.readiness
+            we.readiness = min(100.0, we.readiness + gain)
+            we.frozen = False
+            we.last_zone_match_turn = session.turn_number
+            if we.readiness != old:
+                _log(session, f"\n> *[Scheduler: {event_id} readiness {old:.0f}→{we.readiness:.0f} (+{gain:.0f} @ {current_location})]*\n")
+        else:
+            we.frozen = True
+
+    _trigger_phase(session)
+
+
 def _inject_context(session: GameSession) -> tuple[str, dict]:
     """Assemble the per-turn system prompt and context metadata.
 
@@ -2776,6 +2922,10 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
             system_content += f"\n\n---\n{_COMBAT_SECTION_SPECS}"
             _log(session, "\n> *[Pre-combat turn: events require %%COMBAT%% block]*\n")
 
+        # Tick scheduler TTL even in combat so active events expire on schedule.
+        # No zone detection or trigger phase — combat blocks new soft triggers anyway.
+        _tick_event_scheduler(session, current_location=None, intent_tags=[])
+
         _active_event_ids = [e.event_id for e in session.active_events]
 
         return system_content, {
@@ -2849,6 +2999,20 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
 
     if npc_match and npc_match.canonical_name not in session.scene_npcs:
         session.scene_npcs.append(npc_match.canonical_name)
+
+    # ── Scheduler tick ────────────────────────────────────────────────────────
+    # Runs after zone/location detection so loc_canonical is available.
+    # intent_tags: whitespace-split tokens from the player message. action_gain_map
+    # keys must therefore be single words (e.g. "explore", "attack") — multi-word
+    # keys will never match. See E1-2 notes in EVENT-TODO.md.
+    _intent_tags = last_user.lower().split()
+    _tick_event_scheduler(session, loc_canonical, _intent_tags)
+
+    # ── Active scheduler event injection ─────────────────────────────────────
+    if session.event_scheduler:
+        _evt_ctx = _format_active_event_context(session.event_runtime)
+        if _evt_ctx:
+            injected.append(_evt_ctx)
 
     # ── Sections active this turn ─────────────────────────────────────────────
     # Inject only the specs that are relevant based on detection results.

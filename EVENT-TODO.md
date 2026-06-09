@@ -28,57 +28,69 @@ The system should persist per-session in sessions/session_NNN/state.json so even
 
 Minimum useful implementation: one active event, warming events, threshold roll, and simple hard-chain progression.
 
-- [ ] **E1-1 - Session state schema: event_runtime block**
-  - [ ] Add event_runtime to state snapshot with: active_event_id, active_chain_id, active_node_id, warm_events, completed_events, cooldowns
-  - [ ] Define warm_events entries with: readiness (0-100), threshold, failed_rolls, frozen, last_zone_match_turn
-  - [ ] Keep schema backward compatible when loading old sessions (missing event_runtime -> defaults)
-  - [ ] Gate all scheduler logic on session.event_scheduler (boot-time flag set via UI "Scheduler" checkbox); when off, only the %%EVENT%% LLM path runs
+- [x] **E1-1 - Session state schema: event_runtime block**
+  - [x] Add event_runtime to state snapshot with: active_event_id, active_chain_id, active_node_id, warm_events, completed_events, cooldowns
+  - [x] Define warm_events entries with: readiness (0-100), threshold, failed_rolls, frozen, last_zone_match_turn
+  - [x] Keep schema backward compatible when loading old sessions (missing event_runtime -> defaults via dataclass default_factory)
+  - [x] Gate all scheduler logic on session.event_scheduler (boot-time flag set via UI "Scheduler" checkbox); when off, only the %%EVENT%% LLM path runs
 
-- [ ] **E1-2 - Event definition format (data files)**
-  - [ ] Extend existing adventure_path/02_events files with a ## Schedule section; only files with this section are loaded as warm events by the scheduler
-  - [ ] ## Schedule section fields: id, type (soft|chain_node), zones (list of location names), threshold, base_gain, action_gain_map (intent tag -> gain), priority
-  - [ ] Add chain metadata fields: chain_id, node_id, next_node_id, hard_transition
+- [x] **E1-2 - Event definition format (data files)**
+  - [x] Extend existing adventure_path/02_events files with a ## Schedule section; only files with this section are loaded as warm events by the scheduler
+  - [x] ## Schedule section fields: zones (comma-separated location names), threshold, base gain, action gain (tag:value pairs), priority
+  - [x] EventIndex.schedulable_entries() public method returns only schedulable entries; create_session uses this to populate warm_events at boot
+  - [x] Zone names normalize underscores↔spaces so slug-style names ("festival_square") match display-name canonicals ("Festival Square")
+  - [x] action_gain_map keys must be single words — whitespace split is used for matching; documented in code and here
+  - [ ] Add chain metadata fields: chain_id, node_id, next_node_id, hard_transition (E1-6)
   - [ ] Add a small validator for required keys to fail fast on malformed ## Schedule sections
 
-- [ ] **E1-3 - Turn tick: readiness update**
-  - [ ] Add tick step inside _inject_context, after zone/location detection (tick needs the resolved zone to evaluate match)
-  - [ ] If current zone matches event's zones list: readiness += base_gain
-  - [ ] If zone does not match: freeze readiness (no gain, no decay in MVP)
-  - [ ] Apply action-based boosts from detected player intent tags (action_gain_map)
-  - [ ] Clamp readiness to 0-100
+- [x] **E1-3 - Turn tick: readiness update**
+  - [x] Tick runs inside _inject_context after zone/location detection (loc_canonical available)
+  - [x] If current zone matches event's zones list: readiness += base_gain + action_gain_map bonuses
+  - [x] If zone does not match: freeze readiness (no gain, no decay in MVP)
+  - [x] Clamp readiness to 0-100
+  - [x] TTL tick also runs in combat branch (location=None, no new gains) so active events expire correctly during combat
 
-- [ ] **E1-4 - Threshold trigger roll**
-  - [ ] Start rolling only when readiness >= threshold
-  - [ ] Roll once per turn: d100 <= readiness triggers event
-  - [ ] Increment failed_rolls on miss
-  - [ ] Add pity rule: auto-trigger after N failed rolls above threshold (start with N=6)
+- [x] **E1-4 - Threshold trigger roll**
+  - [x] Start rolling only when readiness >= threshold
+  - [x] Roll once per turn: d100 <= readiness triggers event
+  - [x] Increment failed_rolls on miss
+  - [x] Pity rule: auto-trigger after N=6 failed rolls above threshold
 
-- [ ] **E1-5 - Active event lifecycle**
-  - [ ] On trigger, set active_event_id, record turns_remaining (TTL), and mark event as in_progress
-  - [ ] Prevent other soft events from starting while an event is active
-  - [ ] Decrement turns_remaining each turn; on TTL expiry (backend-driven), clear active_event_id and write completed_events/cooldowns — no LLM signal needed
+- [x] **E1-5 - Active event lifecycle**
+  - [x] On trigger, set active_event_id, record turns_remaining (TTL=5), log source (roll or pity)
+  - [x] Prevent other soft events from starting while an event is active (_trigger_phase returns early)
+  - [x] Decrement turns_remaining each turn; on TTL expiry clear active_event_id and append to completed_events
 
 - [ ] **E1-6 - Hard-chain handling (basic)**
   - [ ] If active_chain_id exists, ignore soft-event rolls by default
   - [ ] Resolve next node via hard_transition fields when completion condition is met
   - [ ] On final node, clear active_chain_id and return control to soft scheduler
 
-- [ ] **E1-7 - Prompt integration (minimal)**
-  - [ ] Inject one compact [ACTIVE EVENT] block when active_event_id is set
-  - [ ] Inject one compact [CHAIN STATE] block when active_chain_id is set
-  - [ ] Do not inject full event map in MVP
+- [x] **E1-7 - Prompt integration (minimal)**
+  - [x] Inject compact [ACTIVE EVENT] block (event id, readiness at trigger, turns remaining) via _format_active_event_context() helper
+  - [ ] Inject one compact [CHAIN STATE] block when active_chain_id is set (E1-6)
+  - [x] Full event-map text not duplicated in this block
 
-- [ ] **E1-8 - Logging and diagnostics**
-  - [ ] Log readiness changes and trigger rolls in session log
-  - [ ] Log chain transitions and completion conditions
+- [x] **E1-8 - Logging and diagnostics**
+  - [x] Log readiness changes (old→new, gain, zone) in session log each tick
+  - [x] Log trigger source (roll value or pity) and readiness/failed_rolls at trigger time
+  - [x] Log TTL expiry on completion
   - [ ] Add a debug endpoint or log section to inspect event_runtime at runtime
 
-- [ ] **E1-T - Tests (must-have for MVP)**
-  - [ ] Unit: readiness gain/freeze/clamp
-  - [ ] Unit: threshold roll + pity behavior
-  - [ ] Unit: hard-chain transitions and lockout of soft rolls
-  - [ ] Integration: event_runtime written to and restored from state.json
-  - [ ] Integration: active event injected to prompt context
+- [x] **E1-T - Tests (must-have for MVP)**
+  - [x] Unit: readiness gain when zone matches, freeze when not
+  - [x] Unit: action_gain_map bonus applied only to matching event
+  - [x] Unit: threshold roll hit/miss, failed_rolls increment
+  - [x] Unit: pity fires at exactly N=6 failed rolls
+  - [x] Unit: active event blocks other soft triggers
+  - [x] Unit: TTL decrement and expiry → completed_events
+  - [x] Unit: TTL ticks during combat (location=None, no gain, only decrement)
+  - [x] Unit: zone normalization — underscore slug matches display-name canonical
+  - [x] Unit: schedulable_entries() returns only events with ## Schedule section
+  - [x] Integration: event_runtime serialized to and round-tripped from state.json
+  - [x] Integration: [ACTIVE EVENT] block appears in system_content when active_event_id set
+  - [x] Integration: scheduler transitions (gain, trigger, pity, expiry) logged to session log
+  - Tests live in tests/test_event_scheduler.py — 43 tests, AC-001–AC-012
 
 ---
 
