@@ -198,6 +198,14 @@ The existing "Sandpoint NPC skeletons" backlog item is correct but needs priorit
 
 ---
 
+## Music System
+
+> All procedural adaptive music work lives in **[MUSIC_TODO.md](MUSIC_TODO.md)**.
+> Tiers M0-M2+: calm monophonic chiptune first, then smooth looping, then multi-track arrangement.
+> Current status: specs written, implementation not started. Tier M0 backend next.
+
+---
+
 ## Combat System
 
 > All combat work lives in **[COMBAT-TODO.md](COMBAT-TODO.md)**.

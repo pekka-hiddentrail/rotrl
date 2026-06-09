@@ -1,0 +1,233 @@
+# FEATURE — Calm Music Playback (Frontend)
+
+**ID:** music-calm-playback
+**Status:** Draft
+**Area:** Frontend
+**Tags:** @music @playback @calm @ui @webaudio
+
+---
+
+## Story
+
+> As a **GM using the app**,
+> I want calm ambient music to play in the background while running a social scene,
+> so that the atmosphere is enhanced without distracting from gameplay.
+
+The frontend fetches symbolic note events from the backend and synthesises them in the browser
+using Tone.js or the Web Audio API directly. No audio files are downloaded. The synth is a simple
+triangle or square oscillator (chiptune aesthetic). Playback is phrase-based: the frontend
+schedules a full 4-bar phrase, then requests the next one before the current one ends.
+
+---
+
+## Background
+
+- Given the app is loaded in a browser that supports Web Audio API
+- And a session is active (or a dev-mode "music only" path is available)
+- And the backend `POST /music/calm/next-phrase` endpoint is reachable
+
+---
+
+## Acceptance Criteria
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-001 — Audio does not start before a user gesture
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Web Audio autoplay policy requires a user interaction before the AudioContext can
+start. Violating this causes a silent or error state in most browsers.
+
+```gherkin
+Given the page has just loaded
+When  no user interaction has occurred
+Then  the AudioContext is not started
+And   no notes are played
+And   no HTTP requests to /music are made
+
+When  the user clicks "Start Music"
+Then  the AudioContext is resumed or created
+And   phrase fetching and playback begin
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-002 — Start calm music from a UI control
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The user explicitly starts the music player.
+
+```gherkin
+Given the app is in a session
+And   the music player is stopped
+When  the user activates the "Start Music" control
+Then  the frontend calls POST /music/calm/next-phrase with seed and previousState=null
+And   the returned events are scheduled into Tone.js Transport (or Web Audio clock)
+And   the first note plays within one beat of the scheduled start time
+And   the music player UI transitions to "Playing" state
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-003 — Stop calm music from a UI control
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The user explicitly stops the music player.
+
+```gherkin
+Given the music player is in "Playing" state
+When  the user activates the "Stop Music" control
+Then  all scheduled note events are cancelled
+And   the Tone.js Transport (or Web Audio clock) is paused or stopped
+And   the music player UI transitions to "Stopped" state
+And   no further HTTP requests to /music are made until restarted
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-004 — Play symbolic events in bar/beat order
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Events are scheduled by bar + beat position, not by array index.
+
+```gherkin
+Given a phrase response with events in arbitrary array order
+When  the frontend schedules the phrase
+Then  events are sorted by (bar, beat) before scheduling
+And   event at bar=1, beat=1 plays first
+And   event at bar=4, beat=4 (or last beat of bar 4) plays last
+And   each note's duration maps correctly: "4n"→quarter, "2n"→half, "8n"→eighth
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-005 — Phrase-level scheduling — no per-note API calls
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The frontend fetches one full phrase at a time, not individual notes.
+
+```gherkin
+Given the music player is playing
+When  a 4-bar phrase is being synthesised
+Then  exactly one HTTP request was made to /music/calm/next-phrase for that phrase
+And   no HTTP request is made per note event
+And   the next phrase request is made while the current phrase is still playing
+      (look-ahead scheduling — not after the last note ends)
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-006 — Browser-side synthesis — triangle or square oscillator
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The synth is a simple chiptune-style oscillator; no audio assets are loaded.
+
+```gherkin
+Given the music player starts
+When  a note event is played
+Then  the sound is produced by a Tone.js Synth (or equivalent Web Audio OscillatorNode)
+      configured with oscillator type "triangle" or "square"
+And   no audio files (WAV, MP3, OGG) are fetched from the network for synthesis
+And   the note's MIDI value is converted to frequency before being sent to the oscillator
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-007 — Debug: generate one phrase without playback
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** A developer wants to inspect phrase output without hearing it.
+
+```gherkin
+Given a "Generate Phrase (Debug)" button or action is available in dev mode
+When  the developer activates it
+Then  the frontend calls POST /music/calm/next-phrase
+And   the response JSON is displayed in a debug panel or browser console
+And   no audio is played unless playback is separately enabled
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-008 — Debug view: display current phrase as compact note list
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The current phrase is human-readable in the UI during development.
+
+```gherkin
+Given a phrase has been generated and is playing (or was last generated in debug mode)
+When  the debug music panel is open
+Then  the panel shows either:
+        (a) the raw phrase JSON from the backend, or
+        (b) a compact note list: e.g. "B1: C5-4n E5-4n D5-2n | B2: G4-2n A4-8n ..."
+And   the motifId and cadenceDegree are visible
+And   bpm is displayed
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-009 — Phrase motif state is passed between consecutive requests
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The frontend maintains a rolling previousState so each phrase is musically
+connected to the last.
+
+```gherkin
+Given phrase N has finished playing
+And   the frontend stored phrase N's state.motifId and state.motifDegrees
+When  the frontend requests phrase N+1
+Then  the request body includes previousState = { phrase N's state }
+And   the seed for phrase N+1 is derived or incremented from the session seed
+```
+
+---
+
+## Out of Scope
+
+- Harmony, second voice, bass line, or percussion — single monophonic synth only
+- Audio file download or offline caching of phrases
+- Mood detection — the GM manually selects mood for now
+- Automatic mood switching on combat or NPC events — Tier 2+
+- Volume normalisation, EQ, or reverb — keep it raw at Tier 0
+- MIDI output or export
+- Mobile PWA background audio
+- Phrase queue lookahead (2–3 phrases buffered) — Tier 1
+
+---
+
+## Notes
+
+**Proposed library:** Tone.js (`npm install tone`)
+
+- `Tone.Synth` with `oscillator.type = "triangle"` or `"square"` for chiptune feel
+- `Tone.Transport.bpm.value = phrase.bpm` — set once per session start
+- Schedule events: `Tone.Transport.schedule(time => synth.triggerAttackRelease(freq, dur), beatTime)`
+- MIDI → frequency: `Tone.Frequency(midi, "midi").toFrequency()`
+
+**Duration mapping:**
+
+| Symbol | Tone.js value | Beats |
+|--------|--------------|-------|
+| `8n`   | `"8n"`       | 0.5   |
+| `4n`   | `"4n"`       | 1.0   |
+| `2n`   | `"2n"`       | 2.0   |
+
+**Where should the music UI live?** Open question — see MUSIC_TODO.md.
+Options: (a) new `MusicPlayer.tsx` in `ui/src/components/`, (b) fold into `Header.tsx` as a
+small control, (c) separate floating player widget. Recommend (a) for testability.
+
+**Related specs:**
+- [music-calm-generation.feature](music-calm-generation.feature) — generator rules
+- [music-api-contract.feature](music-api-contract.feature) — endpoint this component calls
+
+**Open questions:**
+- Triangle or square oscillator as the default?
+- Should there be a volume slider at Tier 0?
+- Where does the music player control live in the layout — Header, sidebar, or floating?
+- Should the debug phrase view be gated behind `dev_mode`?
