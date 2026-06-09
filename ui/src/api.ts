@@ -2,6 +2,41 @@ import type { CombatState } from './types'
 
 const BASE = '/api'
 
+export interface NoteEvent {
+  bar: number
+  beat: number
+  note: string
+  midi: number
+  duration: '8n' | '4n' | '2n' | string
+  velocity: number
+}
+
+export interface PhraseState {
+  motif_id: string
+  motif_degrees: number[]
+  cadence_degree: number
+  highest_degree: number
+  novelty: number
+}
+
+export interface CalmPhrase {
+  phrase_id: string
+  mood: string
+  key: string
+  scale: string[]
+  bpm: number
+  time_signature: string
+  bars: number
+  events: NoteEvent[]
+  state: PhraseState
+}
+
+export interface NextPhraseRequest {
+  session_id?: string | null
+  seed: number
+  previous_state: PhraseState | null
+}
+
 export type SseEvent =
   | { type: 'token'; content: string }
   | { type: 'status'; message: string }
@@ -39,6 +74,43 @@ export async function* bootSession(
     throw new Error(`Boot failed (${res.status}): ${detail}`)
   }
   yield* parseSseStream(res)
+}
+
+export async function fetchCalmPhrase(
+  sessionId: string | null,
+  seed: number,
+  previousState: PhraseState | null,
+): Promise<CalmPhrase> {
+  const req: NextPhraseRequest = {
+    session_id: sessionId,
+    seed,
+    previous_state: previousState,
+  }
+
+  const res = await fetch(`${BASE}/music/calm/next_phrase`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    let detail = body
+    let errorCode: string | undefined
+    try {
+      const parsed = JSON.parse(body) as { detail?: string; error_code?: string }
+      detail = parsed.detail ?? body
+      errorCode = parsed.error_code
+    } catch {
+      // keep raw body text
+    }
+    if (res.status === 422 && errorCode === 'generation_failed') {
+      throw new Error(`Music generation failed: ${detail}`)
+    }
+    throw new Error(`Calm phrase fetch failed (${res.status}): ${detail}`)
+  }
+
+  return res.json() as Promise<CalmPhrase>
 }
 
 export async function* sendTurn(

@@ -188,6 +188,26 @@ And   the seed for phrase N+1 is derived or incremented from the session seed
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-010 — Music Off toggle hard-disables playback and polling
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The user wants instant silence and no background music activity.
+
+```gherkin
+Given the music player is visible
+When  the user enables the "Music Off" toggle
+Then  any currently playing phrase is stopped
+And   all scheduled note events are cancelled
+And   no additional HTTP requests to /api/music/calm/next_phrase are made while Music Off is enabled
+And   the Start Music control is disabled (or otherwise prevented)
+
+When  the user disables the "Music Off" toggle
+Then  music remains stopped until the user explicitly presses "Start Music"
+```
+
+---
+
 ## Out of Scope
 
 - Harmony, second voice, bass line, or percussion — single monophonic synth only

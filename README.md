@@ -119,13 +119,14 @@ Navigate to **http://localhost:5173** in your browser.
 
 1. **Configure** — pick provider (`groq` recommended), model, session number; uncheck **Dev** for real play
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
-3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
-4. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
-5. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DicePanel — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
-6. **View Log** — opens the live session markdown log in a new browser tab (shown during an active session)
-7. **API Logs** — opens an in-app overlay listing recent LLM call log files. Click any entry to see a summary bar (`status` · `section_format_ok` · `first_token_ms` · `duration_ms` · `total_tokens`) plus the full JSON payload. Escape or click outside to close
-8. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
-9. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
+3. **Music controls (optional)** — use **Start Music** to begin calm procedural playback. Use **Stop Music** to halt playback. Enable **Music Off** for a hard disable: it stops playback immediately and blocks further phrase fetches until turned off. In Dev mode, **Generate Phrase (Debug)** fetches and displays phrase details without starting playback
+4. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
+5. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
+6. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DicePanel — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
+7. **View Log** — opens the live session markdown log in a new browser tab (shown during an active session)
+8. **API Logs** — opens an in-app overlay listing recent LLM call log files. Click any entry to see a summary bar (`status` · `section_format_ok` · `first_token_ms` · `duration_ms` · `total_tokens`) plus the full JSON payload. Escape or click outside to close
+9. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
+10. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
 
 ### Rate limit badge
 
@@ -195,9 +196,13 @@ rotrl/
 │   └── src/
 │       ├── App.tsx                # Session state, SSE event handling
 │       ├── api.ts                 # SSE fetch helpers + SseEvent types
+│       ├── music/
+│       │   ├── synth.ts           # Tone.js synth bootstrap + AudioContext start
+│       │   └── player.ts          # Calm phrase scheduling over Tone.Transport
 │       ├── types.ts
 │       └── components/
 │           ├── Header.tsx         # Logo + controls (column layout); rate-limit badge
+│           ├── MusicPlayer.tsx    # Calm music controls + Music Off toggle + debug phrase view
 │           ├── ChatWindow.tsx     # Message list + thinking indicator
 │           ├── InputBar.tsx       # Player input textarea
 │           ├── IntentBar.tsx      # NPC/skill context + scene NPC chips (fixed bottom)
