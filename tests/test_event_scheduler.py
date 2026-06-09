@@ -1,6 +1,6 @@
 """Tests for the temperature-based event scheduler (specs/event-temperature-mvp.feature).
 
-Covers AC-001 through AC-012:
+Covers AC-001 through AC-013:
   AC-001  event_runtime serialized to state.json
   AC-002  missing event_runtime backfilled on load (dataclass defaults)
   AC-003  zone match increases readiness
@@ -13,6 +13,7 @@ Covers AC-001 through AC-012:
   AC-010  active event blocks other soft triggers
   AC-011  [ACTIVE EVENT] block injected into system prompt
   AC-012  scheduler transitions logged in session log
+  AC-013  zone detection requires a matching location entry
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from api.context.event_index import EventIndex
+from api.context.location_lookup import LocationIndex
 from api.session_manager import (
     EventRuntime,
     GameSession,
@@ -547,3 +549,85 @@ class TestSchedulerLogging:
         log = log_path.read_text(encoding="utf-8")
         assert "EXPIRED" in log
         assert "evt" in log
+
+
+# ── AC-013 — zone detection via LocationIndex ─────────────────────────────────
+
+class TestLocationZoneIntegration:
+    """AC-013: zone detection feeds from LocationIndex; a matching location file is required."""
+
+    def _make_location_file(self, tmp_path: Path, canonical: str, aliases: list[str]) -> None:
+        slug = canonical.lower().replace(" ", "_")
+        loc_dir = tmp_path / "adventure_path" / "03_locations" / slug
+        loc_dir.mkdir(parents=True, exist_ok=True)
+        (loc_dir / "base.md").write_text(
+            f"# {canonical}\n"
+            f"**Aliases:** {', '.join(aliases)}\n\n"
+            f"## Description\n\nA place.\n\n"
+            f"## Typical Occupants\n\nPeople.\n\n"
+            f"## Current State\n\nOpen.\n\n"
+            f"<!-- REFERENCE -->\n",
+            encoding="utf-8",
+        )
+
+    def _no_npc_skill(self):
+        m = MagicMock()
+        m.detect.return_value = None
+        m.detect_by_location.return_value = []
+        m.lookup.return_value = None
+        return m
+
+    def _call(self, session, loc_idx):
+        ns = self._no_npc_skill()
+        with patch("api.session_manager._get_npc_index", return_value=ns), \
+             patch("api.session_manager._get_skill_index", return_value=ns), \
+             patch("api.session_manager._get_location_index", return_value=loc_idx):
+            return _inject_context(session)
+
+    def test_alias_in_message_increases_readiness(self, tmp_path):
+        self._make_location_file(tmp_path, "Festival Square",
+                                 ["festival square", "the square", "square"])
+        loc_idx = LocationIndex(_repo_root=tmp_path)
+        session = _make_session(event_scheduler=True)
+        session.messages = [{"role": "user", "content": "I walk through the festival square."}]
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=10.0, base_gain=1.0, threshold=200.0, zones=["festival_square"],
+        )
+        self._call(session, loc_idx)
+        assert session.event_runtime.warm_events["evt"].readiness == pytest.approx(11.0)
+
+    def test_unmatched_message_freezes_readiness(self, tmp_path):
+        self._make_location_file(tmp_path, "Festival Square",
+                                 ["festival square", "the square", "square"])
+        loc_idx = LocationIndex(_repo_root=tmp_path)
+        session = _make_session(event_scheduler=True)
+        session.messages = [{"role": "user", "content": "I head into the tavern."}]
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=20.0, base_gain=1.0, threshold=200.0, zones=["festival_square"],
+        )
+        self._call(session, loc_idx)
+        assert session.event_runtime.warm_events["evt"].readiness == pytest.approx(20.0)
+        assert session.event_runtime.warm_events["evt"].frozen is True
+
+    def test_no_location_file_means_always_frozen(self, tmp_path):
+        """A zone with no location file never produces a loc_canonical match."""
+        loc_idx = LocationIndex(_repo_root=tmp_path)  # empty — no location files
+        session = _make_session(event_scheduler=True)
+        session.messages = [{"role": "user", "content": "I walk to the festival square."}]
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=20.0, base_gain=1.0, threshold=200.0, zones=["festival_square"],
+        )
+        self._call(session, loc_idx)
+        assert session.event_runtime.warm_events["evt"].readiness == pytest.approx(20.0)
+
+    def test_scene_locations_carry_zone_forward(self, tmp_path):
+        """Party visited the zone on a prior turn; readiness gains even without re-mentioning it."""
+        loc_idx = LocationIndex(_repo_root=tmp_path)  # lookup will return None but that's fine
+        session = _make_session(event_scheduler=True)
+        session.scene_locations = ["Festival Square"]
+        session.messages = [{"role": "user", "content": "I talk to the merchant."}]
+        session.event_runtime.warm_events["evt"] = _make_warm_event(
+            readiness=10.0, base_gain=1.0, threshold=200.0, zones=["festival_square"],
+        )
+        self._call(session, loc_idx)
+        assert session.event_runtime.warm_events["evt"].readiness == pytest.approx(11.0)

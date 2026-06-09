@@ -207,6 +207,37 @@ Then  session log contains trigger source (roll or pity)
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-013 — zone detection requires a matching location entry
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+```gherkin
+Given a warm event lists "festival_square" in its zones
+And   adventure_path/03_locations/festival_square/base.md exists with alias "festival square"
+When  the player turn message contains "festival square"
+Then  LocationIndex detects the location and returns canonical "Festival Square"
+And   _tick_event_scheduler normalises both sides (underscore↔spaces) and finds a match
+And   readiness increases by base_gain
+
+Given no location file exists for a zone name
+When  the player mentions that zone by any text
+Then  LocationIndex returns no match
+And   readiness remains frozen (loc_canonical stays None)
+
+Given session.scene_locations contains "Festival Square" from a prior turn
+And   the current player message does not mention the location
+When  the tick runs
+Then  loc_canonical is taken from scene_locations
+And   readiness still increases (zone continues to match without re-detection)
+```
+
+Zone names in `## Schedule` are slug-style (`festival_square`); `_tick_event_scheduler`
+normalises both the zone name and `loc_canonical` via `.replace("_", " ")` before comparing,
+so slug-style and display-name canonicals both match. A zone with no corresponding
+location file will never produce a `loc_canonical` match and will remain frozen indefinitely.
+
+---
+
 ## Out of Scope
 
 - Multi-event arbitration among simultaneous winners
