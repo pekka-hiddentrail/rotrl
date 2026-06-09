@@ -14,16 +14,14 @@
 > so that I can synthesise music entirely in the browser without the server generating audio.
 
 This spec pins the request/response shape for the music endpoint family. The only Tier 0 endpoint
-is `POST /music/calm/next-phrase`. All types in this contract should use the casing convention
-already established in the project API (check `api/main.py` for current practice — camelCase vs
-snake_case; this spec uses camelCase as placeholder and defers to the project convention).
+is `POST /api/music/calm/next_phrase`. Tier 0 uses snake_case request/response fields.
 
 ---
 
 ## Background
 
 - Given the FastAPI backend is running
-- And no session is required for a basic phrase request (though `sessionId` may be passed for future context)
+- And no session is required for a basic phrase request (though `session_id` may be passed for future context)
 - And the `mood` for all Tier 0 requests is `"calm"`
 
 ---
@@ -39,11 +37,11 @@ snake_case; this spec uses camelCase as placeholder and defers to the project co
 ```gherkin
 Given the frontend has no stored phrase state
 When  the frontend sends:
-        POST /music/calm/next-phrase
-        { "sessionId": "demo", "seed": 12345, "previousState": null }
+        POST /api/music/calm/next_phrase
+        { "session_id": "demo", "seed": 12345, "previous_state": null }
 Then  the backend responds 200 OK
 And   the response body matches the phrase schema (see AC-003)
-And   response.state.motifId is a non-empty string
+And   response.state.motif_id is a non-empty string
 And   response.state.novelty equals 1
 ```
 
@@ -56,13 +54,13 @@ And   response.state.novelty equals 1
 **Scenario:** Continuation — passing last phrase's state for musical coherence.
 
 ```gherkin
-Given phrase 1 was returned with state { motifId: "m001", motifDegrees: [1,2,3,5], ... }
+Given phrase 1 was returned with state { motif_id: "m001", motif_degrees: [1,2,3,5], ... }
 When  the frontend sends:
-        POST /music/calm/next-phrase
-        { "sessionId": "demo", "seed": 99, "previousState": <phrase1.state> }
+        POST /api/music/calm/next_phrase
+        { "session_id": "demo", "seed": 99, "previous_state": <phrase1.state> }
 Then  the backend responds 200 OK
-And   response.state.motifId is non-null
-And   the response phrase begins with a note consistent with previousState.motifDegrees
+And   response.state.motif_id is non-null
+And   the response phrase begins with a note consistent with previous_state.motif_degrees
 ```
 
 ---
@@ -77,12 +75,12 @@ And   the response phrase begins with a note consistent with previousState.motif
 Given a phrase has been generated and returned
 When  the response body is inspected
 Then  it contains these top-level fields with correct types:
-        phraseId     : string   (e.g. "calm_20260609_12345")
+        phrase_id     : string   (deterministic for identical request inputs)
         mood         : "calm"
         key          : "C"
         scale        : "major_pentatonic"
         bpm          : integer in [88, 108]
-        timeSignature: "4/4"
+        time_signature: "4/4"
         bars         : 4
         events       : array (min 1 element)
         state        : object
@@ -94,10 +92,10 @@ And   each event in events contains:
         duration : one of "8n", "4n", "2n"
         velocity : number  0.0–1.0
 And   state contains:
-        motifId      : string
-        motifDegrees : array of integers from {1, 2, 3, 5, 6}
-        cadenceDegree: integer from {1, 3, 5}
-        highestDegree: integer from {1, 2, 3, 5, 6}
+        motif_id      : string
+        motif_degrees : array of integers from {1, 2, 3, 5, 6}
+        cadence_degree: integer from {1, 3, 5}
+        highest_degree: integer from {1, 2, 3, 5, 6}
         novelty      : integer >= 1
 ```
 
@@ -105,12 +103,12 @@ And   state contains:
 
 ```json
 {
-  "phraseId": "calm_20260609_12345",
+        "phrase_id": "calm_s12345_h9f0a1c2d",
   "mood": "calm",
   "key": "C",
   "scale": "major_pentatonic",
   "bpm": 96,
-  "timeSignature": "4/4",
+        "time_signature": "4/4",
   "bars": 4,
   "events": [
     { "bar": 1, "beat": 1.0, "note": "C5", "midi": 72, "duration": "4n", "velocity": 0.6 },
@@ -118,32 +116,29 @@ And   state contains:
     { "bar": 1, "beat": 3.0, "note": "D5", "midi": 74, "duration": "2n", "velocity": 0.5 }
   ],
   "state": {
-    "motifId": "m_12345_001",
-    "motifDegrees": [1, 3, 2],
-    "cadenceDegree": 1,
-    "highestDegree": 3,
+                "motif_id": "m_12345_001",
+                "motif_degrees": [1, 3, 2],
+                "cadence_degree": 1,
+                "highest_degree": 3,
     "novelty": 1
   }
 }
 ```
 
-> **Note on casing:** the field names above use camelCase as a placeholder. The final implementation
-> should match the casing convention used by existing endpoints in `api/main.py`.
-
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-004 — Same seed + same previousState returns identical phrase
+### AC-004 — Same seed + same previous_state returns identical phrase
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 **Scenario:** Determinism — essential for debugging and phrase replay.
 
 ```gherkin
-Given seed=12345 and previousState=null
-When  POST /music/calm/next-phrase is called twice with identical request bodies
+Given seed=12345 and previous_state=null
+When  POST /api/music/calm/next_phrase is called twice with identical request bodies
 Then  both responses have identical events arrays
 And   both responses have identical state objects
-And   both responses have the same phraseId
+And   both responses have the same phrase_id
 ```
 
 ---
@@ -171,13 +166,8 @@ And   the backend never writes WAV, MP3, OGG, or MIDI files to disk for this end
 **Scenario:** Bad input is rejected at the API boundary.
 
 ```gherkin
-Given a request body with mood="combat" (not yet supported at Tier 0)
-When  POST /music/calm/next-phrase is called
-Then  the backend responds 422 Unprocessable Entity
-And   the error body contains "error" and "detail" fields
-
 Given a request body where seed is a non-integer string
-When  POST /music/calm/next-phrase is called
+When  POST /api/music/calm/next_phrase is called
 Then  the backend responds 422 Unprocessable Entity
 ```
 
@@ -191,7 +181,7 @@ Then  the backend responds 422 Unprocessable Entity
 
 ```gherkin
 Given the generator configuration forces all validation checks to fail (test-only)
-When  POST /music/calm/next-phrase is called
+When  POST /api/music/calm/next_phrase is called
 Then  the backend responds 422
 And   the error body contains:
         { "error": "generation_failed", "attempts": <int>, "detail": "<reason>" }
@@ -202,8 +192,8 @@ And   no 500 Internal Server Error is returned
 
 ## Out of Scope
 
-- `GET /music/calm/phrase/{phraseId}` — phrase persistence and retrieval (future Tier 1)
-- `POST /music/transition` — mood stingers and transitions (Tier 2+)
+- `GET /api/music/calm/phrase/{phrase_id}` — phrase persistence and retrieval (future Tier 1)
+- `POST /api/music/transition` — mood stingers and transitions (Tier 2+)
 - WebSocket streaming of notes one-by-one — all notes are returned in a single batch
 - Audio files or base64 audio in any response field (Tier 0 constraint)
 - Session-linked music state persistence — state is passed by the client each call (Tier 0)
@@ -216,19 +206,16 @@ And   no 500 Internal Server Error is returned
 
 | Method | Path                         | Tier | Purpose                              |
 |--------|------------------------------|------|--------------------------------------|
-| POST   | `/music/calm/next-phrase`    | 0    | Generate one 4-bar calm phrase       |
-| GET    | `/music/calm/phrase/{id}`    | 1    | Retrieve a previously generated phrase |
-| POST   | `/music/transition`          | 2+   | Request a mood-transition stinger    |
+| POST   | `/api/music/calm/next_phrase`    | 0    | Generate one 4-bar calm phrase       |
+| GET    | `/api/music/calm/phrase/{id}`    | 1    | Retrieve a previously generated phrase |
+| POST   | `/api/music/transition`          | 2+   | Request a mood-transition stinger    |
 
-**Casing convention:** Defer to whatever `api/main.py` uses for existing POST body fields —
-currently a mix. Recommend aligning to `snake_case` for consistency with Python internals and
-existing Pydantic models, but this is an open question (see MUSIC_TODO.md).
+**Casing convention:** Tier 0 uses snake_case fields in both request and response.
 
 **Related specs:**
 - [music-calm-generation.feature](music-calm-generation.feature) — generator rules this endpoint wraps
 - [music-calm-playback.feature](music-calm-playback.feature) — frontend that calls this endpoint
 
 **Open questions:**
-- snake_case vs camelCase for request/response fields?
-- Should `sessionId` be required or optional?
+- Should `session_id` be required or optional?
 - Should `bpm` be fixed per session or allowed to vary per phrase?

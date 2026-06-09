@@ -127,13 +127,13 @@ And   no phrase ends on D or A
 ### AC-007 — Seeded generation is deterministic
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-**Scenario:** The same seed + previous state always produces identical output.
+**Scenario:** The same seed + previous_state always produces identical output.
 
 ```gherkin
-Given seed=12345 and previousState=null
+Given seed=12345 and previous_state=null
 When  the calm phrase endpoint is called twice with the same inputs
 Then  both responses contain identical events (same notes, durations, beats, bars)
-And   both responses return the same phraseId prefix
+And   both responses return the same phrase_id
 ```
 
 ---
@@ -145,11 +145,11 @@ And   both responses return the same phraseId prefix
 **Scenario:** Phrase N+1 references the motif extracted from phrase N, creating continuity.
 
 ```gherkin
-Given phrase 1 was generated and returned state.motifDegrees=[1, 2, 3, 5]
-When  phrase 2 is requested with previousState from phrase 1
-Then  phrase 2 begins with a note derived from or related to motifDegrees
-And   the state returned by phrase 2 carries a non-null motifId
-And   calling again with the same previousState returns the same phrase 2 (seeded)
+Given phrase 1 was generated and returned state.motif_degrees=[1, 2, 3, 5]
+When  phrase 2 is requested with previous_state from phrase 1
+Then  phrase 2 begins with a note derived from or related to motif_degrees
+And   the state returned by phrase 2 carries a non-null motif_id
+And   calling again with the same previous_state returns the same phrase 2 (seeded)
 ```
 
 ---

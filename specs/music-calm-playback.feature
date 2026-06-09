@@ -24,7 +24,7 @@ schedules a full 4-bar phrase, then requests the next one before the current one
 
 - Given the app is loaded in a browser that supports Web Audio API
 - And a session is active (or a dev-mode "music only" path is available)
-- And the backend `POST /music/calm/next-phrase` endpoint is reachable
+- And the backend `POST /api/music/calm/next_phrase` endpoint is reachable
 
 ---
 
@@ -61,7 +61,7 @@ And   phrase fetching and playback begin
 Given the app is in a session
 And   the music player is stopped
 When  the user activates the "Start Music" control
-Then  the frontend calls POST /music/calm/next-phrase with seed and previousState=null
+Then  the frontend calls POST /api/music/calm/next_phrase with seed and previous_state=null
 And   the returned events are scheduled into Tone.js Transport (or Web Audio clock)
 And   the first note plays within one beat of the scheduled start time
 And   the music player UI transitions to "Playing" state
@@ -112,7 +112,7 @@ And   each note's duration maps correctly: "4n"→quarter, "2n"→half, "8n"→e
 ```gherkin
 Given the music player is playing
 When  a 4-bar phrase is being synthesised
-Then  exactly one HTTP request was made to /music/calm/next-phrase for that phrase
+Then  exactly one HTTP request was made to /api/music/calm/next_phrase for that phrase
 And   no HTTP request is made per note event
 And   the next phrase request is made while the current phrase is still playing
       (look-ahead scheduling — not after the last note ends)
@@ -146,7 +146,7 @@ And   the note's MIDI value is converted to frequency before being sent to the o
 ```gherkin
 Given a "Generate Phrase (Debug)" button or action is available in dev mode
 When  the developer activates it
-Then  the frontend calls POST /music/calm/next-phrase
+Then  the frontend calls POST /api/music/calm/next_phrase
 And   the response JSON is displayed in a debug panel or browser console
 And   no audio is played unless playback is separately enabled
 ```
@@ -165,7 +165,7 @@ When  the debug music panel is open
 Then  the panel shows either:
         (a) the raw phrase JSON from the backend, or
         (b) a compact note list: e.g. "B1: C5-4n E5-4n D5-2n | B2: G4-2n A4-8n ..."
-And   the motifId and cadenceDegree are visible
+And   the motif_id and cadence_degree are visible
 And   bpm is displayed
 ```
 
@@ -175,14 +175,14 @@ And   bpm is displayed
 ### AC-009 — Phrase motif state is passed between consecutive requests
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-**Scenario:** The frontend maintains a rolling previousState so each phrase is musically
+**Scenario:** The frontend maintains a rolling previous_state so each phrase is musically
 connected to the last.
 
 ```gherkin
 Given phrase N has finished playing
-And   the frontend stored phrase N's state.motifId and state.motifDegrees
+And   the frontend stored phrase N's state.motif_id and state.motif_degrees
 When  the frontend requests phrase N+1
-Then  the request body includes previousState = { phrase N's state }
+Then  the request body includes previous_state = { phrase N's state }
 And   the seed for phrase N+1 is derived or incremented from the session seed
 ```
 

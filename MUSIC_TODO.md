@@ -46,8 +46,8 @@ Minimum backend to make calm playback work end-to-end.
 - [ ] **M0-1 - Music models and config**
   - [ ] Define `CalmConfig` dataclass: mood, bpm_range, phrase_bars, register, scale, durations, cadence_weights, motif config, max_retries
   - [ ] Define `NoteEvent` dataclass: bar, beat, note, midi, duration, velocity
-  - [ ] Define `PhraseState` dataclass: motifId, motifDegrees, cadenceDegree, highestDegree, novelty
-  - [ ] Define `CalmPhrase` dataclass: phraseId, mood, key, scale, bpm, timeSignature, bars, events, state
+  - [ ] Define `PhraseState` dataclass: motif_id, motif_degrees, cadence_degree, highest_degree, novelty
+  - [ ] Define `CalmPhrase` dataclass: phrase_id, mood, key, scale, bpm, time_signature, bars, events, state
 
 - [ ] **M0-2 - Scale and degree utilities**
   - [ ] Implement `degree_to_note(degree, octave_hint)` → note name + MIDI
@@ -74,8 +74,8 @@ Minimum backend to make calm playback work end-to-end.
   - [ ] On exhausted retries: raise `GenerationFailedError` with attempt count
 
 - [ ] **M0-5 - `/music/calm/next-phrase` endpoint**
-  - [ ] Add `POST /music/calm/next-phrase` to `api/main.py`
-  - [ ] Pydantic request model: `sessionId`, `seed`, `previousState` (nullable)
+  - [ ] Add `POST /api/music/calm/next_phrase` to `api/main.py`
+  - [ ] Pydantic request model: `session_id`, `seed`, `previous_state` (nullable)
   - [ ] Pydantic response model: full `CalmPhrase` shape
   - [ ] Wire up generator with config, seed, and previousState
   - [ ] Handle `GenerationFailedError` → HTTP 422 with structured body
@@ -104,10 +104,10 @@ Minimum backend to make calm playback work end-to-end.
 Minimum frontend to play a calm phrase end-to-end.
 
 - [ ] **M0-F1 - TypeScript types**
-  - [ ] Add `NoteEvent`, `PhraseState`, `CalmPhrase`, `NextPhraseRequest` types to `ui/src/api.ts`
+  - [ ] Add `NoteEvent`, `PhraseState`, `CalmPhrase`, `NextPhraseRequest` types to `ui/src/api.ts` using snake_case field names
 
 - [ ] **M0-F2 - Music API client**
-  - [ ] Add `fetchCalmPhrase(sessionId, seed, previousState)` to `ui/src/api.ts`
+  - [ ] Add `fetchCalmPhrase(session_id, seed, previous_state)` to `ui/src/api.ts`
   - [ ] Handle 422 `generation_failed` error gracefully
 
 - [ ] **M0-F3 - Tone.js dependency**
@@ -136,7 +136,7 @@ Minimum frontend to play a calm phrase end-to-end.
 - [ ] **M0-F6 - Debug phrase view**
   - [ ] "Generate Phrase (Debug)" button — fetch without playing
   - [ ] Display compact note list: `B1: C5-4n E5-4n D5-2n | B2: ...`
-  - [ ] Display `motifId`, `cadenceDegree`, `bpm`
+  - [ ] Display `motif_id`, `cadence_degree`, `bpm`
   - [ ] Gate behind `dev_mode` or always visible TBD
 
 ---
