@@ -72,7 +72,7 @@ describe('LocationZonesPanel — LZ-007 current zone display', () => {
 
   it('renders an enabled move button for each open available move', () => {
     const { onMove } = renderPanel()
-    const btn = screen.getByRole('button', { name: /Alley mouth/i })
+    const btn = screen.getByRole('button', { name: /Alleyway/i })
     expect(btn).not.toBeDisabled()
     fireEvent.click(btn)
     expect(onMove).toHaveBeenCalledWith('center_alleyway')
@@ -80,7 +80,7 @@ describe('LocationZonesPanel — LZ-007 current zone display', () => {
 
   it('disables move buttons while movePending is true', () => {
     renderPanel({}, { movePending: true })
-    const btn = screen.getByRole('button', { name: /Alley mouth/i })
+    const btn = screen.getByRole('button', { name: /Alleyway/i })
     expect(btn).toBeDisabled()
   })
 })
@@ -165,7 +165,7 @@ describe('LocationZonesPanel — LZ-009 access point states', () => {
     const btn = container.querySelector('.lz-move-btn--restricted') as HTMLButtonElement
     expect(btn).toBeTruthy()
     expect(btn.disabled).toBe(true)
-    expect(btn.textContent).toContain('Stone steps')
+    expect(btn.textContent).toContain('Cathedral Stairs')
   })
 
   it('locked button title includes the requirement', () => {
@@ -239,7 +239,7 @@ describe('LocationZonesPanel — collapsed state', () => {
       />,
     )
     expect(screen.queryByText('Open clearing.')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Alley mouth/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Alleyway/i })).not.toBeInTheDocument()
   })
 
   it('collapse button toggles the panel', () => {

@@ -434,6 +434,7 @@ export interface LocationZonesData {
   access_points: LocationAccessPointData[]
   occupants: LocationOccupantData[]
   available_moves: LocationMoveData[]
+  combat_state?: CombatState | null
 }
 
 export async function fetchEventStatus(sessionId: string): Promise<EventStatusData> {

@@ -87,6 +87,7 @@ export default function App() {
   const [zoneActorId, setZoneActorId] = useState('party')
   const [zoneMovePending, setZoneMovePending] = useState(false)
   const [zonePanelCollapsed, setZonePanelCollapsed] = useState(false)
+  const [pendingZoneMove, setPendingZoneMove] = useState<string | null>(null)
   const endAbortRef = useRef<AbortController | null>(null)
   // Refs for reading current state inside async closures (stale closure guard)
   const attackPhaseRef = useRef<AttackPhase>(null)
@@ -164,16 +165,20 @@ export default function App() {
       ? Object.values(characterMap).find(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()) ?? null
       : null
     const speaker = combatPc ?? (activeCharacter ? characterMap[activeCharacter] : null)
-    const sentInput = speaker ? `@${speaker.name}: "${input}"` : input
+    const zoneMovedTo = pendingZoneMove
+    setPendingZoneMove(null)
+    const zoneSuffix = zoneMovedTo ? ` [Moved to: ${zoneMovedTo}]` : ''
+    const sentInput = speaker ? `@${speaker.name}: "${input}"${zoneSuffix}` : input + zoneSuffix
     setError(null)
     setAttention(null)
     setLastInput(input)
     setIntent(null)
+    const displayParts = [input, selectedTarget ? `→ Target: ${selectedTarget}` : null, zoneMovedTo ? `[Moved to: ${zoneMovedTo}]` : null].filter(Boolean)
     setMessages(prev => [
       ...prev,
       {
         role: 'player',
-        content: selectedTarget ? `${input}\n→ Target: ${selectedTarget}` : input,
+        content: displayParts.join('\n'),
         speaker: speaker
           ? { name: speaker.name, portrait: speaker.portrait, color: speaker.color, rune: speaker.rune }
           : null,
@@ -383,10 +388,21 @@ export default function App() {
 
   const handleZoneMove = async (accessPointId: string) => {
     if (!session || zoneMovePending) return
+    // Resolve destination zone name from current data before the API call —
+    // this is the zone name that was shown on the button, so it's always correct.
+    const move = locationZonesData?.available_moves.find(m => m.access_point_id === accessPointId)
+    const destName = move
+      ? (locationZonesData?.zones.find(z => z.id === move.to_zone_id)?.name ?? move.to_zone_id)
+      : null
     setZoneMovePending(true)
     try {
       const refreshed = await postZoneMove(session.id, zoneActorId, accessPointId)
       setLocationZonesData(refreshed)
+      if (destName) setPendingZoneMove(destName)
+      if (refreshed.combat_state != null) {
+        setCombatState(refreshed.combat_state)
+        setCurrentCombatantName(refreshed.combat_state.current_actor ?? null)
+      }
     } catch (e) {
       setToast(String(e))
       setTimeout(() => setToast(null), 3000)

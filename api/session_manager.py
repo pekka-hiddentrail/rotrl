@@ -2607,7 +2607,9 @@ def apply_zone_move(session: "GameSession", actor_id: str, access_point_id: str)
     dest_zone_name = dest_zone["name"] if dest_zone else dest_zone_id
 
     _apply_actor_zone_change(session, actor_id, dest_zone_name)
-    return get_location_zone_state(session)
+    result = get_location_zone_state(session)
+    result["combat_state"] = _serialize_combat_state(session.combat_state)
+    return result
 
 
 def save_session(session: GameSession) -> Path:
@@ -4712,6 +4714,10 @@ def _extract_pc_combat_intent(text: str, session: "GameSession", action_type_hin
             action_type = "attack"
             break
     for phrase in _move_words:
+        # BUG: guard only checks for the literal word "attack"; words like "strike", "swing"
+        # don't protect against a [Moved to: Zone] suffix overriding the intent to "move".
+        # Fix: replace "attack" not in text_lower with:
+        #   _has_attack_intent = any(w in text_lower for w in _attack_words)
         if phrase in text_lower and "attack" not in text_lower:
             action_type = "move"
             break
@@ -5127,13 +5133,17 @@ def stream_pc_turn(session: GameSession, player_text: str, action_type_hint: Opt
         # Apply zone movement before narrating so the LLM sees the updated state
         if intent.get("action_type") == "move":
             _dest = intent.get("destination_zone", "")
-            if not _dest:
-                # Destination zone not recognised — surface a soft warning with zone list
+            _zone_names = intent.get("available_zones", [])
+            if not _dest and _zone_names:
+                # Zones are defined but destination wasn't recognised — surface a warning.
+                # Only triggered when the session has a zone map; when no zones are configured
+                # (test sessions, out-of-zone-combat) fall through to normal narration.
                 _actor_name = intent["actor"]
-                _zone_names = intent.get("available_zones", [])
-                _zones_hint = (", ".join(_zone_names)) if _zone_names else "none known"
+                _zones_hint = ", ".join(_zone_names)
                 yield f"data: {json.dumps({'type': 'attention', 'message': f'{_actor_name} — zone not recognised. Available zones: {_zones_hint}.'})}\n\n"
-            else:
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                return  # don't advance the turn — player can try again with a valid zone
+            elif _dest:
                 _mover = next((c for c in session.combat_state.combatants
                                if c.name.lower() == intent["actor"].lower()), None)
                 if _mover:

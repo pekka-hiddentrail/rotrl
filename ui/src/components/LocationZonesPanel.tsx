@@ -122,7 +122,7 @@ export default function LocationZonesPanel({
               <div className="lz-moves-label">Move</div>
               {available_moves.map(m => {
                 const destZone = zones.find(z => z.id === m.to_zone_id)
-                const label    = m.label || destZone?.name || m.to_zone_id
+                const label    = destZone?.name ?? m.to_zone_id
                 return (
                   <button
                     key={m.access_point_id}
@@ -142,7 +142,7 @@ export default function LocationZonesPanel({
                   : stateLabel
                 const destId   = ap.from === current_zone_id ? ap.to : ap.from
                 const destZone = zones.find(z => z.id === destId)
-                const label    = ap.label || destZone?.name || destId
+                const label    = destZone?.name ?? destId
                 return (
                   <button
                     key={ap.id}
