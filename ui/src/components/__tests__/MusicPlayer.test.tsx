@@ -3,8 +3,19 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import MusicPlayer from '../MusicPlayer'
 import type { CalmPhrase } from '../../api'
 
+// ── Mocks ────────────────────────────────────────────────────────────────────
+
 const stopMock = vi.fn()
-const schedulePhraseMock = vi.fn(() => ({ start_delay_seconds: 0, duration_seconds: 0.2 }))
+
+// Calls onBarChange(1) synchronously so the first bar chip becomes active
+// immediately after schedulePhrase is called, enabling AC-014 assertions.
+const schedulePhraseMock = vi.fn(
+  (_phrase: CalmPhrase, _delay?: number, onBarChange?: (bar: number) => void) => {
+    onBarChange?.(1)
+    return { start_delay_seconds: 0.05, duration_seconds: 2.0 }
+  },
+)
+
 const startAudioContextMock = vi.fn().mockResolvedValue(undefined)
 const fetchCalmPhraseMock = vi.fn<(...args: unknown[]) => Promise<CalmPhrase>>()
 
@@ -31,7 +42,9 @@ vi.mock('../../api', async () => {
   }
 })
 
-function makePhrase(): CalmPhrase {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function makePhrase(overrides: Partial<CalmPhrase> = {}): CalmPhrase {
   return {
     phrase_id: 'p-1',
     mood: 'calm',
@@ -48,8 +61,24 @@ function makePhrase(): CalmPhrase {
       highest_degree: 5,
       novelty: 0.3,
     },
+    ...overrides,
   }
 }
+
+// 4-bar phrase with one event per bar — used for intent-row tests.
+function makePhrase4Bars(): CalmPhrase {
+  return makePhrase({
+    bars: 4,
+    events: [
+      { bar: 1, beat: 1, note: 'C5', midi: 72, duration: '4n', velocity: 88 },
+      { bar: 2, beat: 1, note: 'E5', midi: 76, duration: '4n', velocity: 80 },
+      { bar: 3, beat: 1, note: 'D5', midi: 74, duration: '4n', velocity: 85 },
+      { bar: 4, beat: 1, note: 'G4', midi: 67, duration: '4n', velocity: 78 },
+    ],
+  })
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('MusicPlayer', () => {
   beforeEach(() => {
@@ -58,36 +87,105 @@ describe('MusicPlayer', () => {
     fetchCalmPhraseMock.mockResolvedValue(makePhrase())
   })
 
-  it('starts playback and fetches one phrase on Start', async () => {
-    render(<MusicPlayer sessionId="sess-1" />)
+  // AC-001, AC-002 ─────────────────────────────────────────────────────────────
 
+  it('shows Stopped status on mount, no fetch or audio before user gesture (AC-001)', () => {
+    render(<MusicPlayer sessionId="sess-1" />)
+    expect(screen.getByText('Stopped')).toBeInTheDocument()
+    expect(fetchCalmPhraseMock).not.toHaveBeenCalled()
+    expect(startAudioContextMock).not.toHaveBeenCalled()
+  })
+
+  it('resumes AudioContext and schedules phrase 1 on Start (AC-002)', async () => {
+    render(<MusicPlayer sessionId="sess-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
 
     await waitFor(() => expect(startAudioContextMock).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(schedulePhraseMock).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('Playing')).toBeInTheDocument()
+  })
+
+  // AC-003 ─────────────────────────────────────────────────────────────────────
+
+  it('Stop Music triggers a 0.5s fade stop and transitions to Stopped (AC-003, AC-013)', async () => {
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+    await waitFor(() => expect(schedulePhraseMock).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Music' }))
+
+    expect(stopMock).toHaveBeenCalledWith(0.5)
+    expect(screen.getByText('Stopped')).toBeInTheDocument()
+  })
+
+  it('no further fetches occur after Stop (AC-003)', async () => {
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+    // Wait until phrase 1 + prefetch are both in flight
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Music' }))
+    const countAtStop = fetchCalmPhraseMock.mock.calls.length
+
+    await new Promise(resolve => setTimeout(resolve, 200))
+    expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(countAtStop)
+  })
+
+  // AC-005 / AC-011 ─────────────────────────────────────────────────────────────
+
+  it('prefetch for phrase 2 starts immediately after phrase 1 schedules — no timer delay (AC-005, AC-011)', async () => {
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+
+    // Both phrase-1 fetch and phrase-2 prefetch should complete quickly
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
+    // Only phrase 1 is scheduled so far (phrase 2 waits in prefetchedRef)
     expect(schedulePhraseMock).toHaveBeenCalledTimes(1)
   })
 
-  it('shows Stopped status and no Off badge', () => {
+  it('phrase-1 fetch uses previous_state=null; prefetch uses phrase-1 state (AC-009, AC-011)', async () => {
     render(<MusicPlayer sessionId="sess-1" />)
-    expect(screen.getByText('Stopped')).toBeInTheDocument()
-    expect(screen.queryByText('Off')).not.toBeInTheDocument()
-  })
-
-  it('stop button halts playback and prevents follow-up fetches', async () => {
-    render(<MusicPlayer sessionId="sess-1" />)
-
     fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
-    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(1))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stop Music' }))
-    expect(stopMock).toHaveBeenCalled()
-
-    await new Promise(resolve => setTimeout(resolve, 250))
-    expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
+    // First call: previous_state = null
+    expect(fetchCalmPhraseMock.mock.calls[0][2]).toBeNull()
+    // Second call (prefetch): previous_state = phrase-1's state
+    expect(fetchCalmPhraseMock.mock.calls[1][2]).toEqual(makePhrase().state)
   })
 
-  it('volume slider persists to localStorage and updates displayed value', () => {
+  // AC-012 ─────────────────────────────────────────────────────────────────────
+
+  it('fetch failure leaves prefetchedRef null — fallback replay path is armed (AC-012)', async () => {
+    // Phrase 1 succeeds; prefetch (phrase 2) fails
+    fetchCalmPhraseMock
+      .mockResolvedValueOnce(makePhrase())
+      .mockRejectedValueOnce(new Error('network'))
+
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+
+    // Phrase 1 schedules fine; prefetch call is made and fails
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
+    expect(schedulePhraseMock).toHaveBeenCalledTimes(1)
+    // No error shown for a background prefetch failure (error shown only at swap time)
+    expect(screen.queryByText(/timed out/i)).not.toBeInTheDocument()
+  })
+
+  // AC-013 — hard stop on error ─────────────────────────────────────────────────
+
+  it('fetch error in handleStart triggers hard stop — no fade (AC-013)', async () => {
+    fetchCalmPhraseMock.mockRejectedValueOnce(new Error('network'))
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+
+    await waitFor(() => expect(stopMock).toHaveBeenCalledWith(0))
+    expect(screen.queryByText('Playing')).not.toBeInTheDocument()
+  })
+
+  // AC-010 ─────────────────────────────────────────────────────────────────────
+
+  it('volume slider persists to localStorage and displays updated value (AC-010)', () => {
     render(<MusicPlayer sessionId="sess-1" />)
     const slider = screen.getByLabelText('Music volume') as HTMLInputElement
 
@@ -97,11 +195,54 @@ describe('MusicPlayer', () => {
     expect(window.localStorage.getItem('rotrl.music.volume')).toBe('50')
   })
 
-  it('restores volume from localStorage on mount', () => {
+  it('volume is restored from localStorage on mount (AC-010)', () => {
     window.localStorage.setItem('rotrl.music.volume', '30')
     render(<MusicPlayer sessionId="sess-1" />)
-
     const slider = screen.getByLabelText('Music volume') as HTMLInputElement
     expect(slider.value).toBe('30')
+  })
+
+  // AC-014 ─────────────────────────────────────────────────────────────────────
+
+  it('Intent row shows all bar chips after phrase is scheduled (AC-014)', async () => {
+    fetchCalmPhraseMock.mockResolvedValue(makePhrase4Bars())
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+
+    await waitFor(() => expect(schedulePhraseMock).toHaveBeenCalledTimes(1))
+
+    expect(screen.getByText('Intent:')).toBeInTheDocument()
+    expect(screen.getByText('B1')).toBeInTheDocument()
+    expect(screen.getByText('B2')).toBeInTheDocument()
+    expect(screen.getByText('B3')).toBeInTheDocument()
+    expect(screen.getByText('B4')).toBeInTheDocument()
+  })
+
+  it('active bar chip is highlighted when onBarChange fires (AC-014)', async () => {
+    fetchCalmPhraseMock.mockResolvedValue(makePhrase4Bars())
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+
+    await waitFor(() => expect(schedulePhraseMock).toHaveBeenCalledTimes(1))
+
+    // schedulePhraseMock calls onBarChange(1), so B1 chip should be active
+    const b1 = screen.getByText('B1')
+    expect(b1.closest('.music-intent-bar')).toHaveClass('music-intent-bar-active')
+
+    // B2–B4 should not be active
+    expect(screen.getByText('B2').closest('.music-intent-bar')).not.toHaveClass('music-intent-bar-active')
+    expect(screen.getByText('B3').closest('.music-intent-bar')).not.toHaveClass('music-intent-bar-active')
+    expect(screen.getByText('B4').closest('.music-intent-bar')).not.toHaveClass('music-intent-bar-active')
+  })
+
+  it('Stop Music clears the active bar indicator (AC-014)', async () => {
+    fetchCalmPhraseMock.mockResolvedValue(makePhrase4Bars())
+    render(<MusicPlayer sessionId="sess-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
+    await waitFor(() => expect(schedulePhraseMock).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Music' }))
+
+    expect(document.querySelector('.music-intent-bar-active')).toBeNull()
   })
 })

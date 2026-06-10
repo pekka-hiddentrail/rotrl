@@ -23,8 +23,9 @@ browser-side synthesis with Tone.js. No audio files generated on the server.
 The system is designed to grow from a single melody line to a multi-track arrangement while
 keeping each tier independently shippable.
 
-Status snapshot (2026-06-09): Tier 0 backend/API/tests and frontend playback controls are complete.
-Music Off toggle behavior is implemented in the UI and persists via localStorage.
+Status snapshot (2026-06-10): Tier 0 backend/API/tests and frontend playback controls are complete.
+Tier 1 prefetch pipeline, stop fade, and audio quality fixes are complete.
+Bar-level Intent indicator implemented (AC-014).
 
 ---
 
@@ -139,6 +140,8 @@ Minimum frontend to play a calm phrase end-to-end.
   - [x] Fix: capture `nowMs` after fetch so `startDelayMs` is not stale
   - [x] Fix: reset phrase clock when scheduler drifts behind real time (late fetch or backgrounded tab)
   - [x] Fix: `Tone.Destination` (deprecated) → `Tone.getDestination()`
+  - [x] Bar-level Intent indicator: "Intent: B1 B2 B3 B4" row — active chip highlighted when Transport bar callback fires
+  - [x] Per-bar highlighting in detailed note list (mirrors active bar from Intent row)
 
 - [x] **M0-F6 - Debug phrase view**
   - [x] "Generate Phrase (Debug)" button — fetch without playing, gated behind `devMode` prop
@@ -151,25 +154,35 @@ Minimum frontend to play a calm phrase end-to-end.
 
 Improve continuity so music loops without gaps or jarring cuts.
 
-- [ ] **M1-1 - Phrase queue**
-  - [ ] Pre-fetch next phrase while current is still playing (look-ahead buffer)
-  - [ ] Keep 2 phrases queued at all times when playing
-  - [ ] Handle fetch failures gracefully (replay last phrase rather than silence)
+- [x] **M1-1 + M1-2 - Pre-fetch pipeline and seamless bar-boundary switching**
+  - [x] Add `prefetchedRef: CalmPhrase | null` — holds a fetched phrase not yet scheduled
+  - [x] Add `prefetchingRef: boolean` — prevents duplicate in-flight fetches
+  - [x] `triggerPrefetch()` — starts background fetch into `prefetchedRef`; called immediately after each `scheduleAndContinue()`, no timer delay
+  - [x] Replace single-fetch timer cascade with swap timer: fires `SWAP_BUFFER_MS = 500 ms` before phrase end
+  - [x] Swap timer handler (`handleSwap`): takes `prefetchedRef`, schedules at exact `nextScheduleAtMsRef`, calls `triggerPrefetch()` for next phrase
+  - [x] On start: schedule phrase 1, immediately call `triggerPrefetch()` for phrase 2 (no wait)
+  - [x] `previous_state` snapshotted at fetch time via `previousStateRef` set in `scheduleAndContinue` (motif continuity across pipeline)
+  - [x] Handle `prefetchedRef === null` at swap time: poll every `PREFETCH_POLL_MS = 50 ms` up to `PREFETCH_TIMEOUT_MS = 3000 ms`
+  - [x] Fallback: if timeout exceeded, replay `lastScheduledPhraseRef` from bar boundary — never go silent; show error in UI
+  - [x] `schedulePhrase` guards minimum ahead time (`MIN_SCHEDULE_AHEAD_S = 0.15 s`) to prevent past-scheduling
 
-- [ ] **M1-2 - Scheduled loop switching**
-  - [ ] Switch to next phrase at the exact bar boundary, not when the last note ends
-  - [ ] Pass motif state from completed phrase to queued phrase request
+- [x] **M1-3 - Stop fade-out**
+  - [x] `stop(fadeSecs = 0)` on `CalmPhrasePlayer` — ramps `Tone.getDestination().volume` to −60 dB over `fadeSecs`, then cancels events and stops Transport
+  - [x] User Stop button: `stop(0.5)` — 0.5 s fade; UI transitions to Stopped immediately
+  - [x] Error stop and unmount cleanup: `stop(0)` — hard stop, no fade
+  - [x] Volume restored to saved level 600 ms after fade so next Start is not silent
+  - [x] Global `tone` mock added to `ui/src/test/setup.ts` — prevents tone errors in all App tests
+  - [x] Fix: snapshot `scheduledIds` immediately in `stop(fadeSecs)` — prevents fade timer from cancelling next phrase's notes
+  - [x] Fix: cancel pending fade timer in `schedulePhrase` — prevents stale fade from stopping Transport mid-new-phrase
+  - [x] Fix: `MIN_SCHEDULE_AHEAD_S` raised 0.05 → 0.15 s — prevents first beat being scheduled in Tone.js past on slower systems
+  - [x] Fix: grace note at phrase boundary — `triggerRelease` scheduled 1 ms before each phrase start; synth `release` reduced 0.2 → 0.05 s
+  - [x] `schedulePhrase` accepts optional `onBarChange: (bar: number) => void` — bar callbacks scheduled on Transport at each bar start
 
-- [ ] **M1-3 - Stop/start without clicks or pops**
-  - [ ] Fade out over 0.5 s on Stop
-  - [ ] Fade in over 0.25 s on Start
-  - [ ] Do not cut notes mid-sustain
-
-- [ ] **M1-4 - Transport improvements**
+- [ ] **M1-4 - Transport improvements** *(deferred — not part of next step)*
   - [ ] BPM changes between phrases should be glide-rate limited
   - [ ] Expose tempo as a visible control (±10 BPM trim)
 
-- [ ] **M1-5 - Debugging improvements**
+- [ ] **M1-5 - Debugging improvements** *(deferred)*
   - [ ] Phrase history panel: last N phrases with motifId, seed, cadence
   - [ ] Export last phrase as JSON for regression testing
 

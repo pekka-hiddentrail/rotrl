@@ -1,7 +1,7 @@
 # FEATURE — Calm Music Playback (Frontend)
 
 **ID:** music-calm-playback
-**Status:** Implemented (Tier 0)
+**Status:** Tier 0 + Tier 1 M1-1/M1-2/M1-3 implemented; AC-014 (bar indicator) implemented
 **Area:** Frontend
 **Tags:** @music @playback @calm @ui @webaudio
 
@@ -14,9 +14,9 @@
 > so that the atmosphere is enhanced without distracting from gameplay.
 
 The frontend fetches symbolic note events from the backend and synthesises them in the browser
-using Tone.js or the Web Audio API directly. No audio files are downloaded. The synth is a simple
-triangle or square oscillator (chiptune aesthetic). Playback is phrase-based: the frontend
-schedules a full 4-bar phrase, then requests the next one before the current one ends.
+using Tone.js. No audio files are downloaded. The synth is a triangle oscillator (chiptune
+aesthetic). Playback is phrase-based: the frontend pre-fetches the next phrase immediately after
+scheduling the current one, so the swap at each bar boundary is instantaneous with no silence.
 
 ---
 
@@ -114,8 +114,8 @@ Given the music player is playing
 When  a 4-bar phrase is being synthesised
 Then  exactly one HTTP request was made to /api/music/calm/next_phrase for that phrase
 And   no HTTP request is made per note event
-And   the next phrase request is made while the current phrase is still playing
-      (look-ahead scheduling — not after the last note ends)
+And   the next phrase prefetch begins immediately after the current phrase is scheduled
+      (not on a timer — fetch and schedule are decoupled)
 ```
 
 ---
@@ -210,6 +210,89 @@ And   Tone.getDestination().volume is set to the corresponding dB level before a
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-011 — Seamless bar-boundary phrase switching (Tier 1)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Phrases transition without audible silence between them.
+
+```gherkin
+Given the music player is playing
+And   phrase N is currently scheduled on the Transport
+When  the swap timer fires (~500 ms before phrase N ends)
+Then  phrase N+1 is already pre-fetched and waiting in the prefetch buffer
+And   phrase N+1 is scheduled onto the Transport immediately at the exact bar boundary
+      (nextScheduleAtMs = phraseN.startMs + phraseN.durationMs)
+And   there is no gap between the last note of phrase N and the first note of phrase N+1
+And   the prefetch for phrase N+2 starts immediately after phrase N+1 is scheduled
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-012 — Fetch failure fallback: replay last phrase (Tier 1)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** A slow or failed network request must not produce silence.
+
+```gherkin
+Given phrase N+1 prefetch is in flight when the swap timer fires
+When  the prefetch has not returned within 3000 ms of the swap time
+Then  the last successfully played phrase is rescheduled from the bar boundary
+And   playback continues without silence
+And   an error indicator is shown in the UI
+
+Given the prefetch returns a non-2xx response or network error
+Then  the same fallback replay applies
+And   the next prefetch attempt is started immediately after the fallback is scheduled
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-013 — Stop fade-out: no hard cut (Tier 1)
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** Stopping music fades out smoothly instead of cutting mid-note.
+
+```gherkin
+Given the music player is in "Playing" state
+When  the user activates the "Stop Music" control
+Then  Tone.getDestination().volume ramps to -Infinity dB over 0.5 seconds
+And   all scheduled note events are cancelled after the fade completes
+And   the Transport is stopped after the fade completes
+And   the music player UI transitions to "Stopped" state immediately on click
+      (UI is responsive; audio fades in background)
+
+Given the player is stopped due to an error (not user action)
+Then  a hard stop is used instead of fade (no further audio output is desired)
+```
+
+---
+
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-014 — Active bar indicator: Intent row
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Scenario:** The GM can see which bar of the current phrase is playing, and follow the
+note list without getting lost.
+
+```gherkin
+Given a phrase has been scheduled and is playing
+Then  the music player shows an Intent row: "Intent: B1  B2  B3  B4"
+      (one chip per bar in the phrase, in order)
+And   the chip for the currently playing bar is visually highlighted
+And   the detailed note row below mirrors the same highlighting on its bar labels
+
+When  bar N starts playing (Transport callback fires for that bar)
+Then  the chip for BN becomes active and all other chips become inactive
+
+When  the music player is stopped (fade or hard stop)
+Then  no bar chip is highlighted
+```
+
+---
+
 ## Out of Scope
 
 - Harmony, second voice, bass line, or percussion — single monophonic synth only
@@ -220,7 +303,9 @@ And   Tone.getDestination().volume is set to the corresponding dB level before a
 - A separate "Music Off" toggle — Stop Music button is sufficient
 - MIDI output or export
 - Mobile PWA background audio
-- Phrase queue lookahead (2–3 phrases buffered) — Tier 1
+- Phrase queue lookahead beyond 1 (keep 2–3 pre-fetched simultaneously) — Tier 2+
+- BPM glide rate limiting between phrases — Tier 1 M1-4 (deferred)
+- ±10 BPM tempo trim control — Tier 1 M1-4 (deferred)
 
 ---
 
@@ -235,10 +320,34 @@ And   Tone.getDestination().volume is set to the corresponding dB level before a
 - Volume: `Tone.getDestination().volume.value` — mapped from linear 0–100 slider with +12 dB boost
   so the full range is −∞ to +12 dB; default slider position is 70 (~+9 dB)
 
-**Scheduling timing note:** `nowMs` is captured *after* the phrase fetch completes so that
-`startDelayMs` reflects actual remaining lookahead time, not stale pre-fetch time. If the
-scheduler falls behind real time (late fetch, tab backgrounded), the clock resets to
-`now + 100ms` rather than attempting to schedule notes into the past.
+**Scheduling timing note (Tier 0):** `nowMs` is captured *after* the phrase fetch completes so that
+`startDelayMs` reflects actual remaining lookahead time. If the scheduler falls behind real time,
+the clock resets to `now + 100ms` rather than scheduling notes into the past.
+
+**Tier 1 scheduling architecture:** Fetching and scheduling are decoupled.
+- `prefetchedRef: CalmPhrase | null` holds a phrase that has been fetched but not yet scheduled
+- `triggerPrefetch()` — fires immediately after each `schedulePhrase()` call, no timer delay
+- Swap timer fires `SWAP_BUFFER_MS` (500 ms) before phrase N ends
+- On swap: take `prefetchedRef`, call `schedulePhrase` at the exact next bar boundary, call `triggerPrefetch()` for N+2
+- `nextScheduleAtMs` is tracked in Transport seconds (not wall-clock ms) to stay locked to the audio clock
+- Fallback: if `prefetchedRef` is null at swap time, poll every 50 ms up to `PREFETCH_TIMEOUT_MS` (3000 ms), then replay last phrase
+- Stop path: `player.stop(fadeSecs = 0.5)` — snapshots current `scheduledIds` immediately, ramps `Tone.getDestination().volume` to −∞ dB, then cancels only the snapshotted IDs and stops Transport; `schedulePhrase` called during a fade cancels the fade timer so new-phrase notes are never affected
+
+**Minimum schedule lookahead:** `MIN_SCHEDULE_AHEAD_S = 0.15 s` — 150 ms minimum gap between the
+current Transport position and the first note of a newly scheduled phrase. Prevents the first beat
+from being treated as already-past on slower systems.
+
+**Grace note / phrase-boundary fix:** A `triggerRelease()` is scheduled 1 ms before each phrase's
+first note fires. This flushes any lingering release tail from the previous phrase before the new
+attack starts. The synth `release` envelope is set to `0.05 s` (down from `0.2 s`) so tails are
+inaudible even if the boundary callback is slightly late.
+
+**Bar indicator (AC-014):** `schedulePhrase` accepts an optional `onBarChange?: (bar: number) => void`
+callback. It schedules a Transport callback at the start of each bar that fires the callback with the
+bar number. `MusicPlayer` passes `setCurrentBar` and renders:
+- Intent row: compact chips "B1 B2 B3 B4" — active chip highlighted green
+- Notes row: same highlighting on bar labels in the detailed note list
+Both reset to `currentBar = 0` (no highlight) when music stops.
 
 **Duration mapping:**
 

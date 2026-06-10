@@ -14,7 +14,9 @@ export function getMusicSynth(): Tone.Synth {
         attack: 0.01,
         decay: 0.1,
         sustain: 0.3,
-        release: 0.2,
+        // Short release prevents the tail of a phrase's last note from bleeding
+        // into the next phrase's first attack on the monophonic synth.
+        release: 0.05,
       },
     }).toDestination()
   }
