@@ -247,6 +247,102 @@ class TestActionCardIncludesActionType:
 
 # ── AC-007 — session log includes action_type ─────────────────────────────────
 
+class TestEnemyMoveZone:
+    """Enemy move action: target is a zone name and the combatant's zone is updated."""
+
+    def _events(self, chunks):
+        events = []
+        for chunk in chunks:
+            for line in chunk.splitlines():
+                if line.startswith("data: "):
+                    events.append(json.loads(line[6:]))
+        return events
+
+    def _session_with_zones(self):
+        s = _session()
+        s.combat_state.known_zones = ["center", "alleyway", "market stalls"]
+        s.combat_state.combatants[1].zone = "alleyway"  # Goblin starts in alleyway
+        return s
+
+    def test_move_action_updates_combatant_zone(self):
+        s = self._session_with_zones()
+        llm_response = (
+            "%%NARRATIVE%%\nThe goblin darts toward the market stalls.\n\n"
+            "%%ACTION%%\n"
+            "action: move\n"
+            "action_type: move\n"
+            "target: market stalls\n"
+            "movement: dashes toward the stall canopies\n"
+        )
+        with patch.object(sm, "_call_blocking", return_value=llm_response):
+            list(sm.stream_enemy_turn(s, "Goblin Warrior 1"))
+
+        goblin = next(c for c in s.combat_state.combatants if c.name == "Goblin Warrior 1")
+        assert goblin.zone == "market stalls"
+
+    def test_move_action_combat_update_reflects_new_zone(self):
+        s = self._session_with_zones()
+        llm_response = (
+            "%%NARRATIVE%%\nThe goblin falls back to center.\n\n"
+            "%%ACTION%%\n"
+            "action: move\n"
+            "action_type: move\n"
+            "target: center\n"
+            "movement: retreats to the open clearing\n"
+        )
+        with patch.object(sm, "_call_blocking", return_value=llm_response):
+            events = self._events(list(sm.stream_enemy_turn(s, "Goblin Warrior 1")))
+
+        combat_updates = [e for e in events if e["type"] == "combat_update"]
+        assert combat_updates, "Expected a combat_update event"
+        combatants = combat_updates[-1]["combat_state"]["combatants"]
+        goblin = next(c for c in combatants if c["name"] == "Goblin Warrior 1")
+        assert goblin["zone"] == "center"
+
+    def test_move_to_unknown_zone_is_ignored(self):
+        s = self._session_with_zones()
+        llm_response = (
+            "%%NARRATIVE%%\nThe goblin tries to flee.\n\n"
+            "%%ACTION%%\n"
+            "action: move\n"
+            "action_type: move\n"
+            "target: roof\n"
+            "movement: scrambles upward\n"
+        )
+        with patch.object(sm, "_call_blocking", return_value=llm_response):
+            list(sm.stream_enemy_turn(s, "Goblin Warrior 1"))
+
+        goblin = next(c for c in s.combat_state.combatants if c.name == "Goblin Warrior 1")
+        assert goblin.zone == "alleyway", "Unknown zone must not overwrite existing zone"
+
+    def test_move_no_zone_in_combat_is_ignored_gracefully(self):
+        s = _session()  # no known_zones
+        llm_response = (
+            "%%NARRATIVE%%\nThe goblin sidesteps.\n\n"
+            "%%ACTION%%\n"
+            "action: move\n"
+            "action_type: move\n"
+            "target: somewhere\n"
+            "movement: steps aside\n"
+        )
+        with patch.object(sm, "_call_blocking", return_value=llm_response):
+            events = self._events(list(sm.stream_enemy_turn(s, "Goblin Warrior 1")))
+
+        assert any(e["type"] == "combat_update" for e in events), "combat_update should still emit"
+
+    def test_zones_listed_in_enemy_briefing(self):
+        s = self._session_with_zones()
+        system = _build_enemy_turn_system(s, "Goblin Warrior 1")
+        assert "market stalls" in system
+        assert "alleyway" in system
+        assert "center" in system
+
+    def test_target_description_distinguishes_zone_vs_combatant(self):
+        s = self._session_with_zones()
+        system = _build_enemy_turn_system(s, "Goblin Warrior 1")
+        assert "destination zone name if move" in system
+
+
 class TestActionTypeSessionLog:
     """AC-007: action_type is visible in the session log after the turn."""
 

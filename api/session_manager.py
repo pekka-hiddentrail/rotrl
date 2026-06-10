@@ -2541,6 +2541,75 @@ def get_location_zone_state(session: GameSession) -> dict:
     }
 
 
+def _apply_actor_zone_change(session: "GameSession", actor_id: str, destination_zone_name: str) -> None:
+    """Update an actor's zone in session state and write to disk.
+
+    actor_id == "party"  → updates session.party_zone_id
+    anything else        → matches a combatant by slug or lowercase name
+    """
+    if actor_id == "party":
+        old = session.party_zone_id
+        session.party_zone_id = destination_zone_name
+        _log(session, f"\n> *[Zone move: party {old} → {destination_zone_name}]*\n")
+    else:
+        combatants = session.combat_state.combatants if session.combat_state else []
+        mover = next(
+            (c for c in combatants
+             if _slugify(c.name) == actor_id or c.name.lower() == actor_id.lower()),
+            None,
+        )
+        if mover:
+            old = mover.zone
+            mover.zone = destination_zone_name
+            _log(session, f"\n> *[Zone move: {mover.name} {old} → {destination_zone_name}]*\n")
+    _write_session_state(session)
+
+
+def apply_zone_move(session: "GameSession", actor_id: str, access_point_id: str) -> dict:
+    """Validate and apply a zone move via an access point, returning refreshed zone state.
+
+    Raises ValueError with a human-readable message on any validation failure.
+    """
+    state = get_location_zone_state(session)
+
+    ap = next((a for a in state["access_points"] if a["id"] == access_point_id), None)
+    if ap is None:
+        raise ValueError(f"Access point '{access_point_id}' not found")
+    if ap["state"] != "open":
+        raise ValueError(f"Access point '{access_point_id}' is {ap['state']}")
+
+    # Resolve actor's current zone id
+    if actor_id == "party":
+        current_zone_id = state["current_zone_id"]
+    else:
+        combatants = session.combat_state.combatants if session.combat_state else []
+        mover = next(
+            (c for c in combatants
+             if _slugify(c.name) == actor_id or c.name.lower() == actor_id.lower()),
+            None,
+        )
+        if mover is None:
+            raise ValueError(f"Actor '{actor_id}' not found")
+        current_zone_id = _slugify(mover.zone) if mover.zone else ""
+
+    # Validate the actor is at one end of this access point
+    if ap["from"] == current_zone_id:
+        dest_zone_id = ap["to"]
+    elif ap["bidirectional"] and ap["to"] == current_zone_id:
+        dest_zone_id = ap["from"]
+    else:
+        raise ValueError(
+            f"Actor is in zone '{current_zone_id}', not reachable via '{access_point_id}'"
+        )
+
+    # Resolve destination zone name from id
+    dest_zone = next((z for z in state["zones"] if z["id"] == dest_zone_id), None)
+    dest_zone_name = dest_zone["name"] if dest_zone else dest_zone_id
+
+    _apply_actor_zone_change(session, actor_id, dest_zone_name)
+    return get_location_zone_state(session)
+
+
 def save_session(session: GameSession) -> Path:
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     _log(session, f"\n## Session Ended — {_ts()}")
@@ -4326,6 +4395,9 @@ def _build_enemy_turn_system(session: "GameSession", name: str) -> str:
     _allies_block = "\n".join(_ally_line(c) for c in allies) if allies else "- (none)"
     _pcs_block    = "\n".join(_pc_line(c)   for c in pcs)    if pcs    else "- (none)"
 
+    _known_zones  = session.combat_state.known_zones if session.combat_state.known_zones else []
+    _zones_line   = f"Known zones: {', '.join(_known_zones)}" if _known_zones else "Known zones: (none)"
+
     briefing = f"""[ENEMY TURN BRIEFING]
 Round: {session.combat_state.round}
 Actor: {actor.name}, {actor.status}{_actor_cond}{_actor_zone_label}
@@ -4333,6 +4405,7 @@ Action budget: {_enemy_action_budget(actor)}
 {_equipped_line}
 {_available_line}
 Tactic: {_tactic}
+{_zones_line}
 
 Allies:
 {_allies_block}
@@ -4350,10 +4423,10 @@ Full-round: full attack (all iterative attacks) or charge.
 %%ACTION%%
 action: attack|use_ability|move|delay
 action_type: standard|move|full|swift|free|five_foot_step
-target: <target name, if attacking or moving toward>
+target: <combatant name if attack or use_ability> | <destination zone name if move — must be from Known zones>
 weapon: <weapon name, if attack — must match Equipped or Available weapon>
 ability: <ability name, if use_ability>
-movement: <destination or direction, if move>
+movement: <brief flavor description of the movement, if move>
 if_hit: <one sentence narrating the outcome if the attack hits — e.g. "The blade bites into Vanx's shoulder!">
 if_miss: <one sentence narrating the outcome if the attack misses — e.g. "Vanx sidesteps and the blow glances off.">"""
 
@@ -4793,6 +4866,16 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
             if _fallback:
                 _log(session, f"\n> *[CB1.9-2: weapon '{_chosen}' not in profile — using '{_fallback}']*\n")
                 action = {**action, "weapon": _fallback}
+
+    # Apply zone move before narrating so combat_update sees the updated position
+    if action and action.get("action") == "move" and action.get("target"):
+        _dest_raw = action["target"].strip()
+        _known_z  = {z.lower(): z for z in (session.combat_state.known_zones or [])}
+        _canonical_z = _known_z.get(_dest_raw.lower(), "")
+        if _canonical_z:
+            _apply_actor_zone_change(session, _slugify(actor.name), _canonical_z)
+        else:
+            _log(session, f"\n> *[Zone move ignored: '{_dest_raw}' not in known zones {list(_known_z.values())}]*\n")
 
     # Resolve the attack before building the visible message so we know hit/miss
     result: Optional[dict] = None

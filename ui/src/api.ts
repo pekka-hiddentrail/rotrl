@@ -448,6 +448,23 @@ export async function fetchLocationZones(sessionId: string): Promise<LocationZon
   return res.json() as Promise<LocationZonesData>
 }
 
+export async function postZoneMove(
+  sessionId: string,
+  actorId: string,
+  accessPointId: string,
+): Promise<LocationZonesData> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/zone_move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor_id: actorId, access_point_id: accessPointId }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail ?? `Zone move failed (${res.status})`)
+  }
+  return res.json() as Promise<LocationZonesData>
+}
+
 async function* parseSseStream(response: Response, signal?: AbortSignal): AsyncGenerator<SseEvent> {
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()

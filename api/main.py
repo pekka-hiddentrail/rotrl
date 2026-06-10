@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.music import GenerationFailedError, generate_calm_phrase
-from api.session_manager import advance_combat_turn, create_session, get_location_zone_state, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_pc_turn, stream_resume_combat, stream_turn, write_session_state
+from api.session_manager import advance_combat_turn, apply_zone_move, create_session, get_location_zone_state, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_pc_turn, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -227,6 +227,24 @@ def get_location_zones(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return JSONResponse(get_location_zone_state(session))
+
+
+class ZoneMoveRequest(BaseModel):
+    actor_id: str          # "party" or slugified combatant name
+    access_point_id: str   # id from the location_zones response
+
+
+@app.post("/api/sessions/{session_id}/zone_move")
+def post_zone_move(session_id: str, req: ZoneMoveRequest):
+    """Move an actor through an access point to an adjacent zone."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        refreshed = apply_zone_move(session, req.actor_id, req.access_point_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return JSONResponse(refreshed)
 
 
 @app.get("/api/sessions/{session_id}/log")
