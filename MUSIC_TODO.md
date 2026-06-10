@@ -106,42 +106,44 @@ Minimum backend to make calm playback work end-to-end.
 
 Minimum frontend to play a calm phrase end-to-end.
 
-- [ ] **M0-F1 - TypeScript types**
+- [x] **M0-F1 - TypeScript types**
   - [x] Add `NoteEvent`, `PhraseState`, `CalmPhrase`, `NextPhraseRequest` types to `ui/src/api.ts` using snake_case field names
 
-- [ ] **M0-F2 - Music API client**
+- [x] **M0-F2 - Music API client**
   - [x] Add `fetchCalmPhrase(session_id, seed, previous_state)` to `ui/src/api.ts`
   - [x] Handle 422 `generation_failed` error gracefully
 
-- [ ] **M0-F3 - Tone.js dependency**
+- [x] **M0-F3 - Tone.js dependency**
   - [x] `npm install tone` in `ui/`
   - [x] Create `ui/src/music/synth.ts`: Tone.js bootstrap, AudioContext resume, synth factory
-  - [x] Synth type: `Tone.Synth` with `oscillator.type = "triangle"` (or `"square"` — TBD)
+  - [x] Synth type: `Tone.Synth` with `oscillator.type = "triangle"`
   - [x] Expose `startAudioContext()` to be called on first user gesture
 
-- [ ] **M0-F4 - Phrase playback engine**
+- [x] **M0-F4 - Phrase playback engine**
   - [x] Create `ui/src/music/player.ts`
-  - [x] Implement `schedulePhrase(phrase: CalmPhrase)`: sort events by (bar, beat), schedule each via `Tone.Transport`
+  - [x] Implement `schedulePhrase(phrase: CalmPhrase)`: sort events by (bar, beat), schedule each via `Tone.getTransport()`
   - [x] Map duration strings: `"8n"` → 0.5 beats, `"4n"` → 1 beat, `"2n"` → 2 beats
   - [x] Convert MIDI to frequency: `Tone.Frequency(midi, "midi").toFrequency()`
-  - [x] Set `Tone.Transport.bpm.value = phrase.bpm` on first phrase
+  - [x] Set `transport.bpm.value = phrase.bpm` per phrase
   - [x] Implement `stop()`: cancel all scheduled events, stop Transport
 
-- [ ] **M0-F5 - Music player UI component**
+- [x] **M0-F5 - Music player UI component**
   - [x] Create `ui/src/components/MusicPlayer.tsx`
-  - [x] Start / Stop buttons
-  - [x] Add a persistent `Music Off` toggle that blocks playback and phrase fetching
+  - [x] Start / Stop buttons (no separate "Music Off" toggle — Stop is sufficient)
+  - [x] Volume slider 0–100, persisted to localStorage, mapped to `Tone.getDestination().volume` with +12 dB boost
   - [x] Require user gesture before starting AudioContext (AC-001)
   - [x] Show Playing / Stopped status badge
   - [x] Wire up `fetchCalmPhrase` → `schedulePhrase`
   - [x] Pass `previousState` from last phrase into next request
-  - [x] Add to appropriate location in layout (TBD — Header or sidebar)
+  - [x] Added to `App.tsx`
+  - [x] Fix: capture `nowMs` after fetch so `startDelayMs` is not stale
+  - [x] Fix: reset phrase clock when scheduler drifts behind real time (late fetch or backgrounded tab)
+  - [x] Fix: `Tone.Destination` (deprecated) → `Tone.getDestination()`
 
-- [ ] **M0-F6 - Debug phrase view**
-  - [x] "Generate Phrase (Debug)" button — fetch without playing
+- [x] **M0-F6 - Debug phrase view**
+  - [x] "Generate Phrase (Debug)" button — fetch without playing, gated behind `devMode` prop
   - [x] Display compact note list: `B1: C5-4n E5-4n D5-2n | B2: ...`
   - [x] Display `motif_id`, `cadence_degree`, `bpm`
-  - [x] Gate behind `dev_mode` or always visible TBD
 
 ---
 
@@ -237,10 +239,12 @@ Ideas not scoped to any current tier.
 
 ## Open Questions
 
-- [ ] Where should the music debug UI live — Header, sidebar, or floating panel?
+- [ ] Where should the music UI live long-term — Header, sidebar, or floating panel? *(currently rendered in App.tsx)*
 - [ ] Should phrase state be stored in backend session state or remain frontend-only?
-- [x] API request/response casing decided: snake_case for Tier 0
-- [x] Triangle or square oscillator as the Tier 0 default?
+- [x] API request/response casing: snake_case (matches existing convention)
+- [x] Triangle or square oscillator default: triangle shipped
+- [x] Volume slider at Tier 0: yes — 0–100 linear, +12 dB boost, persisted to localStorage
+- [x] Separate "Music Off" toggle: removed — Stop Music button is sufficient
 - [ ] Should generated phrases be persisted to `outputs/` for replay and debugging?
 - [ ] Should BPM be fixed for a session or vary phrase-by-phrase within the allowed range?
 - [x] `session_id` is optional in Tier 0 request

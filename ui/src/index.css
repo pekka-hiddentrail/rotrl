@@ -349,12 +349,23 @@ body {
   gap: 8px;
 }
 
-.music-off-toggle {
+.music-volume {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.music-volume input[type='range'] {
+  width: 80px;
+  accent-color: #5a9e7a;
+  cursor: pointer;
+}
+
+.music-volume-value {
+  min-width: 22px;
+  text-align: right;
 }
 
 .music-player-error {

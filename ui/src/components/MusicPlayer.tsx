@@ -1,10 +1,18 @@
+import * as Tone from 'tone'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchCalmPhrase, type CalmPhrase, type PhraseState } from '../api'
 import { createCalmPhrasePlayer } from '../music/player'
 import { startAudioContext } from '../music/synth'
 
 const LOOKAHEAD_CAP_MS = 1500
-const OFF_STORAGE_KEY = 'rotrl.music.off'
+const VOLUME_STORAGE_KEY = 'rotrl.music.volume'
+const DEFAULT_VOLUME = 70
+const VOLUME_BOOST_DB = 15
+
+function linearToDb(linear: number): number {
+  if (linear === 0) return -Infinity
+  return 20 * Math.log10(linear / 100) + VOLUME_BOOST_DB
+}
 
 interface MusicPlayerProps {
   sessionId: string | null
@@ -27,7 +35,7 @@ function formatPhraseCompact(phrase: CalmPhrase): string {
 
 export default function MusicPlayer({ sessionId, devMode = false }: MusicPlayerProps) {
   const [status, setStatus] = useState<'stopped' | 'playing' | 'error'>('stopped')
-  const [musicOff, setMusicOff] = useState(false)
+  const [volume, setVolume] = useState(DEFAULT_VOLUME)
   const [error, setError] = useState<string | null>(null)
   const [lastPhrase, setLastPhrase] = useState<CalmPhrase | null>(null)
 
@@ -45,8 +53,10 @@ export default function MusicPlayer({ sessionId, devMode = false }: MusicPlayerP
   }, [lastPhrase])
 
   useEffect(() => {
-    const storedOff = window.localStorage.getItem(OFF_STORAGE_KEY)
-    setMusicOff(storedOff === 'true')
+    const stored = window.localStorage.getItem(VOLUME_STORAGE_KEY)
+    const initial = stored !== null ? Number(stored) : DEFAULT_VOLUME
+    setVolume(initial)
+    Tone.getDestination().volume.value = linearToDb(initial)
   }, [])
 
   const clearFetchTimer = () => {
@@ -66,19 +76,21 @@ export default function MusicPlayer({ sessionId, devMode = false }: MusicPlayerP
   }
 
   const queueNextPhrase = async () => {
-    if (!playingRef.current || musicOff || requestInFlightRef.current) return
+    if (!playingRef.current || requestInFlightRef.current) return
 
     requestInFlightRef.current = true
     try {
       const phrase = await fetchCalmPhrase(sessionId, seedRef.current, previousStateRef.current)
       seedRef.current += 1
 
+      // Capture nowMs AFTER the fetch so startDelayMs reflects actual remaining time.
       const nowMs = performance.now()
-      if (nextPhraseStartAtMsRef.current === null) {
+      if (nextPhraseStartAtMsRef.current === null || nextPhraseStartAtMsRef.current < nowMs) {
+        // First phrase, or we've drifted behind real time — reset the clock.
         nextPhraseStartAtMsRef.current = nowMs + 100
       }
 
-      const startDelayMs = Math.max(0, nextPhraseStartAtMsRef.current - nowMs)
+      const startDelayMs = nextPhraseStartAtMsRef.current - nowMs
       const scheduled = playerRef.current.schedulePhrase(phrase, startDelayMs / 1000)
       const durationMs = scheduled.duration_seconds * 1000
       const lookaheadMs = Math.min(LOOKAHEAD_CAP_MS, durationMs / 2)
@@ -103,7 +115,7 @@ export default function MusicPlayer({ sessionId, devMode = false }: MusicPlayerP
   }
 
   const handleStart = async () => {
-    if (musicOff || playingRef.current) return
+    if (playingRef.current) return
     try {
       await startAudioContext()
       playingRef.current = true
@@ -120,14 +132,14 @@ export default function MusicPlayer({ sessionId, devMode = false }: MusicPlayerP
     hardStop()
   }
 
-  const handleToggleOff = (nextOff: boolean) => {
-    setMusicOff(nextOff)
-    window.localStorage.setItem(OFF_STORAGE_KEY, String(nextOff))
-    if (nextOff) hardStop()
+  const handleVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = Number(e.target.value)
+    setVolume(next)
+    Tone.getDestination().volume.value = linearToDb(next)
+    window.localStorage.setItem(VOLUME_STORAGE_KEY, String(next))
   }
 
   const handleDebugGenerate = async () => {
-    if (musicOff) return
     try {
       const phrase = await fetchCalmPhrase(sessionId, seedRef.current, previousStateRef.current)
       seedRef.current += 1
@@ -150,27 +162,31 @@ export default function MusicPlayer({ sessionId, devMode = false }: MusicPlayerP
       <div className="music-player-top">
         <div className="music-player-title">Calm Music</div>
         <div className={`music-player-status music-player-status-${status}`}>
-          {musicOff ? 'Off' : status === 'playing' ? 'Playing' : 'Stopped'}
+          {status === 'playing' ? 'Playing' : 'Stopped'}
         </div>
       </div>
 
       <div className="music-player-controls">
-        <button className="btn btn-secondary" onClick={handleStart} disabled={musicOff || status === 'playing'}>
+        <button className="btn btn-secondary" onClick={handleStart} disabled={status === 'playing'}>
           Start Music
         </button>
         <button className="btn btn-secondary" onClick={handleStop} disabled={status !== 'playing'}>
           Stop Music
         </button>
-        <label className="music-off-toggle">
+        <label className="music-volume">
+          <span>Vol</span>
           <input
-            type="checkbox"
-            checked={musicOff}
-            onChange={(e) => handleToggleOff(e.target.checked)}
+            type="range"
+            min={0}
+            max={100}
+            value={volume}
+            onChange={handleVolume}
+            aria-label="Music volume"
           />
-          Music Off
+          <span className="music-volume-value">{volume}</span>
         </label>
         {devMode && (
-          <button className="btn btn-secondary" onClick={handleDebugGenerate} disabled={musicOff}>
+          <button className="btn btn-secondary" onClick={handleDebugGenerate}>
             Generate Phrase (Debug)
           </button>
         )}

@@ -1,7 +1,7 @@
 # FEATURE — Calm Music Playback (Frontend)
 
 **ID:** music-calm-playback
-**Status:** Draft
+**Status:** Implemented (Tier 0)
 **Area:** Frontend
 **Tags:** @music @playback @calm @ui @webaudio
 
@@ -189,21 +189,23 @@ And   the seed for phrase N+1 is derived or incremented from the session seed
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-010 — Music Off toggle hard-disables playback and polling
+### AC-010 — Volume control
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
-**Scenario:** The user wants instant silence and no background music activity.
+**Scenario:** The GM can adjust playback volume without stopping music.
 
 ```gherkin
 Given the music player is visible
-When  the user enables the "Music Off" toggle
-Then  any currently playing phrase is stopped
-And   all scheduled note events are cancelled
-And   no additional HTTP requests to /api/music/calm/next_phrase are made while Music Off is enabled
-And   the Start Music control is disabled (or otherwise prevented)
+When  the user moves the volume slider
+Then  the output volume changes immediately via Tone.getDestination().volume
+And   the volume persists across page reloads (stored in localStorage)
+And   the slider range is 0 (silent) to 100 (maximum, +12 dB above nominal)
 
-When  the user disables the "Music Off" toggle
-Then  music remains stopped until the user explicitly presses "Start Music"
+Given the page reloads
+And   a volume level was previously saved
+When  the MusicPlayer mounts
+Then  the slider restores to the saved value
+And   Tone.getDestination().volume is set to the corresponding dB level before any playback
 ```
 
 ---
@@ -215,6 +217,7 @@ Then  music remains stopped until the user explicitly presses "Start Music"
 - Mood detection — the GM manually selects mood for now
 - Automatic mood switching on combat or NPC events — Tier 2+
 - Volume normalisation, EQ, or reverb — keep it raw at Tier 0
+- A separate "Music Off" toggle — Stop Music button is sufficient
 - MIDI output or export
 - Mobile PWA background audio
 - Phrase queue lookahead (2–3 phrases buffered) — Tier 1
@@ -223,12 +226,19 @@ Then  music remains stopped until the user explicitly presses "Start Music"
 
 ## Notes
 
-**Proposed library:** Tone.js (`npm install tone`)
+**Library:** Tone.js (`npm install tone`) — implemented.
 
-- `Tone.Synth` with `oscillator.type = "triangle"` or `"square"` for chiptune feel
-- `Tone.Transport.bpm.value = phrase.bpm` — set once per session start
-- Schedule events: `Tone.Transport.schedule(time => synth.triggerAttackRelease(freq, dur), beatTime)`
+- `Tone.Synth` with `oscillator.type = "triangle"` — triangle chosen as default
+- `Tone.getTransport().bpm.value = phrase.bpm` — set per phrase
+- Schedule events: `transport.schedule(time => synth.triggerAttackRelease(freq, dur), at)`
 - MIDI → frequency: `Tone.Frequency(midi, "midi").toFrequency()`
+- Volume: `Tone.getDestination().volume.value` — mapped from linear 0–100 slider with +12 dB boost
+  so the full range is −∞ to +12 dB; default slider position is 70 (~+9 dB)
+
+**Scheduling timing note:** `nowMs` is captured *after* the phrase fetch completes so that
+`startDelayMs` reflects actual remaining lookahead time, not stale pre-fetch time. If the
+scheduler falls behind real time (late fetch, tab backgrounded), the clock resets to
+`now + 100ms` rather than attempting to schedule notes into the past.
 
 **Duration mapping:**
 
@@ -238,16 +248,13 @@ Then  music remains stopped until the user explicitly presses "Start Music"
 | `4n`   | `"4n"`       | 1.0   |
 | `2n`   | `"2n"`       | 2.0   |
 
-**Where should the music UI live?** Open question — see MUSIC_TODO.md.
-Options: (a) new `MusicPlayer.tsx` in `ui/src/components/`, (b) fold into `Header.tsx` as a
-small control, (c) separate floating player widget. Recommend (a) for testability.
+**Music UI location:** `ui/src/components/MusicPlayer.tsx`, rendered in `App.tsx`.
 
 **Related specs:**
 - [music-calm-generation.feature](music-calm-generation.feature) — generator rules
 - [music-api-contract.feature](music-api-contract.feature) — endpoint this component calls
 
 **Open questions:**
-- Triangle or square oscillator as the default?
-- Should there be a volume slider at Tier 0?
-- Where does the music player control live in the layout — Header, sidebar, or floating?
+- Triangle or square oscillator — triangle shipped; square still an option
+- Where does the music player control live long-term — Header, sidebar, or floating?
 - Should the debug phrase view be gated behind `dev_mode`?

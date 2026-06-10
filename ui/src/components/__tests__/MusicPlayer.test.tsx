@@ -8,6 +8,10 @@ const schedulePhraseMock = vi.fn(() => ({ start_delay_seconds: 0, duration_secon
 const startAudioContextMock = vi.fn().mockResolvedValue(undefined)
 const fetchCalmPhraseMock = vi.fn<(...args: unknown[]) => Promise<CalmPhrase>>()
 
+vi.mock('tone', () => ({
+  getDestination: () => ({ volume: { value: 0 } }),
+}))
+
 vi.mock('../../music/player', () => ({
   createCalmPhrasePlayer: () => ({
     schedulePhrase: schedulePhraseMock,
@@ -54,14 +58,6 @@ describe('MusicPlayer', () => {
     fetchCalmPhraseMock.mockResolvedValue(makePhrase())
   })
 
-  it('keeps start disabled when Music Off is persisted', () => {
-    window.localStorage.setItem('rotrl.music.off', 'true')
-    render(<MusicPlayer sessionId="sess-1" />)
-
-    expect(screen.getByRole('button', { name: 'Start Music' })).toBeDisabled()
-    expect(screen.getByText('Off')).toBeInTheDocument()
-  })
-
   it('starts playback and fetches one phrase on Start', async () => {
     render(<MusicPlayer sessionId="sess-1" />)
 
@@ -72,16 +68,40 @@ describe('MusicPlayer', () => {
     expect(schedulePhraseMock).toHaveBeenCalledTimes(1)
   })
 
-  it('stops playback and prevents follow-up fetches when Music Off is enabled', async () => {
+  it('shows Stopped status and no Off badge', () => {
+    render(<MusicPlayer sessionId="sess-1" />)
+    expect(screen.getByText('Stopped')).toBeInTheDocument()
+    expect(screen.queryByText('Off')).not.toBeInTheDocument()
+  })
+
+  it('stop button halts playback and prevents follow-up fetches', async () => {
     render(<MusicPlayer sessionId="sess-1" />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
     await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(1))
 
-    fireEvent.click(screen.getByLabelText('Music Off'))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Music' }))
     expect(stopMock).toHaveBeenCalled()
 
     await new Promise(resolve => setTimeout(resolve, 250))
     expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('volume slider persists to localStorage and updates displayed value', () => {
+    render(<MusicPlayer sessionId="sess-1" />)
+    const slider = screen.getByLabelText('Music volume') as HTMLInputElement
+
+    fireEvent.change(slider, { target: { value: '50' } })
+
+    expect(slider.value).toBe('50')
+    expect(window.localStorage.getItem('rotrl.music.volume')).toBe('50')
+  })
+
+  it('restores volume from localStorage on mount', () => {
+    window.localStorage.setItem('rotrl.music.volume', '30')
+    render(<MusicPlayer sessionId="sess-1" />)
+
+    const slider = screen.getByLabelText('Music volume') as HTMLInputElement
+    expect(slider.value).toBe('30')
   })
 })
