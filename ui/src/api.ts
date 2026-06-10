@@ -393,10 +393,59 @@ export interface EventStatusData {
   cooldowns: Record<string, number>
 }
 
+export interface LocationZoneData {
+  id: string
+  name: string
+  description: string
+  visible: boolean
+  source: string
+  tags: string[]
+}
+
+export interface LocationAccessPointData {
+  id: string
+  from: string
+  to: string
+  label: string
+  state: string
+  bidirectional: boolean
+  requirements: string
+  description: string
+  source: string
+}
+
+export interface LocationOccupantData {
+  actor_id: string
+  label: string
+  zone_id: string
+}
+
+export interface LocationMoveData {
+  access_point_id: string
+  to_zone_id: string
+  label: string
+  state: string
+}
+
+export interface LocationZonesData {
+  current_location: { id: string; name: string }
+  current_zone_id: string
+  zones: LocationZoneData[]
+  access_points: LocationAccessPointData[]
+  occupants: LocationOccupantData[]
+  available_moves: LocationMoveData[]
+}
+
 export async function fetchEventStatus(sessionId: string): Promise<EventStatusData> {
   const res = await fetch(`${BASE}/sessions/${sessionId}/event_status`)
   if (!res.ok) throw new Error(`Event status fetch failed (${res.status})`)
   return res.json() as Promise<EventStatusData>
+}
+
+export async function fetchLocationZones(sessionId: string): Promise<LocationZonesData> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/location_zones`)
+  if (!res.ok) throw new Error(`Location zones fetch failed (${res.status})`)
+  return res.json() as Promise<LocationZonesData>
 }
 
 async function* parseSseStream(response: Response, signal?: AbortSignal): AsyncGenerator<SseEvent> {

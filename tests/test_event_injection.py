@@ -23,15 +23,18 @@ def _make_event_file(
     trigger: str,
     content: str,
     event_type: str = "",
+    location_id: str = "",
 ) -> Path:
     """Write a minimal valid event file and return its path."""
     events_dir = tmp_path / "adventure_path" / "02_events"
     events_dir.mkdir(parents=True, exist_ok=True)
     f = events_dir / f"{event_id}.md"
     type_line = f"**Type:** {event_type}\n" if event_type else ""
+    location_line = f"**Location:** {location_id}\n" if location_id else ""
     f.write_text(
         f"**Event:** {event_id}\n"
         f"{type_line}"
+        f"{location_line}"
         f"**Trigger:** {trigger}\n"
         f"**Expires:** 5 turns\n\n"
         f"<!-- INJECT -->\n\n"
@@ -168,6 +171,19 @@ class TestEventTypeField:
                              "content", event_type="aftermath")
         entry = _parse_event_file(f)
         assert entry.event_type == "aftermath"
+
+    def test_location_field_parsed(self, tmp_path):
+        f = _make_event_file(
+            tmp_path,
+            "goblin_attack_begins",
+            "When goblins attack",
+            "content",
+            event_type="combat",
+            location_id="festival_square",
+        )
+        entry = _parse_event_file(f)
+        assert entry is not None
+        assert entry.location_id == "festival_square"
 
     def test_real_event_files_have_type(self):
         """Smoke test: the real adventure event files are loaded with correct types."""

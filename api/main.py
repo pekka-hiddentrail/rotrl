@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.music import GenerationFailedError, generate_calm_phrase
-from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_pc_turn, stream_resume_combat, stream_turn, write_session_state
+from api.session_manager import advance_combat_turn, create_session, get_location_zone_state, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_pc_turn, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -218,6 +218,15 @@ def get_event_status(session_id: str):
         "completed_events": list(rt.completed_events),
         "cooldowns": dict(rt.cooldowns),
     })
+
+
+@app.get("/api/sessions/{session_id}/location_zones")
+def get_location_zones(session_id: str):
+    """Return the active location/encounter zone graph for the GUI."""
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return JSONResponse(get_location_zone_state(session))
 
 
 @app.get("/api/sessions/{session_id}/log")
