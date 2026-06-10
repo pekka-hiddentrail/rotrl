@@ -242,7 +242,8 @@ And   the error body includes "attempts" with the retry count
 
 - Audio file generation (WAV, MP3, MIDI) — Tier 0 is symbolic only
 - Harmony, chords, or simultaneous voices — single monophonic line only
-- Percussion or bass — no rhythm track at Tier 0
+- Percussion — no rhythm track at Tier 0 or in this spec
+- Bass — covered separately in [music-calm-bass-track.feature](music-calm-bass-track.feature); not part of the Tier 0 lead generator
 - Scale modes other than C major pentatonic — all other keys/modes are Tier 2+
 - Tempo other than 88–108 BPM
 - Mood detection or automatic mood switching — see [music-calm-playback.feature](music-calm-playback.feature) notes

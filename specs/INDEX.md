@@ -53,8 +53,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [enemy-action-type.feature](enemy-action-type.feature) | Backend | `@combat` `@enemy` `@action` `@economy` `@parsing` `@session` | 7 | `_parse_action_block` `action_type` field, normalisation to canonical set, inference from `action` when absent, `_build_enemy_turn_system` prompt update, `action_card` SSE `action_type`, session log |
 
 | [music-calm-generation.feature](music-calm-generation.feature) | Backend | `@music` `@generation` `@calm` `@symbolic` `@backend` | 13 | `CalmConfig`, `NoteEvent`, `PhraseState`, degree→note mapping, bar-fill algorithm, cadence weighting, motif carry-forward, validation/repair loop — `tests/test_music_generation.py` |
-| [music-api-contract.feature](music-api-contract.feature) | Backend \| Frontend | `@music` `@api` `@calm` `@symbolic` `@contract` | 7 | `POST /api/music/calm/next_phrase`, `CalmPhrase` response schema, `NoteEvent` event shape, `PhraseState` motif state, 422 error contract |
-| [music-calm-playback.feature](music-calm-playback.feature) | Frontend | `@music` `@playback` `@calm` `@ui` `@webaudio` | 9 | `MusicPlayer.tsx`, `ui/src/music/synth.ts`, `ui/src/music/player.ts`, Tone.js `Synth`, phrase scheduling, motif state rolling, debug phrase view |
+| [music-api-contract.feature](music-api-contract.feature) | Backend \| Frontend | `@music` `@api` `@calm` `@symbolic` `@contract` | 8 | `POST /api/music/calm/next_phrase`, `CalmPhrase` response schema, `NoteEvent` event shape, `PhraseState` motif state, 422 error contract; AC-008 (planning) multi-track `tracks` shape |
+| [music-calm-playback.feature](music-calm-playback.feature) | Frontend | `@music` `@playback` `@calm` `@ui` `@webaudio` | 14 | `MusicPlayer.tsx`, `ui/src/music/synth.ts`, `ui/src/music/player.ts`, Tone.js `Synth`, phrase scheduling, prefetch pipeline, stop fade, bar indicator (AC-014) |
+| [music-calm-bass-track.feature](music-calm-bass-track.feature) | Backend \| Frontend | `@music` `@generation` `@calm` `@bass` `@symbolic` `@multi-track` | 14 | **Planning** — `CalmBassConfig`, bass register C2–G3, stable degrees only, sparse rhythms, lead/bass density coordination, bar-root weights, phrase arc, `bass_pattern_id` state, separate bass `Tone.Synth`; multi-track `tracks` API shape |
 
 **Total: 433 acceptance criteria across 45 feature files**
 

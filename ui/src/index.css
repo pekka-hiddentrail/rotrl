@@ -317,6 +317,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.music-collapse-chevron {
+  font-size: 10px;
+  color: #6a7a6e;
+  margin-left: 6px;
+  flex-shrink: 0;
 }
 
 .music-player-title {

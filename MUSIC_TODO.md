@@ -188,9 +188,86 @@ Improve continuity so music loops without gaps or jarring cuts.
 
 ---
 
+## Next Phase — Calm Track 2: Bass
+
+Add a second generated symbolic track (bass) to the calm mood phrase.
+Spec: [specs/music-calm-bass-track.feature](specs/music-calm-bass-track.feature)
+
+The bass is the first step toward the eventual 4-track arrangement. Only bass is added here.
+Percussion and harmony remain deferred to Tier 2.
+
+- [ ] **MB-1 - Update phrase model to support multiple tracks**
+  - [ ] Replace flat `events: NoteEvent[]` field in `CalmPhrase` with `tracks: TrackEvents[]`
+  - [ ] Add `TrackEvents` dataclass/type: `track_id`, `role`, `events`
+  - [ ] Add `bass_pattern_id` and `bass_final_degree` to `PhraseState`
+  - [ ] Update Pydantic response model in `api/main.py`
+  - [ ] Update `CalmPhrase` TypeScript type in `ui/src/api.ts`
+
+- [ ] **MB-2 - Bass generator — backend**
+  - [ ] Define `CalmBassConfig`: register C2–G3 (MIDI 36–55), degrees {1,3,5,6}, durations {1n,2n,4n}, max 3 events/bar, velocity 0.35–0.55
+  - [ ] Implement bar-root weight table (see AC-004 in spec): bar 1 C/G, bar 2 G/E/C, bar 3 A/G/E, bar 4 C/G/E
+  - [ ] Implement bass bar filler: choose root, fill bar to 4.0 beats using allowed durations
+  - [ ] Enforce phrase arc: bar 1 home → bar 2 away → bar 3 lift → bar 4 return
+  - [ ] Enforce phrase ending: ≥75% end on degree 1 / C (AC-005)
+  - [ ] Enforce density coordination with lead: if lead ≥5 events in bar, bass ≤2 (AC-007)
+  - [ ] Enforce movement limit: no consecutive bass notes >12 semitones apart (AC-008)
+  - [ ] Generate `bass_pattern_id` from seed; carry `bass_final_degree` in state (AC-012)
+
+- [ ] **MB-3 - Bass validation and repair**
+  - [ ] All MIDI values 36–55 (AC-002)
+  - [ ] All degrees in {1, 3, 5, 6} (AC-003)
+  - [ ] No 8n or shorter durations; max 3 events/bar (AC-006)
+  - [ ] Final degree is 1, 3, or 5 — not A / degree 6 (AC-005, AC-011)
+  - [ ] No consecutive jump >12 semitones (AC-008)
+  - [ ] Lead and bass never both at maximum density in same bar (AC-007, AC-011)
+  - [ ] Bass note always below simultaneous lead note (AC-010)
+  - [ ] Repair / regenerate up to MAX_RETRIES; return 422 on exhaustion (AC-011)
+
+- [ ] **MB-4 - Backend tests**
+  - [ ] Unit: all bass MIDI values within 36–55
+  - [ ] Unit: no bass duration is 8n or shorter
+  - [ ] Unit: each bass bar sums to exactly 4.0 beats
+  - [ ] Unit: final bass note is degree 1, 3, or 5
+  - [ ] Unit: bar-root degree distribution within ±10% of target weights (1000 samples)
+  - [ ] Unit: phrase ends on degree 1 ≥75% of time (1000 samples)
+  - [ ] Unit: no consecutive bass jump >12 semitones
+  - [ ] Unit: density coordination — lead-busy bars have ≤2 bass events
+  - [ ] Integration: POST /api/music/calm/next_phrase returns tracks array with lead + bass
+  - [ ] Integration: state includes bass_pattern_id and bass_final_degree
+
+- [ ] **MB-5 - Frontend: separate bass synth**
+  - [ ] Add `getBasssynth()` to `ui/src/music/synth.ts`
+  - [ ] Bass synth: triangle, volume 55–70% of lead, envelope attack 0.01/decay 0.08/sustain 0.4/release 0.1
+  - [ ] Update `schedulePhrase` in `player.ts` to accept `tracks: TrackEvents[]` and schedule each track to its own synth
+  - [ ] Lead events → lead synth (existing behaviour preserved)
+  - [ ] Bass events → bass synth (new)
+  - [ ] Both synths share same Transport clock and route to `Tone.getDestination()`
+
+- [ ] **MB-6 - Frontend: UI and debug updates**
+  - [ ] Intent row and notes row already support per-bar data — extend to show both tracks if needed
+  - [ ] No separate bass volume slider at this phase (master volume applies to both)
+  - [ ] Update debug phrase display to show bass notes per bar alongside lead notes
+
+- [ ] **MB-7 - Update all specs and docs**
+  - [x] Create `specs/music-calm-bass-track.feature` (14 ACs — planning complete)
+  - [x] Update `specs/music-api-contract.feature` (AC-008 multi-track shape — planning complete)
+  - [x] Update `specs/music-calm-generation.feature` (out-of-scope note updated)
+  - [x] Update `specs/INDEX.md` (new row added)
+  - [ ] Update `specs/music-calm-playback.feature` with multi-track synth AC when implementation begins
+  - [ ] Update README.md music section when implementation begins
+
+---
+
 ## Tier 2 — Multi-Track Chiptune Arrangement
 
-Expand from a single melody to a 4-part arrangement.
+Complete the 4-track calm arrangement. The eventual track lineup:
+
+```
+Track 1: lead melody    ← Tier 0 (complete)
+Track 2: bass           ← Next phase (spec complete, implementation pending)
+Track 3: harmony        ← Tier 2
+Track 4: noise/percussion ← Tier 2
+```
 
 - [ ] **M2-1 - Lead voice (Tier 0 melody promoted)**
   - [ ] Separate lead generator config from the monophonic prototype
@@ -198,12 +275,12 @@ Expand from a single melody to a 4-part arrangement.
 
 - [ ] **M2-2 - Harmony voice**
   - [ ] Generate a harmony line that is 3rds or 6ths below the lead (within C major pentatonic)
-  - [ ] Harmony starts at Tier 2 — no harmony in Tier 0 or Tier 1
+  - [ ] Harmony starts at Tier 2 — no harmony in Tier 0 or bass phase
 
-- [ ] **M2-3 - Bass line**
-  - [ ] Bass follows chord roots: C–Am–F–G (or pentatonic-safe root motion)
-  - [ ] Register: C2–G3
-  - [ ] Square or triangle oscillator with more attack
+- [ ] **M2-3 - Bass line promotion**
+  - [ ] Bass phase (Next Phase above) is prerequisite — must be complete before Tier 2 work starts
+  - [ ] At Tier 2: extend bass to use richer root motion informed by harmony track
+  - [ ] Register: C2–G3 (established in bass phase)
 
 - [ ] **M2-4 - Noise / percussion**
   - [ ] Simple chiptune drum pattern: kick on 1 and 3, snare on 2 and 4, hi-hat 8n fills

@@ -62,6 +62,8 @@ class MusicPhraseStateRequest(BaseModel):
     cadence_degree: int
     highest_degree: int
     novelty: int
+    bass_pattern_id: str | None = None
+    bass_final_degree: int | None = None
 
 
 class CalmNextPhraseRequest(BaseModel):
@@ -104,16 +106,23 @@ def post_music_calm_next_phrase(req: CalmNextPhraseRequest):
             "bpm": phrase.bpm,
             "time_signature": phrase.time_signature,
             "bars": phrase.bars,
-            "events": [
+            "tracks": [
                 {
-                    "bar": e.bar,
-                    "beat": e.beat,
-                    "note": e.note,
-                    "midi": e.midi,
-                    "duration": e.duration,
-                    "velocity": e.velocity,
+                    "track_id": t.track_id,
+                    "role": t.role,
+                    "events": [
+                        {
+                            "bar": e.bar,
+                            "beat": e.beat,
+                            "note": e.note,
+                            "midi": e.midi,
+                            "duration": e.duration,
+                            "velocity": e.velocity,
+                        }
+                        for e in t.events
+                    ],
                 }
-                for e in phrase.events
+                for t in phrase.tracks
             ],
             "state": {
                 "motif_id": phrase.state.motif_id,
@@ -121,6 +130,8 @@ def post_music_calm_next_phrase(req: CalmNextPhraseRequest):
                 "cadence_degree": phrase.state.cadence_degree,
                 "highest_degree": phrase.state.highest_degree,
                 "novelty": phrase.state.novelty,
+                "bass_pattern_id": phrase.state.bass_pattern_id,
+                "bass_final_degree": phrase.state.bass_final_degree,
             },
         }
     )

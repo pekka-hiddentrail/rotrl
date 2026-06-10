@@ -190,6 +190,46 @@ And   no 500 Internal Server Error is returned
 
 ---
 
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+### AC-008 — Planned: multi-track response for lead + bass
+<!-- ─────────────────────────────────────────────────────────────────────── -->
+
+**Status:** Planning — not yet implemented. Specifies the target shape when the bass track is
+added. See [music-calm-bass-track.feature](music-calm-bass-track.feature) for full rules.
+
+```gherkin
+Given the bass track phase is implemented
+When  POST /api/music/calm/next_phrase is called
+Then  the response contains "tracks" (array) instead of the flat "events" field
+And   each element in tracks has: track_id, role, events
+And   track_id="lead" carries the existing melody events
+And   track_id="bass" carries the new bass events (see music-calm-bass-track.feature)
+And   the state object adds: bass_pattern_id (string), bass_final_degree (integer 1|3|5)
+And   all other top-level fields (phrase_id, mood, key, bpm, bars, etc.) remain unchanged
+And   the response is still Content-Type: application/json with no audio data
+```
+
+**Target state object (extended):**
+
+```json
+{
+  "motif_id": "m_12345_001",
+  "motif_degrees": [1, 3, 2],
+  "cadence_degree": 1,
+  "highest_degree": 3,
+  "novelty": 1,
+  "bass_pattern_id": "bp_12345_001",
+  "bass_final_degree": 1
+}
+```
+
+**Migration note:** The existing `events` top-level field (flat lead track events) is replaced by
+`tracks` — this is a breaking change. Both the Pydantic model and `ui/src/api.ts` `CalmPhrase`
+type must be updated atomically. See music-calm-bass-track.feature Notes for the full migration
+checklist.
+
+---
+
 ## Out of Scope
 
 - `GET /api/music/calm/phrase/{phrase_id}` — phrase persistence and retrieval (future Tier 1)

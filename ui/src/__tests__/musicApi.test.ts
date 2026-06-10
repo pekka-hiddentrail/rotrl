@@ -12,8 +12,9 @@ function makePhrase(): CalmPhrase {
     bpm: 96,
     time_signature: '4/4',
     bars: 4,
-    events: [
-      { bar: 1, beat: 1, note: 'C5', midi: 72, duration: '4n', velocity: 88 },
+    tracks: [
+      { track_id: 'lead', role: 'lead', events: [{ bar: 1, beat: 1, note: 'C5', midi: 72, duration: '4n', velocity: 0.69 }] },
+      { track_id: 'bass', role: 'bass', events: [{ bar: 1, beat: 1, note: 'C3', midi: 48, duration: '4n', velocity: 0.45 }] },
     ],
     state: {
       motif_id: 'm-1',
@@ -21,6 +22,8 @@ function makePhrase(): CalmPhrase {
       cadence_degree: 1,
       highest_degree: 5,
       novelty: 0.2,
+      bass_pattern_id: 'bp-1',
+      bass_final_degree: 0,
     },
   }
 }

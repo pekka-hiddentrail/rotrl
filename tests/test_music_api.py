@@ -19,7 +19,7 @@ def test_post_music_calm_next_phrase_returns_valid_schema(client):
         "bpm",
         "time_signature",
         "bars",
-        "events",
+        "tracks",
         "state",
     ):
         assert key in data
@@ -30,10 +30,13 @@ def test_post_music_calm_next_phrase_returns_valid_schema(client):
     assert 88 <= data["bpm"] <= 108
     assert data["time_signature"] == "4/4"
     assert data["bars"] == 4
-    assert isinstance(data["events"], list)
-    assert len(data["events"]) > 0
+    assert isinstance(data["tracks"], list)
+    assert len(data["tracks"]) >= 1
 
-    sample = data["events"][0]
+    lead = next(t for t in data["tracks"] if t["role"] == "lead")
+    assert set(lead.keys()) >= {"track_id", "role", "events"}
+    assert len(lead["events"]) > 0
+    sample = lead["events"][0]
     assert set(sample.keys()) == {"bar", "beat", "note", "midi", "duration", "velocity"}
 
     state = data["state"]
@@ -43,6 +46,8 @@ def test_post_music_calm_next_phrase_returns_valid_schema(client):
         "cadence_degree",
         "highest_degree",
         "novelty",
+        "bass_pattern_id",
+        "bass_final_degree",
     }
 
 

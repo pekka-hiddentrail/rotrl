@@ -1,6 +1,6 @@
 import * as Tone from 'tone'
 import type { CalmPhrase } from '../api'
-import { getMusicSynth } from './synth'
+import { getBassSynth, getMusicSynth } from './synth'
 
 const BEATS_PER_BAR = 4
 // 150 ms minimum lookahead — enough margin for Tone.js to prepare notes without
@@ -30,6 +30,7 @@ export function createCalmPhrasePlayer(): CalmPhrasePlayer {
   let scheduledIds: number[] = []
   const transport = Tone.getTransport()
   let fadeTimer: number | null = null
+  let bpmLocked = false
 
   const startTransport = () => {
     const anyTransport = transport as unknown as { state?: string; start?: () => void }
@@ -61,31 +62,39 @@ export function createCalmPhrasePlayer(): CalmPhrasePlayer {
       fadeTimer = null
     }
 
-    const synth = getMusicSynth()
     const safeDelay = Math.max(MIN_SCHEDULE_AHEAD_S, startDelaySeconds)
     const startAt = transport.seconds + safeDelay
 
-    transport.bpm.value = phrase.bpm
+    if (!bpmLocked) {
+      transport.bpm.value = phrase.bpm
+      bpmLocked = true
+    }
 
-    const sortedEvents = [...phrase.events].sort(eventSort)
     const beatSeconds = 60 / phrase.bpm
+    const leadSynth = getMusicSynth()
 
     // Flush any lingering release tail from the previous phrase 1 ms before this
     // phrase's first note fires. Prevents monophonic synth re-trigger artifacts.
     const boundaryId = transport.schedule(() => {
-      synth.triggerRelease()
+      leadSynth.triggerRelease()
     }, startAt - 0.001)
     scheduledIds.push(boundaryId)
 
-    for (const ev of sortedEvents) {
-      const beatOffset = (ev.bar - 1) * BEATS_PER_BAR + (ev.beat - 1)
-      const at = startAt + beatOffset * beatSeconds
-      const id = transport.schedule((time) => {
-        const freq = Tone.Frequency(ev.midi, 'midi').toFrequency()
-        const velocity = Math.min(1, Math.max(0, ev.velocity / 127))
-        synth.triggerAttackRelease(freq, ev.duration, time, velocity)
-      }, at)
-      scheduledIds.push(id)
+    // Schedule each track's events through its dedicated synth.
+    for (const track of phrase.tracks) {
+      const synth = track.role === 'bass' ? getBassSynth() : leadSynth
+      const sortedEvents = [...track.events].sort(eventSort)
+
+      for (const ev of sortedEvents) {
+        const beatOffset = (ev.bar - 1) * BEATS_PER_BAR + (ev.beat - 1)
+        const at = startAt + beatOffset * beatSeconds
+        const id = transport.schedule((time) => {
+          const freq = Tone.Frequency(ev.midi, 'midi').toFrequency()
+          const velocity = Math.min(1, Math.max(0, ev.velocity))
+          synth.triggerAttackRelease(freq, ev.duration, time, velocity)
+        }, at)
+        scheduledIds.push(id)
+      }
     }
 
     // Schedule bar-change callbacks so the UI can highlight the active bar.
@@ -113,20 +122,25 @@ export function createCalmPhrasePlayer(): CalmPhrasePlayer {
       fadeTimer = null
     }
 
-    // Snapshot and clear scheduledIds immediately so that a new schedulePhrase
-    // call that arrives before the fade completes does not get its IDs cancelled.
-    const idsToCancel = [...scheduledIds]
+    bpmLocked = false
+
+    // Cancel all scheduled Transport events immediately so no new notes fire.
+    for (const id of scheduledIds) transport.clear(id)
     scheduledIds = []
 
+    // Release any currently-sustaining note so no held tone bleeds through
+    // after volume is restored.
+    getMusicSynth().triggerRelease()
+    getBassSynth().triggerRelease()
+
     if (fadeSecs > 0) {
+      // Fade out only the short release tails.
       Tone.getDestination().volume.rampTo(-60, fadeSecs)
       fadeTimer = window.setTimeout(() => {
         fadeTimer = null
-        for (const id of idsToCancel) transport.clear(id)
         stopTransport()
       }, fadeSecs * 1000 + 50)
     } else {
-      for (const id of idsToCancel) transport.clear(id)
       stopTransport()
     }
   }

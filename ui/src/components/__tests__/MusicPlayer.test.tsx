@@ -23,7 +23,7 @@ vi.mock('tone', () => ({
   getDestination: () => ({ volume: { value: 0 } }),
 }))
 
-vi.mock('../../music/player', () => ({
+vi.mock('../../music/music_player', () => ({
   createCalmPhrasePlayer: () => ({
     schedulePhrase: schedulePhraseMock,
     stop: stopMock,
@@ -53,27 +53,41 @@ function makePhrase(overrides: Partial<CalmPhrase> = {}): CalmPhrase {
     bpm: 100,
     time_signature: '4/4',
     bars: 4,
-    events: [{ bar: 1, beat: 1, note: 'C5', midi: 72, duration: '4n', velocity: 88 }],
+    tracks: [
+      { track_id: 'lead', role: 'lead', events: [{ bar: 1, beat: 1, note: 'C5', midi: 72, duration: '4n', velocity: 0.69 }] },
+      { track_id: 'bass', role: 'bass', events: [{ bar: 1, beat: 1, note: 'C3', midi: 48, duration: '4n', velocity: 0.45 }] },
+    ],
     state: {
       motif_id: 'm-1',
       motif_degrees: [1, 3, 5],
       cadence_degree: 1,
       highest_degree: 5,
       novelty: 0.3,
+      bass_pattern_id: 'bp-1',
+      bass_final_degree: 0,
     },
     ...overrides,
   }
 }
 
-// 4-bar phrase with one event per bar — used for intent-row tests.
+// 4-bar phrase with one lead event per bar — used for intent-row tests.
 function makePhrase4Bars(): CalmPhrase {
   return makePhrase({
     bars: 4,
-    events: [
-      { bar: 1, beat: 1, note: 'C5', midi: 72, duration: '4n', velocity: 88 },
-      { bar: 2, beat: 1, note: 'E5', midi: 76, duration: '4n', velocity: 80 },
-      { bar: 3, beat: 1, note: 'D5', midi: 74, duration: '4n', velocity: 85 },
-      { bar: 4, beat: 1, note: 'G4', midi: 67, duration: '4n', velocity: 78 },
+    tracks: [
+      {
+        track_id: 'lead', role: 'lead', events: [
+          { bar: 1, beat: 1, note: 'C5', midi: 72, duration: '4n', velocity: 0.69 },
+          { bar: 2, beat: 1, note: 'E5', midi: 76, duration: '4n', velocity: 0.63 },
+          { bar: 3, beat: 1, note: 'D5', midi: 74, duration: '4n', velocity: 0.67 },
+          { bar: 4, beat: 1, note: 'G4', midi: 67, duration: '4n', velocity: 0.61 },
+        ],
+      },
+      {
+        track_id: 'bass', role: 'bass', events: [
+          { bar: 1, beat: 1, note: 'C3', midi: 48, duration: '4n', velocity: 0.45 },
+        ],
+      },
     ],
   })
 }
@@ -121,8 +135,8 @@ describe('MusicPlayer', () => {
   it('no further fetches occur after Stop (AC-003)', async () => {
     render(<MusicPlayer sessionId="sess-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
-    // Wait until phrase 1 + prefetch are both in flight
-    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
+    // Phrase 1 + 2 prefetches (both queue slots) = 3 calls
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(3))
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop Music' }))
     const countAtStop = fetchCalmPhraseMock.mock.calls.length
@@ -133,13 +147,13 @@ describe('MusicPlayer', () => {
 
   // AC-005 / AC-011 ─────────────────────────────────────────────────────────────
 
-  it('prefetch for phrase 2 starts immediately after phrase 1 schedules — no timer delay (AC-005, AC-011)', async () => {
+  it('both prefetch queue slots fill immediately after phrase 1 schedules (AC-005, AC-011)', async () => {
     render(<MusicPlayer sessionId="sess-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
 
-    // Both phrase-1 fetch and phrase-2 prefetch should complete quickly
-    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
-    // Only phrase 1 is scheduled so far (phrase 2 waits in prefetchedRef)
+    // Phrase-1 fetch + 2 prefetches = 3 total; second prefetch auto-fires after first completes
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(3))
+    // Only phrase 1 is scheduled so far (phrases 2 & 3 wait in the queue)
     expect(schedulePhraseMock).toHaveBeenCalledTimes(1)
   })
 
@@ -147,17 +161,17 @@ describe('MusicPlayer', () => {
     render(<MusicPlayer sessionId="sess-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
 
-    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(3))
     // First call: previous_state = null
     expect(fetchCalmPhraseMock.mock.calls[0][2]).toBeNull()
-    // Second call (prefetch): previous_state = phrase-1's state
+    // Second call (prefetch 1): previous_state = phrase-1's state
     expect(fetchCalmPhraseMock.mock.calls[1][2]).toEqual(makePhrase().state)
   })
 
   // AC-012 ─────────────────────────────────────────────────────────────────────
 
-  it('fetch failure leaves prefetchedRef null — fallback replay path is armed (AC-012)', async () => {
-    // Phrase 1 succeeds; prefetch (phrase 2) fails
+  it('prefetch failure triggers automatic retry — queue refills without error UI (AC-012)', async () => {
+    // Phrase 1 succeeds; prefetch 1 fails; retry and second slot succeed via default mock
     fetchCalmPhraseMock
       .mockResolvedValueOnce(makePhrase())
       .mockRejectedValueOnce(new Error('network'))
@@ -165,10 +179,10 @@ describe('MusicPlayer', () => {
     render(<MusicPlayer sessionId="sess-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Start Music' }))
 
-    // Phrase 1 schedules fine; prefetch call is made and fails
-    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(2))
+    // 4 calls: phrase 1 + failed prefetch + retry + second slot
+    await waitFor(() => expect(fetchCalmPhraseMock).toHaveBeenCalledTimes(4))
     expect(schedulePhraseMock).toHaveBeenCalledTimes(1)
-    // No error shown for a background prefetch failure (error shown only at swap time)
+    // Prefetch failure is silent — error is only shown at swap time if queue is still empty
     expect(screen.queryByText(/timed out/i)).not.toBeInTheDocument()
   })
 

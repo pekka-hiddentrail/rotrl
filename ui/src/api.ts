@@ -7,8 +7,14 @@ export interface NoteEvent {
   beat: number
   note: string
   midi: number
-  duration: '8n' | '4n' | '2n' | string
+  duration: '8n' | '4n' | '2n' | '1n' | string
   velocity: number
+}
+
+export interface TrackEvents {
+  track_id: string
+  role: 'lead' | 'bass' | string
+  events: NoteEvent[]
 }
 
 export interface PhraseState {
@@ -17,6 +23,8 @@ export interface PhraseState {
   cadence_degree: number
   highest_degree: number
   novelty: number
+  bass_pattern_id: string
+  bass_final_degree: number
 }
 
 export interface CalmPhrase {
@@ -27,7 +35,7 @@ export interface CalmPhrase {
   bpm: number
   time_signature: string
   bars: number
-  events: NoteEvent[]
+  tracks: TrackEvents[]
   state: PhraseState
 }
 
