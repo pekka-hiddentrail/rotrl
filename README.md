@@ -119,13 +119,14 @@ Navigate to **http://localhost:5173** in your browser.
 
 1. **Configure** — pick provider (`groq` recommended), model, session number; uncheck **Dev** for real play
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
-3. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
-4. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
-5. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DicePanel — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
-6. **View Log** — opens the live session markdown log in a new browser tab (shown during an active session)
-7. **API Logs** — opens an in-app overlay listing recent LLM call log files. Click any entry to see a summary bar (`status` · `section_format_ok` · `first_token_ms` · `duration_ms` · `total_tokens`) plus the full JSON payload. Escape or click outside to close
-8. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
-9. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
+3. **Music controls (optional)** — use **Start Music** to begin calm procedural playback. Use **Stop Music** to halt playback. Enable **Music Off** for a hard disable: it stops playback immediately and blocks further phrase fetches until turned off. In Dev mode, **Generate Phrase (Debug)** fetches and displays phrase details without starting playback
+4. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
+5. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
+6. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DicePanel — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
+7. **View Log** — opens the live session markdown log in a new browser tab (shown during an active session)
+8. **API Logs** — opens an in-app overlay listing recent LLM call log files. Click any entry to see a summary bar (`status` · `section_format_ok` · `first_token_ms` · `duration_ms` · `total_tokens`) plus the full JSON payload. Escape or click outside to close
+9. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
+10. **Purge NPCs** — shown on the pre-boot screen; deletes all auto-created session NPC stub directories (dot-prefixed). A toast shows how many were removed
 
 ### Rate limit badge
 
@@ -195,9 +196,13 @@ rotrl/
 │   └── src/
 │       ├── App.tsx                # Session state, SSE event handling
 │       ├── api.ts                 # SSE fetch helpers + SseEvent types
+│       ├── music/
+│       │   ├── synth.ts           # Tone.js synth bootstrap + AudioContext start
+│       │   └── player.ts          # Calm phrase scheduling over Tone.Transport
 │       ├── types.ts
 │       └── components/
 │           ├── Header.tsx         # Logo + controls (column layout); rate-limit badge
+│           ├── MusicPlayer.tsx    # Calm music controls + Music Off toggle + debug phrase view
 │           ├── ChatWindow.tsx     # Message list + thinking indicator
 │           ├── InputBar.tsx       # Player input textarea
 │           ├── IntentBar.tsx      # NPC/skill context + scene NPC chips (fixed bottom)
@@ -207,7 +212,8 @@ rotrl/
 │           ├── CombatPanel.tsx    # Live initiative tracker (visible during combat)
 │           ├── HpBar.tsx          # HP bar with colour thresholds (green/amber/red/grey)
 │           ├── CoverageMatrix.tsx # Feature AC coverage + code-line coverage modal (two tabs)
-│           └── ApiLogPanel.tsx    # In-app API call log browser (list + JSON detail view)
+│           ├── ApiLogPanel.tsx    # In-app API call log browser (list + JSON detail view)
+│           └── EventStatus.tsx    # Event scheduler status panel (overlay, Tools dropdown)
 │
 ├── adventure_path/
 │   ├── 00_system_authority/       # Non-negotiable GM rules — adjudication, PF1e scope
@@ -244,7 +250,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 944 pytest tests
+├── tests/                         # 1265 pytest tests
 ├── ui/src/components/__tests__/    # Vitest component tests
 ├── ui/src/__tests__/               # Vitest App SSE integration tests
 ├── ui/e2e/                         # Playwright browser-flow tests
@@ -270,11 +276,14 @@ rotrl/
 | `GET`  | `/api/sessions/{id}` | Session info (model, message count) |
 | `POST` | `/api/sessions/{id}/turn` | Send player input; streams GM response via SSE |
 | `GET`  | `/api/sessions/{id}/log` | Return live session log as plain text |
+| `GET`  | `/api/sessions/{id}/event_status` | Return full event scheduler runtime state — `scheduler_enabled`, `turn_number`, `active_event_id`, `warm_events` (readiness, threshold, frozen, zones, gains), `completed_events`, `cooldowns` |
+| `POST` | `/api/music/calm/next_phrase` | Generate one symbolic calm phrase (4 bars, C major pentatonic, monophonic). Tier 0 returns JSON note events only; no server-side audio files |
 | `POST` | `/api/sessions/{id}/roll` | Record a dice roll expression and result into the log |
 | `POST` | `/api/sessions/{id}/resolve_roll` | Resolve pending roll: compare `rolled` against DC, record outcome |
 | `POST` | `/api/sessions/{id}/resolve_attack_roll` | Submit player's d20 to-hit roll; returns `{ hit, damage_expr, queue_remaining, next_attack }` |
 | `POST` | `/api/sessions/{id}/resolve_damage_roll` | Submit player's damage dice; applies HP delta, returns `{ damage_total, queue_remaining, next_attack }` |
 | `POST` | `/api/sessions/{id}/resume_combat` | Inject resolved attack results into history and stream LLM narration |
+| `POST` | `/api/sessions/{id}/pc_turn` | Run PC combat action; extracts intent from player input, queues PC attacks, streams narrative, emits `combat_update` |
 | `POST` | `/api/sessions/{id}/enemy_turn` | Run the current enemy actor through a focused LLM call; streams narrative, `attack_result`, `combat_update`, and `done` |
 | `POST` | `/api/sessions/{id}/close_combat` | Stream a short combat-closing narration, then clear combat state and emit `combat_update: null` |
 | `POST` | `/api/sessions/{id}/end` | Generate recap + next-session boot; streams status events via SSE |
@@ -282,6 +291,10 @@ rotrl/
 | `DELETE` | `/api/sessions/{id}/combat` | Clear active combat state immediately (direct API fallback; UI uses `close_combat`) |
 | `POST` | `/api/sessions/{id}/combat/advance_turn` | Advance initiative to next active combatant; writes state.json; returns `{ current_actor, is_pc }` |
 | `POST` | `/api/sessions/{id}/combat/roll_initiatives` | Roll d20 + modifier for every combatant; re-sort initiative; returns `{ combat_state }`. Called automatically on round 1 when a combat event fires; also available as a debug endpoint |
+| `PUT`  | `/api/sessions/{id}/active_character` | Set active character for the session; persists to `state.json`; drives dice bonus auto-apply and speaker badge |
+| `GET`  | `/api/benchmarks` | Return token benchmark data from `outputs/token_benchmarks.csv` |
+| `GET`  | `/api/benchmarks/combat` | Return combat-specific token benchmark data from `outputs/token_benchmarks_combat.csv` |
+| `GET`  | `/api/coverage` | Serve `outputs/coverage.json` (feature AC coverage); used by Coverage modal's "AC Coverage" tab |
 | `GET`  | `/api/code-coverage` | Serve `outputs/code_coverage.json` produced by `pytest --cov`; used by the Coverage modal's "Code Lines" tab |
 | `GET`  | `/api/npcs/session` | List all session NPC slugs (dot-prefixed directories) |
 | `DELETE` | `/api/npcs/session` | Purge all session NPC directories; invalidates the NPC index |
@@ -328,7 +341,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 1026+ pytest tests passing across 29 test files:
+**Backend:** 1265+ pytest tests passing across 47 test files:
 
 | File | Covers |
 |------|--------|
@@ -338,10 +351,10 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_groq_provider.py` | `_groq_post` retry logic, 429 handling, `stream_options` 400 fallback, streaming, max-history, rate-limit SSE event, `first_token_ms` capture |
 | `test_api_logger.py` | LLM call log file format, usage field, summary truncation, `first_token_ms`, `section_format_ok` |
 | `test_api_logs.py` | Log list and fetch endpoints, path traversal rejection |
-| `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks`, section marker detection |
+| `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks` (multi-line and single-line inline blocks — includes Ameiko turn-5 regression case), section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
 | `test_npc_lookup_extended.py` | `detect_all`, `lookup`, status/knowledge reads, `_parse_base` |
-| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC short-stub vs full-profile selection (skill gate), no-location-NPC-injection, skill/location/event injection, context metadata, turn-1 format example injection, full combat spec injection when active, conditional section specs (ROLL/DELTAS gated on detection), PC narrative+mechanical profile injection, PC combat roster injected on round-1 spec with `active_events` |
+| `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC short-stub vs full-profile selection (skill gate), no-location-NPC-injection, skill/location/event injection, context metadata, turn-1 format example injection, full combat spec injection when active, conditional section specs (ROLL/DELTAS gated on detection), PC narrative+mechanical profile injection, PC combat roster injected on round-1 spec with `active_events`, implicit NPC injection from `scene_npcs` when player doesn't name an NPC |
 | `test_end_session.py` | `_parse_turns_from_log`, `_enforce_recap_header`, `stream_end_session` errors |
 | `test_stream_filter.py` | `_stream_with_narrative_filter` — dev pass-through, narrative extraction, split tokens |
 | `test_narrative_guard.py` | `%%NARRATIVE%%` buffer+retry guard — valid section passes first time, missing NARRATIVE triggers retry, tokens from failed attempt not emitted, exhausted retries proceed as-is, flat-format bypasses guard, retry notice written to session log |
@@ -364,8 +377,25 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_pc_combat_turn.py` | PC combat action system (Tier 1.10.5): `_extract_pc_combat_intent` weapon/target extraction and fallbacks, `stream_pc_turn` attack queue from profile, `_stream_pc_turn_narration` narration with known outcome, `/pc_turn` endpoint, edge cases (no enemies, no weapons, non-attack actions) |
 | `test_token_benchmark.py` | Real-API token benchmark — boots Anthropic Haiku, runs three fixed turns, appends prompt/completion/total token counts to `outputs/token_benchmarks.csv`; automatically skipped when `ANTHROPIC_API_KEY` is absent (`@pytest.mark.benchmark`) |
 | `test_prompt_audit.py` | Verifies `scripts/build_coverage.py` produces `outputs/coverage.json` with the expected `summary.total`, `summary.covered`, `summary.gap` keys and correct row schema |
+| `test_combat_hp.py` | `%%HP%%` non-attack HP block, `_parse_hp_deltas`, `_apply_hp_deltas`, `[CURRENT HP]` context injection, HP-status guard |
+| `test_combat_prompt.py` | `_build_combat_system_prompt`, `_COMBAT_SECTION_SPECS`, `_inject_context` combat branch, `[INITIATIVE ORDER]`, `[CURRENT HP]`, `[PC COMBAT STATS]`, `[ACTIVE CONDITIONS]` — 16 tests *(spec: combat-system-prompt.feature)* |
+| `test_combat_active_character.py` | `CombatState.current_actor`, `advance_combat_turn`, `POST /combat/advance_turn`, `_write_session_state` combat actor, `InputBar` hostile state + skull icon, `tests/test_combat_active_character.py`, `InputBarHostile.test.tsx` — 14 tests *(spec: combat-active-character.feature)* |
+| `test_action_economy.py` | `InputBar.tsx` action-type row (Standard/Move/Full-Round), `action_type_hint` POST field, `_HINT_TO_ACTION_TYPE` map, hint override in `_extract_pc_combat_intent`, toggle/reset on turn advance *(spec: action-economy.feature)* |
+| `test_click_to_target.py` | `selectedTarget` state, `combatant-targeted` CSS, target badge near InputBar, `target_hint` POST field, `_extract_pc_combat_intent` target override *(spec: click-to-target.feature)* |
+| `test_enemy_action_type.py` | `_parse_action_block action_type` field, normalisation to canonical set, inference from `action` when absent, `_build_enemy_turn_system` prompt update, `action_card` SSE `action_type` *(spec: enemy-action-type.feature)* |
+| `test_spell_system.py` | `_build_pc_profiles` spell parsing, `_extract_pc_combat_intent` spell detection, `stream_pc_turn` cast branch, `PendingAttack.is_spell`, `damage_request` SSE *(spec: magic-spell-system.feature)* |
+| `test_healing_spells.py` | `PendingAttack.is_heal`, `stream_pc_turn` heal branch, `heal_request` SSE, `resolve_damage_roll` positive delta, DicePanel heal banner, unconscious→active restore *(spec: healing-spells.feature)* |
+| `test_buff_spells.py` | `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects` on turn advance, shield/deflection/luck/natural effect types, ✦ indicator serialisation *(spec: ac-buffs.feature)* |
+| `test_multi_action_turn.py` | Multi-action turn sequencing and edge cases |
+| `test_sse_contract.py` | SSE event shape and field contracts across all streaming endpoints |
+| `test_active_character_api.py` | `PUT /api/sessions/{id}/active_character`, `set_active_character` state persistence, `state.json` write, speaker badge wiring |
+| `test_coverage_matrix.py` | `scripts/build_coverage.py`, `outputs/coverage.json`, `GET /api/coverage`, AC coverage + code-line coverage JSON schema |
+| `test_event_scheduler.py` | Full E1 MVP warm-event scheduler: readiness gain, freeze, threshold roll, pity trigger, active lockout, TTL, zone normalisation, combat TTL tick, frozen guard (BUG-001), cooldown tick (BUG-002), boot location seeding — 55 tests *(spec: event-temperature-mvp.feature)* |
+| `test_event_status.py` | `GET /api/sessions/{id}/event_status` endpoint: response shape, `scheduler_enabled` flag, `warm_events` fields, `active_event_id`, `completed_events`, `turn_number`, boot location seeding — 31 tests *(spec: event-status-panel.feature AC-001–AC-010)* |
+| `test_music_generation.py` | Tier 0 calm phrase generator: degree mapping, bar totals, deterministic seeds, register constraints, cadence rule, repetition/descending/eighth-ratio guards, motif carry-forward |
+| `test_music_api.py` | `POST /api/music/calm/next_phrase` schema contract, API validation 422 path, and structured `generation_failed` 422 response |
 
-**Frontend:** 230+ Vitest tests passing across 15 test files (run separately — `cd ui && npm run test`):
+**Frontend:** Vitest tests passing across 27 test files (run separately — `cd ui && npm run test`):
 
 Recent streaming regressions are covered explicitly: `test_stream_filter.py` asserts dev mode passes raw `%%EVENT%%` tokens while full mode hides them, `test_event_injection.py` asserts event tags do not leak to player-visible non-dev chat, `ChatWindow.test.tsx` covers empty GM bubbles with three thinking dots, and `App.enemy-turn.test.tsx` covers the enemy-turn pre-token loading state.
 
@@ -389,6 +419,15 @@ Recent streaming regressions are covered explicitly: `test_stream_filter.py` ass
 | `ApiLogPanel.test.tsx` | API log browser: list view (empty state, row rendering, filename parsing, close behaviours), detail view (status/format/latency/token badges, JSON block, back navigation, error path) |
 | `MessageBubble.test.tsx` | Player speaker labels, portrait fallback, clean player content, GM bubble invariants |
 | `SplashHint.test.tsx` | Hint pool integrity, initial display, timed rotation, no immediate repeats, fade class |
+| `App.pc-combat-turn.test.tsx` | App wiring for PC combat turn: `pcTurn()` API call, action type routing, attack queue from `pc_turn` stream, `attackPhase` transition |
+| `ActiveCharacter.test.tsx` | Active character state management, `PUT /active_character` wiring, active character reflected in session |
+| `setActiveCharacterApi.test.ts` | `setActiveCharacter` API client function — request shape, response handling |
+| `CombatPanelRollInit.test.tsx` | Roll Initiatives button in CombatPanel: enabled/disabled states, click handler wiring *(spec: roll-initiatives.feature AC-009)* |
+| `CombatEventCard.test.tsx` | Enemy action card rendering — action/target/weapon/ability, if_hit/if_miss conditional text, `combat-event` role bubble *(spec: enemy-turn.feature)* |
+| `InputBarActionEconomy.test.tsx` | Action type buttons (Standard/Move/Full-Round) — visibility gated on PC combat turn, toggle/reset on send and turn advance *(spec: action-economy.feature)* |
+| `InputBarHostile.test.tsx` | InputBar hostile state: skull icon, taunting placeholder text, send button disabled *(spec: combat-active-character.feature)* |
+| `ClickToTarget.test.tsx` | Click-to-target combatant row — `combatant-targeted` CSS class, target badge near InputBar, clear on non-combat *(spec: click-to-target.feature)* |
+| `MultiActionBar.test.tsx` | Multi-action bar component — action sequencing UI |
 
 **E2E:** 13 mocked Playwright tests plus 11 live Playwright tests passing in Chromium:
 
@@ -418,9 +457,12 @@ POST /api/sessions/{id}/turn  (repeated each exchange)
   └─ stream_turn()
        ├─ validate input
        ├─ inject context into system prompt copy:
-       │    NpcIndex.detect()      → inject NPC profile(s) if mentioned
-       │    SkillIndex.detect()    → inject skill rules if triggered
+       │    NpcIndex.detect()           → inject NPC profile(s) if mentioned
+       │    scene_npcs (implicit)       → inject last scene NPC profile when player doesn't name one
+       │    SkillIndex.detect()         → inject skill rules if triggered
        │    scene_npcs → inject profiles of NPCs active in scene
+       │    LocationIndex.detect()      → inject location profile; update scene_locations
+       │    _tick_event_scheduler()     → tick readiness, roll threshold, inject [ACTIVE EVENT] block
        ├─ trim message history to provider limit
        ├─ stream LLM response token-by-token
        │    _stream_with_narrative_filter() → only %%NARRATIVE%% reaches player
@@ -489,6 +531,7 @@ No vector database. Every turn, keyword lookups and active-event TTL checks run 
 5. **Event map** (system prompt, not per-turn) — `EventIndex.event_map_text()` builds a compact block listing all valid event IDs and their trigger conditions, injected once at boot. Zero-cost if `02_events/` is empty.
 6. **Combat rules** — `CombatRulesIndex` scans for trigger phrases against `adventure_path/04_rules/combat/*.md`. Only fires when `session.combat_state.round > 0`. Longest-match trigger wins; rules body injected as `## Combat Reference — {rule_name}`. Twelve rule files cover actions, AC, attack rolls, AoOs, HP, initiative, and spellcasting.
 7. **Combat start roster** — when `active_events` are present and no combat yet, `_build_pc_combat_roster` injects a `[PARTY ROSTER]` block listing every PC in the exact `%%COMBAT%%` combatant line format (name · hp_max/hp_max · ac · init). Ensures all party members appear in the tracker from round 1, not just the active speaker.
+8. **Event scheduler tick** — `_tick_event_scheduler` runs after zone/location detection. If `session.event_scheduler` is True: increments readiness for warm events whose zone matches the current location (base gain + action tag bonuses), freezes events in the wrong zone, then runs `_trigger_phase` (threshold roll; pity auto-trigger at N=6 failed rolls). When an event is active, its TTL is decremented. An `[ACTIVE EVENT]` context block is injected when `event_runtime.active_event_id` is set.
 
 ### Authority hierarchy
 
@@ -569,7 +612,7 @@ ollama list                            # confirm model is pulled
 | Combat Tracker Tier 1.7 — focused per-enemy `%%ACTION%%` query, `POST /enemy_turn`, backend-resolved enemy attacks, Enemy Turn/PC Attacks phase badges, and narrative `POST /close_combat` clear flow | ✅ Complete |
 | Tools ▾ dropdown in header — Benchmarks, Coverage, View Session Log, API Logs, Purge NPCs consolidated into a single dropdown; outside-click + Escape dismissal | ✅ Complete |
 | Code coverage tab in Coverage modal — `pytest-cov` → `outputs/code_coverage.json` → `GET /api/code-coverage` → "Code Lines" tab with per-file bar charts sorted worst-first | ✅ Complete |
-| Anthropic (Claude) provider — `claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5` | ✅ Complete |
+| Anthropic (Claude) provider — `claude-sonnet-4-6`, `claude-opus-4-8`, `claude-haiku-4-5` | ✅ Complete |
 | API call log browser UI (`ApiLogPanel`) — list + detail view, summary metrics bar | ✅ Complete |
 | Env-var-configurable tunables (`ROTRL_*`) for history limits, token cap, retry base | ✅ Complete |
 | `name_exclude_words.txt` — NPC name filter loaded from file, GM-editable without code changes | ✅ Complete |
@@ -578,11 +621,26 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 1026+ pytest · 240+ Vitest · 15 Playwright mocked · 11 live Playwright tests | ✅ Complete |
+| Test suites — 1265+ pytest · Vitest · 15 Playwright mocked · 11 live Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
 | Player characters — Yanyeeku, Vanx, Ani | ✅ Complete |
+| Combat Tracker Tier 1.8 — active character per turn: `CombatState.current_actor`, `POST /combat/advance_turn`, `InputBar` hostile state + skull icon + taunting placeholder, `set_active_character` API, speaker badge | ✅ Complete |
+| Roll Initiatives — `roll_combat_initiatives`, PC/enemy modifier, `current_actor` set to highest active, auto-roll on round-1 combat event, `POST /combat/roll_initiatives` debug endpoint | ✅ Complete |
+| PC combat turn — `stream_pc_turn`, `POST /pc_turn`, `_extract_pc_combat_intent` weapon/target extraction and fallbacks, attack queue from PC action | ✅ Complete |
+| Magic spell system — `PendingAttack.is_spell`, `stream_pc_turn` `cast` branch, `PendingAttack` spell flow, `damage_request` SSE, `AttackPhase spell_damage`, DicePanel spell banner | ✅ Complete |
+| Healing spells — `PendingAttack.is_heal`, `heal_request` SSE, `AttackPhase spell_heal`, DicePanel heal banner, `resolve_damage_roll` positive delta, unconscious→active restore | ✅ Complete |
+| AC buffs — `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects` on turn advance, shield/deflection/luck/natural effect types, ✦ indicator in CombatPanel | ✅ Complete |
+| Action economy — `InputBar` action-type row (Standard/Move/Full-Round), `action_type_hint` POST field, visible only on PC combat turn, toggle/reset on send and turn advance | ✅ Complete |
+| Click-to-target — `selectedTarget` state, `combatant-targeted` CSS, target badge near InputBar, `target_hint` POST field, `_extract_pc_combat_intent` target override | ✅ Complete |
+| Zone combat — `Combatant.zone`, `_parse_event_combatants` Zone column, zone badge in CombatPanel below HP bar | ✅ Complete |
+| Enemy action type parsing — `_parse_action_block action_type` field, normalisation to canonical set, inference from `action` when absent | ✅ Complete |
+| Splash hints — rotating hint pool on pre-boot screen (`SplashHint.tsx`, `hints.ts`, timed fade) | ✅ Complete |
+| Event scheduler E1 MVP — warm-event temperature system, readiness tick, zone freeze, threshold roll (d100 ≤ readiness), pity auto-trigger at N=6 failed rolls, TTL-based active event lifecycle, boot location seeding from `boot.md`, scheduler frozen guard (BUG-001), cooldown tick fix (BUG-002) | ✅ Complete |
+| Event Status debug panel — `EventStatus.tsx`, `GET /api/sessions/{id}/event_status`, readiness bars, threshold markers, status badges (ACTIVE/ELIGIBLE/FROZEN/WARMING/DONE), TTL bar, opens fresh on click | ✅ Complete |
+| Implicit NPC injection from `scene_npcs` — when player doesn't name an NPC the most recently tracked NPC's profile is injected; full profile when skill active, short stub otherwise | ✅ Complete |
+| Single-line bracket block parsing — `_BRACKET_BLOCK_INLINE_RE` + `_parse_inline_block_fields` handle `[ key: val  key: val ]` on one line; fixes silently-dropped `%%DELTAS%%` blocks | ✅ Complete |
 | Roll outcome fed into next GM turn directive | 🔴 Not done — GM narrates blind after resolve |
 | Session crash recovery (in-memory sessions lost on restart) | 🔴 Not started |
 | Acts II–III of Burnt Offerings | 🔴 In progress — sinspawn, Glassworks, Catacombs, Thistletop pending |
@@ -595,7 +653,7 @@ ollama list                            # confirm model is pulled
 | Layer | Technology |
 |-------|------------|
 | Primary LLM | [Groq](https://groq.com/) — `llama-3.3-70b-versatile` (quality) · `llama-3.1-8b-instant` (fast) |
-| Alt LLM | [Anthropic](https://anthropic.com/) — `claude-sonnet-4-6` · `claude-opus-4-7` · `claude-haiku-4-5` |
+| Alt LLM | [Anthropic](https://anthropic.com/) — `claude-sonnet-4-6` · `claude-opus-4-8` · `claude-haiku-4-5` |
 | Fallback LLM | [Ollama](https://ollama.com/) — local, no internet required |
 | Backend | Python 3.9+, FastAPI, uvicorn |
 | Frontend | Vite 5, React 18, TypeScript |

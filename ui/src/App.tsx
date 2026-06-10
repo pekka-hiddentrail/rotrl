@@ -13,6 +13,7 @@ import EventStatus from './components/EventStatus'
 import DicePanel from './components/DicePanel'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
+import MusicPlayer from './components/MusicPlayer'
 import { loadCharacterSheet, useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
 import { advanceCombatTurn, bootSession, sendTurn, pcTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi } from './api'
@@ -639,6 +640,8 @@ export default function App() {
         onOpenEventStatus={() => setShowEventStatus(true)}
         onPurgeNpcs={handlePurgeNpcs}
       />
+
+      <MusicPlayer sessionId={session?.id ?? null} devMode={devMode} />
 
       {error && (
         <div className="error-bar">

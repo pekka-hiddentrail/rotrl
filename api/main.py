@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
+from api.music import GenerationFailedError, generate_calm_phrase
 from api.session_manager import advance_combat_turn, create_session, get_session, list_session_npcs, log_roll, purge_session_npcs, resolve_attack_roll, resolve_damage_roll, resolve_roll, roll_combat_initiatives, save_session, set_active_character, stream_boot, stream_close_combat, stream_end_session, stream_enemy_turn, stream_pc_turn, stream_resume_combat, stream_turn, write_session_state
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -55,10 +56,85 @@ class RollRequest(BaseModel):
     total: int
 
 
+class MusicPhraseStateRequest(BaseModel):
+    motif_id: str
+    motif_degrees: list[int]
+    cadence_degree: int
+    highest_degree: int
+    novelty: int
+    bass_pattern_id: str | None = None
+    bass_final_degree: int | None = None
+
+
+class CalmNextPhraseRequest(BaseModel):
+    session_id: str | None = None
+    seed: int
+    previous_state: MusicPhraseStateRequest | None = None
+
+
 @app.get("/api/health")
 def get_health():
     """Liveness check — the UI hits this before boot to confirm the backend is up."""
     return {"status": "ok"}
+
+
+@app.post("/api/music/calm/next_phrase")
+def post_music_calm_next_phrase(req: CalmNextPhraseRequest):
+    """Generate one symbolic 4-bar calm phrase (Tier 0, no server-side audio)."""
+    try:
+        phrase = generate_calm_phrase(
+            seed=req.seed,
+            previous_state=req.previous_state.model_dump() if req.previous_state else None,
+            session_id=req.session_id,
+        )
+    except GenerationFailedError as e:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "generation_failed",
+                "detail": e.detail,
+                "attempts": e.attempts,
+            },
+        )
+
+    return JSONResponse(
+        content={
+            "phrase_id": phrase.phrase_id,
+            "mood": phrase.mood,
+            "key": phrase.key,
+            "scale": phrase.scale,
+            "bpm": phrase.bpm,
+            "time_signature": phrase.time_signature,
+            "bars": phrase.bars,
+            "tracks": [
+                {
+                    "track_id": t.track_id,
+                    "role": t.role,
+                    "events": [
+                        {
+                            "bar": e.bar,
+                            "beat": e.beat,
+                            "note": e.note,
+                            "midi": e.midi,
+                            "duration": e.duration,
+                            "velocity": e.velocity,
+                        }
+                        for e in t.events
+                    ],
+                }
+                for t in phrase.tracks
+            ],
+            "state": {
+                "motif_id": phrase.state.motif_id,
+                "motif_degrees": phrase.state.motif_degrees,
+                "cadence_degree": phrase.state.cadence_degree,
+                "highest_degree": phrase.state.highest_degree,
+                "novelty": phrase.state.novelty,
+                "bass_pattern_id": phrase.state.bass_pattern_id,
+                "bass_final_degree": phrase.state.bass_final_degree,
+            },
+        }
+    )
 
 
 @app.get("/api/intro")

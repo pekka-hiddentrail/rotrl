@@ -52,7 +52,12 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [click-to-target.feature](click-to-target.feature) | Frontend \| Backend | `@combat` `@pc` `@action` `@target` `@input` `@economy` | 9 | `selectedTarget` state in App.tsx, `combatant-targeted` CSS class, target badge near InputBar, `target_hint` POST field, `PcTurnRequest.target_hint`, `_extract_pc_combat_intent` target_hint override, `CombatPanel.tsx` row click handler |
 | [enemy-action-type.feature](enemy-action-type.feature) | Backend | `@combat` `@enemy` `@action` `@economy` `@parsing` `@session` | 7 | `_parse_action_block` `action_type` field, normalisation to canonical set, inference from `action` when absent, `_build_enemy_turn_system` prompt update, `action_card` SSE `action_type`, session log |
 
-**Total: 404 acceptance criteria across 42 feature files**
+| [music-calm-generation.feature](music-calm-generation.feature) | Backend | `@music` `@generation` `@calm` `@symbolic` `@backend` | 13 | `CalmConfig`, `NoteEvent`, `PhraseState`, degree→note mapping, bar-fill algorithm, cadence weighting, motif carry-forward, validation/repair loop — `tests/test_music_generation.py` |
+| [music-api-contract.feature](music-api-contract.feature) | Backend \| Frontend | `@music` `@api` `@calm` `@symbolic` `@contract` | 8 | `POST /api/music/calm/next_phrase`, `CalmPhrase` response schema, `NoteEvent` event shape, `PhraseState` motif state, 422 error contract; AC-008 (planning) multi-track `tracks` shape |
+| [music-calm-playback.feature](music-calm-playback.feature) | Frontend | `@music` `@playback` `@calm` `@ui` `@webaudio` | 14 | `MusicPlayer.tsx`, `ui/src/music/synth.ts`, `ui/src/music/player.ts`, Tone.js `Synth`, phrase scheduling, prefetch pipeline, stop fade, bar indicator (AC-014) |
+| [music-calm-bass-track.feature](music-calm-bass-track.feature) | Backend \| Frontend | `@music` `@generation` `@calm` `@bass` `@symbolic` `@multi-track` | 14 | **Planning** — `CalmBassConfig`, bass register C2–G3, stable degrees only, sparse rhythms, lead/bass density coordination, bar-root weights, phrase arc, `bass_pattern_id` state, separate bass `Tone.Synth`; multi-track `tracks` API shape |
+
+**Total: 433 acceptance criteria across 45 feature files**
 
 ---
 
@@ -97,6 +102,12 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@streaming` | SSE token streaming | `StreamingResponse`, token/done/error/patch_last events |
 | `@event` | Scene-triggered event injection | `api/context/event_index.py`, `adventure_path/02_events/`, `active_events`, `%%EVENT%%` |
 | `@debug` | Diagnostic / developer tooling panels | `api/main.py` debug endpoints, `ui/src/components/` debug panels |
+| `@music` | Procedural adaptive music system | `api/music/`, `ui/src/music/`, `ui/src/components/MusicPlayer.tsx`, `/music/` endpoints |
+| `@generation` | Rule-based symbolic phrase generation | `CalmConfig`, phrase generator, validation/repair loop |
+| `@playback` | Browser-side audio synthesis | `MusicPlayer.tsx`, `synth.ts`, `player.ts`, Tone.js |
+| `@webaudio` | Web Audio API / Tone.js integration | `Tone.Transport`, `Tone.Synth`, AudioContext lifecycle |
+| `@symbolic` | Symbolic note representation (no audio files) | `NoteEvent`, `CalmPhrase`, MIDI→frequency mapping |
+| `@contract` | API request/response shape specs | Pydantic models, TypeScript types, casing convention |
 | `@temperature` | Readiness-based event warming and trigger chance | `event_runtime`, scheduler tick, threshold/pity logic |
 | `@chain` | Deterministic event node progression | `active_chain_id`, `active_node_id`, hard transitions |
 | `@stability` | Event pacing conflict controls | readiness vs urgency, arbitration, cooldown protections |
