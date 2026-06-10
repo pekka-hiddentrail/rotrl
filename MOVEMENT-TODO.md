@@ -175,13 +175,13 @@ Handling move actions in `stream_pc_turn` when the player declares movement.
 
 Enemy zone changes from `%%ACTION%%` move declarations.
 
-- [ ] **M4-1 — Parse movement from `%%ACTION%%`** — `_parse_action_block` already captures `movement` field. Add zone parsing: if `movement` contains a zone name from `session.zone_map`, update the enemy's `Combatant.zone`.
+- [x] **M4-1 — Parse movement from `%%ACTION%%`** — Implemented via `target` field (not `movement`): when `action: move`, the LLM writes a zone name in `target`. `_build_enemy_turn_system` injects a `Known zones:` line into the briefing and documents `target` as `<destination zone name if move>`. `stream_enemy_turn` matches `target` case-insensitively against `known_zones`, then calls `_apply_actor_zone_change(session, actor_slug, zone_name)` — a shared helper used by both enemy turn and the HTTP endpoint. `_apply_actor_zone_change` updates `Combatant.zone` for NPC actors or `session.party_zone_id` for `actor_id=="party"`, logs the move, and persists state.
 
 - [ ] **M4-2 — Charge (move + attack)** — enemy in `"stairs"` zone charges a PC in `"square"` zone. Sequence: move to `"square"` zone → now in melee range → attack. Backend handles as: update zone, then resolve attack. `_build_enemy_turn_system` shows the zone change in the briefing.
 
 - [ ] **M4-3 — Retreat** — enemy moves to a non-adjacent zone (two-zone jump, spending full-round action). Validate that the path exists (or allow with narrative note).
 
-- [ ] **M4-T — Tests** — enemy charge updates zone then resolves attack; retreat moves zone correctly; zone shown in `combat_update`.
+- [x] **M4-T — Tests** — `tests/test_enemy_action_type.py::TestEnemyMoveZone` (6 tests): zone applied to combatant after move, reflected in `combat_update` SSE, unknown zone ignored gracefully, no known_zones handled gracefully, known zones appear in briefing, `target` field description updated for move actions.
 
 ---
 

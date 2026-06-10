@@ -16,7 +16,9 @@ import IntentBar from './components/IntentBar'
 import MusicPlayer from './components/MusicPlayer'
 import { loadCharacterSheet, useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { advanceCombatTurn, bootSession, sendTurn, pcTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi } from './api'
+import { advanceCombatTurn, bootSession, sendTurn, pcTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi, fetchLocationZones, postZoneMove } from './api'
+import type { LocationZonesData } from './api'
+import LocationZonesPanel from './components/LocationZonesPanel'
 
 function SplashPortrait({ c }: { c: CharacterSummary }) {
   const [imgOk, setImgOk] = useState(true)
@@ -81,6 +83,10 @@ export default function App() {
   const [showCoverage,     setShowCoverage]     = useState(false)
   const [showEventStatus,  setShowEventStatus]  = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
+  const [locationZonesData, setLocationZonesData] = useState<LocationZonesData | null>(null)
+  const [zoneActorId, setZoneActorId] = useState('party')
+  const [zoneMovePending, setZoneMovePending] = useState(false)
+  const [zonePanelCollapsed, setZonePanelCollapsed] = useState(false)
   const endAbortRef = useRef<AbortController | null>(null)
   // Refs for reading current state inside async closures (stale closure guard)
   const attackPhaseRef = useRef<AttackPhase>(null)
@@ -138,7 +144,10 @@ export default function App() {
         if (event.type === 'error') throw new Error(event.message)
         if (event.type === 'done') sessionId = event.session_id
       }
-      if (sessionId) setSession({ id: sessionId, sessionNumber, model })
+      if (sessionId) {
+        setSession({ id: sessionId, sessionNumber, model })
+        void refreshLocationZones(sessionId)
+      }
     } catch (e) {
       setMessages([])
       setError(String(e))
@@ -221,6 +230,7 @@ export default function App() {
       if (!attackPhaseRef.current && attackLogRef.current.length > 0 && session) {
         await doResumeCombat(session.id)
       }
+      if (session) void refreshLocationZones(session.id)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -362,6 +372,29 @@ export default function App() {
     }
   }
 
+  const refreshLocationZones = useCallback(async (sessionId: string) => {
+    try {
+      const data = await fetchLocationZones(sessionId)
+      if (data.zones.length > 0) setLocationZonesData(data)
+    } catch {
+      // non-fatal — panel stays hidden if zones aren't loaded
+    }
+  }, [])
+
+  const handleZoneMove = async (accessPointId: string) => {
+    if (!session || zoneMovePending) return
+    setZoneMovePending(true)
+    try {
+      const refreshed = await postZoneMove(session.id, zoneActorId, accessPointId)
+      setLocationZonesData(refreshed)
+    } catch (e) {
+      setToast(String(e))
+      setTimeout(() => setToast(null), 3000)
+    } finally {
+      setZoneMovePending(false)
+    }
+  }
+
   const handleKillEnd = () => {
     endAbortRef.current?.abort()
     endAbortRef.current = null
@@ -405,6 +438,7 @@ export default function App() {
         }
         if (event.type === 'error') throw new Error(event.message)
       }
+      void refreshLocationZones(session.id)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -730,6 +764,18 @@ export default function App() {
             inPcTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
             selectedTarget={selectedTarget}
             onSelectTarget={setSelectedTarget}
+          />
+        )}
+
+        {locationZonesData && locationZonesData.zones.length > 0 && (
+          <LocationZonesPanel
+            zonesData={locationZonesData}
+            actorId={zoneActorId}
+            onActorChange={setZoneActorId}
+            onMove={handleZoneMove}
+            movePending={zoneMovePending}
+            collapsed={zonePanelCollapsed}
+            onCollapse={setZonePanelCollapsed}
           />
         )}
 

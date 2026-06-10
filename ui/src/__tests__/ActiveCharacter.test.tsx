@@ -29,6 +29,8 @@ vi.mock('../api', () => ({
   resolveDamageRoll:     vi.fn(),
   resumeCombat:          vi.fn(),
   setActiveCharacter:    vi.fn().mockResolvedValue({ active_character: 'party' }),
+  fetchLocationZones:    vi.fn().mockResolvedValue({ zones: [], access_points: [], occupants: [], available_moves: [], current_location: { id: '', name: '' }, current_zone_id: '' }),
+  postZoneMove:          vi.fn().mockResolvedValue({ zones: [], access_points: [], occupants: [], available_moves: [], current_location: { id: '', name: '' }, current_zone_id: '' }),
 }))
 
 vi.mock('../data/characters', () => ({

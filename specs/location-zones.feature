@@ -1,7 +1,7 @@
 # FEATURE - Location Zones
 
 **ID:** location-zones
-**Status:** Draft
+**Status:** Partially Implemented (LZ-001–LZ-010, LZ-013 done; LZ-011/012 pending)
 **Area:** Backend | Frontend | Content
 **Tags:** @location @zone @movement @ui @api @generator @context
 
@@ -285,15 +285,28 @@ And   ending combat preserves the non-combat location zone state
 
 ---
 
-## Implementation Plan
+## Implementation Status
 
-1. Extend the location file format with `## Zones` and `## Access Points`.
-2. Add backend parsing and serialization in the location/context layer.
-3. Add session zone state for current location, current actor zone, visible zones, and occupants.
-4. Add read and move APIs for the frontend.
-5. Build the Location Zones GUI panel: current zone, zone list, access-point movement controls, and occupant markers.
-6. Add description-only zone generation as a draft writer for locations that lack authored zone data.
-7. Bridge location zone ids into combat zone state so combat and exploration do not drift.
+| AC | Status | Notes |
+|----|--------|-------|
+| LZ-001 | ✅ Done | `## Zones` + `## Access Points` markdown tables; `festival_square/base.md` authored |
+| LZ-002 | ✅ Done | `LocationZoneGraph` / `LocationZone` / `LocationAccessPoint` dataclasses in `location_lookup.py`; `_parse_location_zones()` + `_parse_location_access_points()` |
+| LZ-003 | ✅ Done | `GameSession.party_zone_id`, `zone_map`, `zone_properties`, `current_location_id` fields; seeded at session creation |
+| LZ-004 | ✅ Done | `GET /api/sessions/{id}/location_zones` → `get_location_zone_state(session)`; full response schema |
+| LZ-005 | ✅ Done | `apply_zone_move(session, actor_id, access_point_id)` — validates AP state, actor position, directionality; raises `ValueError` on invalid move |
+| LZ-006 | ✅ Done | `POST /api/sessions/{id}/zone_move` in `main.py`; calls `apply_zone_move`, returns refreshed state; `_apply_actor_zone_change` shared helper (also used by enemy turn) |
+| LZ-007 | ✅ Done | `LocationZonesPanel.tsx` — visible when `locationZonesData.zones.length > 0`; shows location name, current zone name/desc, enabled move buttons per open AP |
+| LZ-008 | ✅ Done | Zone list: all visible zones listed, current zone `.lz-zone-current`, reachable zones `.lz-zone-reachable` + `→` marker, tags as chips |
+| LZ-009 | ✅ Done | Open APs → enabled `.lz-move-btn`; locked/blocked APs → disabled `.lz-move-btn--restricted` with requirement in title; hidden APs omitted |
+| LZ-010 | ✅ Done | Occupant chips per zone row; click chip to set `zoneActorId`; active actor chip gets `.lz-occupant-active` highlight |
+| LZ-011 | 🔴 Not done | Description-only zone generation — no LLM-based draft zone writer yet |
+| LZ-012 | 🔴 Not done | Topology quality for generated zones — depends on LZ-011 |
+| LZ-013 | ✅ Done | Combat uses same zone ids; `Combatant.zone` independent of location zone state; combat-specific `## Zones` can override |
+
+## Implementation Plan (remaining)
+
+6. Add description-only zone generation as a draft writer for locations that lack authored zone data (LZ-011/012).
+7. Bridge location zone ids into combat zone state so the location zone panel and combat zone badges show the same data (LZ-013 is structurally done; full bridge is future work).
 
 ---
 

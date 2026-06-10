@@ -3187,6 +3187,201 @@ body {
   flex-shrink: 0;
 }
 
+/* ─── Location Zones Panel ───────────────────────────────────────────────── */
+
+.location-zones-panel {
+  width: 200px;
+  flex-shrink: 0;
+  background: #0c100f;
+  border-left: 1px solid #1a3020;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 8px 12px;
+  gap: 6px;
+  overflow-y: auto;
+  order: 5;
+}
+
+.location-zones-panel--collapsed {
+  width: 32px;
+  padding: 10px 4px;
+  overflow: hidden;
+}
+
+.lz-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.lz-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #70b090;
+  letter-spacing: 0.03em;
+}
+
+.lz-location-name {
+  font-size: 0.62rem;
+  color: #507060;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lz-collapse-btn {
+  background: none;
+  border: none;
+  color: #507060;
+  font-size: 0.6rem;
+  cursor: pointer;
+  padding: 1px 3px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.lz-collapse-btn:hover { color: #70b090; }
+
+.lz-current-zone {
+  background: #0f1a14;
+  border: 1px solid #1e3a28;
+  border-radius: 4px;
+  padding: 5px 7px;
+  flex-shrink: 0;
+}
+
+.lz-current-zone-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #80c898;
+}
+
+.lz-current-zone-desc {
+  font-size: 0.6rem;
+  color: #4a6a54;
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.lz-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.lz-zone-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  background: #0f1510;
+}
+
+.lz-zone-row.lz-zone-current {
+  border-color: #2a5038;
+  background: #0f1a14;
+}
+
+.lz-zone-row.lz-zone-reachable {
+  border-color: #1e3828;
+}
+
+.lz-zone-row-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lz-zone-row-name {
+  font-size: 0.68rem;
+  color: #90a898;
+}
+
+.lz-zone-current .lz-zone-row-name {
+  color: #80c898;
+  font-weight: 600;
+}
+
+.lz-reachable-marker {
+  font-size: 0.6rem;
+  color: #4a9060;
+}
+
+.lz-zone-tags {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.lz-tag {
+  font-size: 0.55rem;
+  color: #3a6048;
+  background: #0a1510;
+  border: 1px solid #1a3020;
+  border-radius: 2px;
+  padding: 0 3px;
+}
+
+.lz-zone-occupants {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.lz-occupant {
+  font-size: 0.6rem;
+  color: #608878;
+  background: #0c1812;
+  border: 1px solid #1a3020;
+  border-radius: 10px;
+  padding: 0 5px;
+}
+
+.lz-occupant.lz-occupant-active {
+  color: #80c898;
+  border-color: #2a5038;
+}
+
+.lz-moves {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.lz-moves-label {
+  font-size: 0.6rem;
+  color: #3a6048;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lz-move-btn {
+  font-size: 0.65rem;
+  padding: 4px 7px;
+  text-align: left;
+  border-color: #1e3828;
+  color: #70b090;
+  background: #0c1510;
+}
+
+.lz-move-btn:hover:not(:disabled) {
+  background: #0f1a14;
+  border-color: #2a5038;
+  color: #90d0a8;
+}
+
+.lz-move-btn--restricted {
+  color: #3a5040;
+  border-color: #1a2820;
+}
+
 /* ─── Feature Coverage Matrix ─────────────────────────────────────────────── */
 
 .cm-overlay {
