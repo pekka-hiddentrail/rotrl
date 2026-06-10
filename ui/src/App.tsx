@@ -84,7 +84,6 @@ export default function App() {
   const [showEventStatus,  setShowEventStatus]  = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [locationZonesData, setLocationZonesData] = useState<LocationZonesData | null>(null)
-  const [zoneActorId, setZoneActorId] = useState('party')
   const [zoneMovePending, setZoneMovePending] = useState(false)
   const [zonePanelCollapsed, setZonePanelCollapsed] = useState(false)
   const [pendingZoneMove, setPendingZoneMove] = useState<string | null>(null)
@@ -98,6 +97,16 @@ export default function App() {
     setAttackLog(prev => { const next = fn(prev); attackLogRef.current = next; return next })
   }
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
+
+  // True when it's a PC's turn in combat (not an enemy's turn and not out of combat).
+  const inPcCombatTurn = !!(combatState && currentCombatantName &&
+    Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))
+
+  // Zone movement actor: locked to the current PC during their combat turn; party otherwise.
+  // Never settable manually — prevents the player from moving enemies or out-of-turn actors.
+  const zoneActorId = (inPcCombatTurn && currentCombatantName)
+    ? currentCombatantName.toLowerCase()
+    : 'party'
 
   // Clear the manual combat speaker override whenever the initiative actor changes.
   // This ensures the override only lasts for the turn it was set on.
@@ -751,7 +760,7 @@ export default function App() {
                 onEnemyTurn={handleEnemyTurn}
                 disabled={streaming || ending || enemyTurnStreaming || combatClosing}
                 activeSpeaker={inputActiveSpeaker}
-                inPcCombatTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
+                inPcCombatTurn={inPcCombatTurn}
                 combatWeapons={(() => {
                   if (!combatState || !currentCombatantName) return undefined
                   const pc = Object.values(fullCharacterMap).find(
@@ -777,7 +786,7 @@ export default function App() {
             onAdvanceTurn={handleAdvanceTurn}
             onEnemyTurn={handleEnemyTurn}
             onEndCombat={handleEndCombat}
-            inPcTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
+            inPcTurn={inPcCombatTurn}
             selectedTarget={selectedTarget}
             onSelectTarget={setSelectedTarget}
           />
@@ -787,9 +796,8 @@ export default function App() {
           <LocationZonesPanel
             zonesData={locationZonesData}
             actorId={zoneActorId}
-            onActorChange={setZoneActorId}
             onMove={handleZoneMove}
-            movePending={zoneMovePending}
+            movePending={zoneMovePending || (!!combatState && !inPcCombatTurn)}
             collapsed={zonePanelCollapsed}
             onCollapse={setZonePanelCollapsed}
           />

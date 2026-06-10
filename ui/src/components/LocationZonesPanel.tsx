@@ -2,8 +2,7 @@ import type { LocationZonesData, LocationAccessPointData } from '../api'
 
 interface Props {
   zonesData: LocationZonesData
-  actorId: string                          // "party" or slugified combatant name
-  onActorChange: (id: string) => void
+  actorId: string                          // "party" or current PC name (lower); highlights active actor chip
   onMove: (accessPointId: string) => void
   movePending: boolean
   collapsed: boolean
@@ -18,7 +17,6 @@ const STATE_LABEL: Record<string, string> = {
 export default function LocationZonesPanel({
   zonesData,
   actorId,
-  onActorChange,
   onMove,
   movePending,
   collapsed,
@@ -102,9 +100,6 @@ export default function LocationZonesPanel({
                           <span
                             key={label}
                             className={`lz-occupant${isActor ? ' lz-occupant-active' : ''}`}
-                            onClick={() => onActorChange(label.toLowerCase())}
-                            title={`Set ${label} as movement actor`}
-                            style={{ cursor: 'pointer' }}
                           >
                             {label}
                           </span>

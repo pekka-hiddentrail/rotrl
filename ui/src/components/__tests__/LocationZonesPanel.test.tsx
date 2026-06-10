@@ -34,14 +34,12 @@ const BASE_DATA: LocationZonesData = {
 
 function renderPanel(overrides: Partial<LocationZonesData> = {}, props = {}) {
   const data = { ...BASE_DATA, ...overrides }
-  const onMove       = vi.fn()
-  const onActorChange = vi.fn()
-  const onCollapse   = vi.fn()
+  const onMove     = vi.fn()
+  const onCollapse = vi.fn()
   render(
     <LocationZonesPanel
       zonesData={data}
       actorId="party"
-      onActorChange={onActorChange}
       onMove={onMove}
       movePending={false}
       collapsed={false}
@@ -49,7 +47,7 @@ function renderPanel(overrides: Partial<LocationZonesData> = {}, props = {}) {
       {...props}
     />,
   )
-  return { onMove, onActorChange, onCollapse }
+  return { onMove, onCollapse }
 }
 
 // ── LZ-007 — current zone and movement controls ───────────────────────────────
@@ -105,7 +103,7 @@ describe('LocationZonesPanel — LZ-008 zone list', () => {
       <LocationZonesPanel
         zonesData={BASE_DATA}
         actorId="party"
-        onActorChange={vi.fn()}
+
         onMove={vi.fn()}
         movePending={false}
         collapsed={false}
@@ -122,7 +120,7 @@ describe('LocationZonesPanel — LZ-008 zone list', () => {
       <LocationZonesPanel
         zonesData={BASE_DATA}
         actorId="party"
-        onActorChange={vi.fn()}
+
         onMove={vi.fn()}
         movePending={false}
         collapsed={false}
@@ -139,7 +137,7 @@ describe('LocationZonesPanel — LZ-008 zone list', () => {
       <LocationZonesPanel
         zonesData={BASE_DATA}
         actorId="party"
-        onActorChange={vi.fn()}
+
         onMove={vi.fn()}
         movePending={false}
         collapsed={false}
@@ -159,7 +157,7 @@ describe('LocationZonesPanel — LZ-008 zone list', () => {
 describe('LocationZonesPanel — LZ-009 access point states', () => {
   it('renders a disabled button for a locked access point', () => {
     const { container } = render(
-      <LocationZonesPanel zonesData={BASE_DATA} actorId="party" onActorChange={vi.fn()}
+      <LocationZonesPanel zonesData={BASE_DATA} actorId="party"
         onMove={vi.fn()} movePending={false} collapsed={false} onCollapse={vi.fn()} />,
     )
     const btn = container.querySelector('.lz-move-btn--restricted') as HTMLButtonElement
@@ -170,7 +168,7 @@ describe('LocationZonesPanel — LZ-009 access point states', () => {
 
   it('locked button title includes the requirement', () => {
     const { container } = render(
-      <LocationZonesPanel zonesData={BASE_DATA} actorId="party" onActorChange={vi.fn()}
+      <LocationZonesPanel zonesData={BASE_DATA} actorId="party"
         onMove={vi.fn()} movePending={false} collapsed={false} onCollapse={vi.fn()} />,
     )
     const btn = container.querySelector('.lz-move-btn--restricted') as HTMLButtonElement
@@ -198,11 +196,11 @@ describe('LocationZonesPanel — LZ-010 occupancy', () => {
     expect(screen.getByText('Goblin Warrior 1')).toBeInTheDocument()
   })
 
-  it('clicking an occupant chip calls onActorChange', () => {
-    const { onActorChange } = renderPanel()
+  it('occupant chips are not interactive (no pointer cursor or click handler)', () => {
+    renderPanel()
     const chip = screen.getByText('Goblin Warrior 1')
-    fireEvent.click(chip)
-    expect(onActorChange).toHaveBeenCalledWith('goblin warrior 1')
+    expect(chip.style.cursor).not.toBe('pointer')
+    expect(chip.getAttribute('onClick')).toBeNull()
   })
 
   it('active actor chip has lz-occupant-active class', () => {
@@ -210,7 +208,7 @@ describe('LocationZonesPanel — LZ-010 occupancy', () => {
       <LocationZonesPanel
         zonesData={BASE_DATA}
         actorId="party"
-        onActorChange={vi.fn()}
+
         onMove={vi.fn()}
         movePending={false}
         collapsed={false}
@@ -231,7 +229,7 @@ describe('LocationZonesPanel — collapsed state', () => {
       <LocationZonesPanel
         zonesData={BASE_DATA}
         actorId="party"
-        onActorChange={vi.fn()}
+
         onMove={vi.fn()}
         movePending={false}
         collapsed={true}
@@ -248,7 +246,7 @@ describe('LocationZonesPanel — collapsed state', () => {
       <LocationZonesPanel
         zonesData={BASE_DATA}
         actorId="party"
-        onActorChange={vi.fn()}
+
         onMove={vi.fn()}
         movePending={false}
         collapsed={false}
