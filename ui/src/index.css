@@ -1,4 +1,4 @@
-* {
+﻿* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -686,12 +686,12 @@ body {
 /* Non-combat: sidebar(1) | chat(2) | dice(3) */
 .char-sidebar  { order: 1; }
 .chat-area     { order: 2; }
-.dice-panel    { order: 3; }
+.dice-tray    { order: 3; }
 .combat-panel  { display: none; order: 4; }
 
 /* Combat active: sidebar(1) | dice(2) | chat(3) | combat(4)
    Dice moves left (border swaps sides); combat panel appears right. */
-.main-content.combat-active .dice-panel {
+.main-content.combat-active .dice-tray {
   order: 2;
   border-left: none;
   border-right: 1px solid #2a1818;
@@ -1462,9 +1462,9 @@ body {
   opacity: 0.5;
 }
 
-/* ── Dice Panel ──────────────────────────── */
+/* ── Dice Tray ──────────────────────────── */
 
-.dice-panel {
+.dice-tray {
   width: 152px;
   flex-shrink: 0;
   background: #110c0c;
@@ -1477,7 +1477,7 @@ body {
   overflow-y: auto;
 }
 
-.dice-panel-active {
+.dice-tray-active {
   border-left-color: #c9a84c;
   box-shadow: inset -3px 0 12px #c9a84c18;
 }
@@ -1628,7 +1628,7 @@ body {
   cursor: pointer;
 }
 
-.dice-panel-label {
+.dice-tray-label {
   font-family: 'Cinzel', serif;
   font-size: 8px;
   letter-spacing: 0.2em;

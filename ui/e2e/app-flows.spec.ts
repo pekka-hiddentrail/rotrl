@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test'
+﻿import { expect, test, type Page, type Route } from '@playwright/test'
 
 const character = {
   id: 'yanyeeku',
@@ -134,8 +134,8 @@ test('send turn displays a streamed GM message', async ({ page }) => {
   await expect(page.getByText('The square wakes.')).toBeVisible()
 })
 
-// Covers: dice-panel.feature AC-001, AC-002, AC-003
-test('roll_request event activates the dice panel', async ({ page }) => {
+// Covers: dice-tray.feature AC-001, AC-002, AC-003
+test('roll_request event activates the Dice Tray', async ({ page }) => {
   await page.route('**/api/sessions/sess-e2e/turn', route =>
     fulfillSse(route, {
       type: 'roll_request',
@@ -150,7 +150,7 @@ test('roll_request event activates the dice panel', async ({ page }) => {
   await page.getByRole('textbox').fill('check for trouble')
   await page.getByRole('button', { name: 'Send' }).click()
 
-  await expect(page.locator('.dice-panel-active')).toBeVisible()
+  await expect(page.locator('.dice-tray-active')).toBeVisible()
   await expect(page.getByText('Perception')).toBeVisible()
   await expect(page.getByText('DC 18')).toBeVisible()
 })

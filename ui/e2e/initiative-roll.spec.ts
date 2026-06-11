@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+﻿import { expect, test, type Page } from '@playwright/test'
 
 // Spec: specs/roll-initiatives.feature  AC-007, AC-008, AC-009
 //
@@ -6,11 +6,11 @@ import { expect, test, type Page } from '@playwright/test'
 //
 //   1. A combat event fires on the same turn as %%COMBAT%% round 1
 //   2. Backend emits "initiative_pending" SSE (not "combat_update")
-//      → CombatPanel stays hidden; DicePanel stays in right column
-//   3. DicePanel shows "⚔ Combat begins — roll for initiative" banner
+//      → CombatPanel stays hidden; DiceTray stays in right column
+//   3. DiceTray shows "⚔ Combat begins — roll for initiative" banner
 //      with a "Roll for all combatants" button
 //   4. User clicks the button → POST /roll_initiatives returns a rolled combat_state
-//   5. CombatPanel appears (left ← DicePanel, right ← CombatPanel)
+//   5. CombatPanel appears (left ← DiceTray, right ← CombatPanel)
 //   6. Combatants are sorted descending by rolled initiative
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ test.describe('Initiative roll flow', () => {
     await boot(page)
     await sendInitiativeTurn(page)
 
-    // DicePanel (right column) shows the combat-start banner
+    // DiceTray (right column) shows the combat-start banner
     await expect(page.locator('.initiative-banner')).toBeVisible()
     await expect(page.locator('.initiative-banner-label')).toContainText('Combat begins')
     await expect(page.getByRole('button', { name: /Roll for all combatants/i })).toBeVisible()
@@ -103,7 +103,7 @@ test.describe('Initiative roll flow', () => {
     await expect(page.locator('.combat-panel')).not.toBeVisible()
   })
 
-  test('DicePanel stays in right column until initiatives are rolled', async ({ page }) => {
+  test('DiceTray stays in right column until initiatives are rolled', async ({ page }) => {
     await setupCommonRoutes(page)
     await routeSse(page, '**/api/sessions/sess-init/turn', [
       { type: 'initiative_pending', combat_state: pendingCombatState },
@@ -113,7 +113,7 @@ test.describe('Initiative roll flow', () => {
     await boot(page)
     await sendInitiativeTurn(page)
 
-    // No combat-active class yet → DicePanel is still in right column position
+    // No combat-active class yet → DiceTray is still in right column position
     const mainContent = page.locator('.main-content')
     await expect(mainContent).not.toHaveClass(/combat-active/)
   })

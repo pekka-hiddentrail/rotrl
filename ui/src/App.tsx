@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+﻿import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Message, SessionInfo, CombatState, AttackPhase, AttackResult, ActiveSpeaker } from './types'
 import type { CharacterData, CharacterSummary } from './data/characters'
 import Header from './components/Header'
@@ -10,7 +10,7 @@ import ApiLogPanel from './components/ApiLogPanel'
 import TokenBenchmarks from './components/TokenBenchmarks'
 import CoverageMatrix from './components/CoverageMatrix'
 import EventStatus from './components/EventStatus'
-import DicePanel from './components/DicePanel'
+import DiceTray from './components/DiceTray'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import MusicPlayer from './components/MusicPlayer'
@@ -806,7 +806,7 @@ export default function App() {
         )}
 
         {isBooted && (
-          <DicePanel
+          <DiceTray
             key={diceKey}
             sessionId={session?.id ?? null}
             pendingRoll={pendingRoll}

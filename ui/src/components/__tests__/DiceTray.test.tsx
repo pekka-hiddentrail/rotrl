@@ -1,12 +1,12 @@
-/**
- * DicePanel — dice roller, skill bonus, roll history, and banner tests.
+﻿/**
+ * DiceTray — dice roller, skill bonus, roll history, and banner tests.
  *
- * Spec: specs/dice-panel.feature
+ * Spec: specs/dice-tray.feature
  * Covers: AC-001 through AC-013
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import DicePanel, { normaliseSkill, lookupSkillBonus } from '../DicePanel'
+import DiceTray, { normaliseSkill, lookupSkillBonus } from '../DiceTray'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ function renderPanel(
 ) {
   const onRoll = props.onRoll ?? NULL_RESOLVE
   return render(
-    <DicePanel
+    <DiceTray
       sessionId="s1"
       pendingRoll={props.pendingRoll ?? null}
       activeSpeaker={props.activeSpeaker ?? null}
@@ -124,7 +124,7 @@ describe('lookupSkillBonus', () => {
 
 // ─── Component: AC-001 — queue accumulation ───────────────────────────────────
 
-describe('DicePanel — AC-001 queue accumulation', () => {
+describe('DiceTray — AC-001 queue accumulation', () => {
   it('renders the Roll button as disabled when no dice are pending', () => {
     renderPanel()
     expect(screen.getByRole('button', { name: 'Roll' })).toBeDisabled()
@@ -160,7 +160,7 @@ describe('DicePanel — AC-001 queue accumulation', () => {
 
 // ─── Component: AC-002 — roll history and latest highlight ────────────────────
 
-describe('DicePanel — AC-002 roll history highlight', () => {
+describe('DiceTray — AC-002 roll history highlight', () => {
   it('most recent roll has history-latest class (AC-002)', async () => {
     const onRoll = vi.fn().mockResolvedValue(null)
     const { container } = renderPanel({ onRoll })
@@ -188,7 +188,7 @@ describe('DicePanel — AC-002 roll history highlight', () => {
 
 // ─── Component: AC-004 — pending roll banner ──────────────────────────────────
 
-describe('DicePanel — AC-004 pending roll banner', () => {
+describe('DiceTray — AC-004 pending roll banner', () => {
   it('shows skill name in the banner (AC-004)', () => {
     renderPanel({ pendingRoll: DIPLOMACY_ROLL })
     expect(screen.getByText('Diplomacy')).toBeInTheDocument()
@@ -204,20 +204,20 @@ describe('DicePanel — AC-004 pending roll banner', () => {
     expect(screen.getByText('click to roll d20')).toBeInTheDocument()
   })
 
-  it('adds dice-panel-active class to aside when pending roll is set (AC-004)', () => {
+  it('adds dice-tray-active class to aside when pending roll is set (AC-004)', () => {
     const { container } = renderPanel({ pendingRoll: DIPLOMACY_ROLL })
-    expect(container.querySelector('aside')).toHaveClass('dice-panel-active')
+    expect(container.querySelector('aside')).toHaveClass('dice-tray-active')
   })
 
-  it('does not show dice-panel-active class when no pending roll', () => {
+  it('does not show dice-tray-active class when no pending roll', () => {
     const { container } = renderPanel({ pendingRoll: null })
-    expect(container.querySelector('aside')).not.toHaveClass('dice-panel-active')
+    expect(container.querySelector('aside')).not.toHaveClass('dice-tray-active')
   })
 })
 
 // ─── Component: AC-006 — roll history limit ───────────────────────────────────
 
-describe('DicePanel — AC-006 roll history limit', () => {
+describe('DiceTray — AC-006 roll history limit', () => {
   it('keeps only the last 10 rolls when 12 have been made (AC-006)', async () => {
     const onRoll = vi.fn().mockResolvedValue(null)
     const { container } = renderPanel({ onRoll })
@@ -233,7 +233,7 @@ describe('DicePanel — AC-006 roll history limit', () => {
 
 // ─── Component: AC-007 — auto-apply modifier ─────────────────────────────────
 
-describe('DicePanel — AC-007 auto-apply modifier', () => {
+describe('DiceTray — AC-007 auto-apply modifier', () => {
   it('calls onRoll with rawTotal + modifier when speaker and pending roll are set', async () => {
     const onRoll = vi.fn().mockResolvedValue({ passed: true })
     renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
@@ -283,7 +283,7 @@ describe('DicePanel — AC-007 auto-apply modifier', () => {
 
 // ─── Component: AC-008 — no active character ──────────────────────────────────
 
-describe('DicePanel — AC-008 no active character', () => {
+describe('DiceTray — AC-008 no active character', () => {
   it('calls onRoll with raw total when activeSpeaker is null', async () => {
     const onRoll = vi.fn().mockResolvedValue(null)
     renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: null, onRoll })
@@ -310,7 +310,7 @@ describe('DicePanel — AC-008 no active character', () => {
 
 // ─── Component: AC-009 — unmapped skill ───────────────────────────────────────
 
-describe('DicePanel — AC-009 unmapped skill', () => {
+describe('DiceTray — AC-009 unmapped skill', () => {
   it('calls onRoll with raw total when skill is not mapped', async () => {
     const onRoll = vi.fn().mockResolvedValue(null)
     renderPanel({ pendingRoll: SPELLCRAFT_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
@@ -336,7 +336,7 @@ describe('DicePanel — AC-009 unmapped skill', () => {
 
 // ─── Component: AC-010 — auto-bonus toggle ────────────────────────────────────
 
-describe('DicePanel — AC-010 auto-bonus toggle', () => {
+describe('DiceTray — AC-010 auto-bonus toggle', () => {
   it('shows the Auto bonus toggle when a pending roll is active', () => {
     renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER })
     expect(screen.getByRole('checkbox')).toBeInTheDocument()
@@ -368,7 +368,7 @@ describe('DicePanel — AC-010 auto-bonus toggle', () => {
 
 // ─── Component: AC-011 — skill name normalisation ────────────────────────────
 
-describe('DicePanel — AC-011 skill normalisation', () => {
+describe('DiceTray — AC-011 skill normalisation', () => {
   it('matches "sense motive" (lowercase) to "Sense Motive" entry', async () => {
     const onRoll = vi.fn().mockResolvedValue(null)
     const roll = { ...PERCEPTION_ROLL, skill: 'sense motive', dc: 15 }
@@ -382,7 +382,7 @@ describe('DicePanel — AC-011 skill normalisation', () => {
 
 // ─── Component: AC-012 — click banner to quick-roll d20 ──────────────────────
 
-describe('DicePanel — AC-012 click banner to quick-roll d20', () => {
+describe('DiceTray — AC-012 click banner to quick-roll d20', () => {
   it('clicking the roll-request-prompt calls onRoll with 1d20 and modifier (AC-012)', async () => {
     const onRoll = vi.fn().mockResolvedValue({ passed: true })
     renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER, onRoll })
@@ -429,7 +429,7 @@ describe('DicePanel — AC-012 click banner to quick-roll d20', () => {
 
 // ─── AC-013 — character portrait and name in roll banner ─────────────────────
 
-describe('DicePanel — AC-013 character badge in pending roll banner', () => {
+describe('DiceTray — AC-013 character badge in pending roll banner', () => {
   it('shows the character name in the banner when active speaker is set', () => {
     renderPanel({ pendingRoll: PERCEPTION_ROLL, activeSpeaker: YANYEEKU_SPEAKER })
     expect(screen.getByText('Yanyeeku')).toBeInTheDocument()
@@ -471,7 +471,7 @@ describe('DicePanel — AC-013 character badge in pending roll banner', () => {
 
 // ─── Component: plain roll (no pending roll) ──────────────────────────────────
 
-describe('DicePanel — plain roll without pending', () => {
+describe('DiceTray — plain roll without pending', () => {
   it('calls onRoll with the raw total', async () => {
     const onRoll = vi.fn().mockResolvedValue(null)
     renderPanel({ pendingRoll: null, activeSpeaker: YANYEEKU_SPEAKER, onRoll })

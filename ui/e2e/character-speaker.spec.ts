@@ -1,11 +1,11 @@
-/**
- * Character speaker activation, dice-panel roll banner, and active_character
+﻿/**
+ * Character speaker activation, dice-tray roll banner, and active_character
  * state persistence tests.
  *
- * Spec: specs/character-system.feature, specs/dice-panel.feature,
+ * Spec: specs/character-system.feature, specs/dice-tray.feature,
  *       specs/session-state.feature
  * Covers: character-system AC-004 (active speaker), AC-005 (speaker badge),
- *         AC-006 (clear active); dice-panel AC-007 (auto-bonus), AC-012
+ *         AC-006 (clear active); dice-tray AC-007 (auto-bonus), AC-012
  *         (banner click), AC-013 (portrait in banner);
  *         session-state AC-014 (PUT sets name), AC-015 (party on deselect)
  *
@@ -125,7 +125,7 @@ test('CS-E2E-001 — each character can be activated and shows the Speaking as b
   }
 })
 
-// Covers: dice-panel.feature AC-007, AC-012, AC-013
+// Covers: dice-tray.feature AC-007, AC-012, AC-013
 test('CS-E2E-002 — Ani active: portrait in roll banner, Perception roll with auto-bonus', async ({ page }) => {
   // Mock turn returning a Perception roll request
   await page.route('**/api/sessions/sess-e2e/turn', route =>
@@ -154,8 +154,8 @@ test('CS-E2E-002 — Ani active: portrait in roll banner, Perception roll with a
   await page.getByRole('textbox').fill('I look around carefully')
   await page.getByRole('button', { name: 'Send' }).click()
 
-  // Dice panel activates with amber border
-  await expect(page.locator('.dice-panel-active')).toBeVisible()
+  // Dice Tray activates with amber border
+  await expect(page.locator('.dice-tray-active')).toBeVisible()
 
   // AC-013 — Ani's portrait and name appear in the banner
   await expect(page.locator('.roll-request-character')).toBeVisible()

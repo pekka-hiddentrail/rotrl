@@ -1,4 +1,4 @@
-# FEATURE — Response Parsing
+﻿# FEATURE — Response Parsing
 
 **ID:** response-parsing
 **Status:** Approved
@@ -53,7 +53,7 @@ Given the LLM response contains a %%ROLL%% section with skill, DC, success, fail
 When  the section is parsed
 Then  session.pending_roll is set with { skill, dc, success, failure }
 And   a roll_request SSE event is emitted with the same values
-And   the dice panel shows the pending roll banner
+And   the Dice Tray shows the pending roll banner
 ```
 
 ---

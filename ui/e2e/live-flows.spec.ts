@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+﻿import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 
@@ -366,14 +366,14 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     // New flow (roll-initiatives.feature AC-008):
     // The goblin_attack_starts combat event is active, so the backend emits
     // "initiative_pending" instead of "combat_update". The CombatPanel stays
-    // hidden until the player clicks "Roll for all combatants" in the DicePanel.
+    // hidden until the player clicks "Roll for all combatants" in the DiceTray.
     await expect(page.locator('.initiative-banner')).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('.combat-panel')).not.toBeVisible()
 
-    // Player triggers the initiative roll — DicePanel is still in right column at this point
+    // Player triggers the initiative roll — DiceTray is still in right column at this point
     await page.getByRole('button', { name: /Roll for all combatants/i }).click()
 
-    // After rolling, CombatPanel appears and DicePanel shifts left
+    // After rolling, CombatPanel appears and DiceTray shifts left
     await expect(page.locator('.combat-panel')).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('.initiative-banner')).not.toBeVisible()
     await expect(page.locator('.combat-round-badge')).toContainText(/Round\s+1/)
@@ -382,14 +382,14 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     const viewport = page.viewportSize()
     expect(viewport, 'viewport should be available for layout assertions').not.toBeNull()
     const combatBox = await visibleBox(page.locator('.combat-panel'), 'combat tracker')
-    const diceBox = await visibleBox(page.locator('.dice-panel'), 'dice panel')
+    const diceBox = await visibleBox(page.locator('.dice-tray'), 'Dice Tray')
     const characterBox = await visibleBox(page.locator('.char-sidebar'), 'character sidebar')
 
     expect(combatBox.x + combatBox.width / 2, 'combat tracker should be on the right side').toBeGreaterThan(viewport!.width / 2)
     expect(characterBox.x + characterBox.width, 'character sidebar should be left of combat tracker').toBeLessThan(combatBox.x)
-    expect(diceBox.x + diceBox.width, 'dice panel should be left of combat tracker').toBeLessThan(combatBox.x)
+    expect(diceBox.x + diceBox.width, 'Dice Tray should be left of combat tracker').toBeLessThan(combatBox.x)
     expect(characterBox.x, 'character sidebar should start on the left side').toBeLessThan(viewport!.width / 2)
-    expect(diceBox.x, 'dice panel should start on the left side').toBeLessThan(viewport!.width / 2)
+    expect(diceBox.x, 'Dice Tray should start on the left side').toBeLessThan(viewport!.width / 2)
 
     // session-state AC-004: state.json switches to combat mode at round 1
     const statePath = path.join(repoRoot, 'sessions', 'session_001', 'state.json')
@@ -398,8 +398,8 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     }, { timeout: 5_000 }).toMatchObject({ mode: 'combat', round: 1 })
   })
 
-  // Covers: dice-panel.feature AC-001, AC-002, AC-004
-  test('L11 - %%ROLL%% prompt can be answered from the dice panel', async () => {
+  // Covers: dice-tray.feature AC-001, AC-002, AC-004
+  test('L11 - %%ROLL%% prompt can be answered from the Dice Tray', async () => {
     await sendTurnAndWait(
       page,
       [
@@ -417,17 +417,17 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
 
     await expect(page.locator('.bubble-gm').last()).toContainText('%%ROLL%%', { timeout: 60_000 })
 
-    // The dice panel activates only if the backend parsed the %%ROLL%% block and emitted
+    // The Dice Tray activates only if the backend parsed the %%ROLL%% block and emitted
     // a roll_request SSE.  If not, the LLM deviated from the required format — fail with
     // a plain assertion (not test.fail(), which produces a counter-intuitive "unexpected
     // pass" result in Playwright when no exception is thrown).
-    const panelActive = page.locator('.dice-panel-active')
+    const panelActive = page.locator('.dice-tray-active')
     const panelVisible = await panelActive.isVisible().catch(() => false) ||
       await panelActive.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false)
 
     expect(
       panelVisible,
-      'dice-panel-active did not appear — roll_request SSE not emitted; LLM deviated from %%ROLL%% format',
+      'dice-tray-active did not appear — roll_request SSE not emitted; LLM deviated from %%ROLL%% format',
     ).toBe(true)
     if (!panelVisible) return
 
@@ -469,8 +469,8 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
     await expect(page.locator('.combat-panel')).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('.combatant-hp-row').first()).toBeVisible()
 
-    // AC-002 + AC-003: PC attack queued → attack_request SSE → DicePanel shows to-hit banner
-    await expect(page.locator('.dice-panel-active')).toBeVisible({ timeout: 10_000 })
+    // AC-002 + AC-003: PC attack queued → attack_request SSE → DiceTray shows to-hit banner
+    await expect(page.locator('.dice-tray-active')).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('.attack-banner')).toBeVisible()
     // Banner must identify Yanyeeku as the attacker
     await expect(page.locator('.roll-request-skill')).toContainText('Yanyeeku')
@@ -518,10 +518,10 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
 })
 
 // ---------------------------------------------------------------------------
-// L13-L14 — dice panel integration (App.tsx wiring)
+// L13-L14 — Dice Tray integration (App.tsx wiring)
 //
-// Queue/auto-bonus/history-cap behaviour is already covered by DicePanel
-// Vitest tests (DicePanel.test.tsx AC-001, AC-006, AC-007, AC-010).
+// Queue/auto-bonus/history-cap behaviour is already covered by DiceTray
+// Vitest tests (DiceTray.test.tsx AC-001, AC-006, AC-007, AC-010).
 // Only the two App.tsx integration paths that cannot be tested at component
 // level live here:
 //
@@ -533,7 +533,7 @@ test.describe.serial('L9-L12 - live goblin event, combat, roll, and attack flow'
 // /turn and /resolve_roll are mocked via page.route — no LLM call needed.
 // ---------------------------------------------------------------------------
 
-test.describe.serial('L13-L14 — dice panel integration', () => {
+test.describe.serial('L13-L14 — Dice Tray integration', () => {
   let page: Page
 
   function rollRequestSse(skill: string, dc: number): string {
@@ -555,7 +555,7 @@ test.describe.serial('L13-L14 — dice panel integration', () => {
   })
 
   // App.tsx wiring: setPendingRoll(null) fires after resolveRoll resolves → banner gone.
-  // DicePanel unit tests cover badge rendering; this covers the parent callback chain.
+  // DiceTray unit tests cover badge rendering; this covers the parent callback chain.
   test('L13 — pending roll banner clears after resolve and PASSED/FAILED badge appears', async () => {
     await page.route('**/sessions/*/turn', route =>
       route.fulfill({

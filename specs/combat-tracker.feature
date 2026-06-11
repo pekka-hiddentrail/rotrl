@@ -1,4 +1,4 @@
-# FEATURE — Combat Tracker (Tier 1)
+﻿# FEATURE — Combat Tracker (Tier 1)
 
 **ID:** combat-tracker
 **Status:** Approved
@@ -124,12 +124,12 @@ And   "%%COMBAT%%", "round:", and "combatants:" are NOT present in any token eve
 ```gherkin
 Given combatState in App.tsx is null
 Then  CombatPanel is not rendered
-And   DicePanel is in the right column (order: 3)
+And   DiceTray is in the right column (order: 3)
 
 Given a combat_update event arrives with a non-null combat_state
 Then  combatState is set in App.tsx
 And   CombatPanel is rendered in the right column (order: 4)
-And   DicePanel moves to the left column (order: 2) adjacent to CharacterSidebar
+And   DiceTray moves to the left column (order: 2) adjacent to CharacterSidebar
 And   .main-content has the "combat-active" CSS class
 ```
 
@@ -410,4 +410,4 @@ And   the CombatPanel disappears only after the stream ends and combat_state is 
 - Related: [attack-resolution.feature](attack-resolution.feature) — `%%ATTACK%%` block, interactive PC dice flow
 - Related: [response-parsing.feature](response-parsing.feature) — `%%COMBAT%%` extends the section marker set
 - Related: [event-injection.feature](event-injection.feature) — `goblin_attack_starts` event co-fires with the first `%%COMBAT%%` block
-- Related: [dice-panel.feature](dice-panel.feature) — DicePanel repositions during combat
+- Related: [dice-tray.feature](dice-tray.feature) — DiceTray repositions during combat

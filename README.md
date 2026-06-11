@@ -1,4 +1,4 @@
-# RotRL: Agentic GM System
+﻿# RotRL: Agentic GM System
 
 A FastAPI + React system that runs Pathfinder 1st Edition adventures with an AI Game Master. The GM agent manages narrative, NPCs, skill checks, combat tracking, and persistent world state. Groq is the primary LLM provider (fast, cloud-hosted); Anthropic (Claude) and Ollama are also supported.
 
@@ -121,8 +121,8 @@ Navigate to **http://localhost:5173** in your browser.
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
 3. **Music controls (optional)** — use **Start Music** to begin calm procedural playback. Use **Stop Music** to halt playback. Enable **Music Off** for a hard disable: it stops playback immediately and blocks further phrase fetches until turned off. In Dev mode, **Generate Phrase (Debug)** fetches and displays phrase details without starting playback
 4. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
-5. **Roll dice** when prompted; the UI shows a dice panel. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
-6. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DicePanel shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DicePanel — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
+5. **Roll dice** when prompted; the UI shows a Dice Tray. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
+6. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DiceTray shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DiceTray — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
 7. **View Log** — opens the live session markdown log in a new browser tab (shown during an active session)
 8. **API Logs** — opens an in-app overlay listing recent LLM call log files. Click any entry to see a summary bar (`status` · `section_format_ok` · `first_token_ms` · `duration_ms` · `total_tokens`) plus the full JSON payload. Escape or click outside to close
 9. **End Session** — generates a recap and next-session boot file; all NPC state is already written per-turn. If it gets stuck (LLM hangs), click **Kill** next to the "Ending…" button — inline confirm, then state is force-reset without saving a recap
@@ -139,7 +139,7 @@ The GM response is structured internally into sections that are stripped before 
 | Section | What it does |
 |---------|-------------|
 | `%%NARRATIVE%%` | The prose you read — streamed token-by-token |
-| `%%ROLL%%` | Triggers a dice panel with skill, DC, success/failure text |
+| `%%ROLL%%` | Triggers a Dice Tray with skill, DC, success/failure text |
 | `%%GENERATE%%` | Creates a new NPC stub file on disk |
 | `%%DELTAS%%` | Writes updated disposition/location/knowledge to each NPC's file |
 | `%%EVENT%%` | Signals a scene transition — injects event content into context for N turns |
@@ -208,7 +208,7 @@ rotrl/
 │           ├── IntentBar.tsx      # NPC/skill context + scene NPC chips (fixed bottom)
 │           ├── CharacterSidebar.tsx
 │           ├── CharacterSheet.tsx
-│           ├── DicePanel.tsx      # Dice roller + attack banners (to-hit / damage) — feeds result back to API
+│           ├── DiceTray.tsx      # Dice roller + attack banners (to-hit / damage) — feeds result back to API
 │           ├── CombatPanel.tsx    # Live initiative tracker (visible during combat)
 │           ├── HpBar.tsx          # HP bar with colour thresholds (green/amber/red/grey)
 │           ├── CoverageMatrix.tsx # Feature AC coverage + code-line coverage modal (two tabs)
@@ -310,7 +310,7 @@ All streaming endpoints use Server-Sent Events. Each event is a JSON object with
 | `roll_request` | When a `%%ROLL%%` block is parsed (includes skill, dc, success, failure) |
 | `rate_limits` | After each Groq turn — per-minute RPM/TPM remaining + reset times (Groq only) |
 | `combat_update` | After every turn — carries serialised `CombatState` or `null`; drives CombatPanel visibility |
-| `attack_request` | When a PC attack is queued — `{ attacker, target, bonus, ac, damage_expr, attack_type }`; activates DicePanel to-hit banner |
+| `attack_request` | When a PC attack is queued — `{ attacker, target, bonus, ac, damage_expr, attack_type }`; activates DiceTray to-hit banner |
 | `attack_result` | After each auto-resolved NPC attack — `{ attacker, target, roll, bonus, total, ac, hit, damage_rolls, damage_total, attack_type, is_pc }` |
 | `context` | Injected NPC/skill/location context for the turn; includes `scene_npcs` list (all NPCs currently tracked in scene) |
 | `status` | Progress messages during end-session generation |
@@ -384,7 +384,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_click_to_target.py` | `selectedTarget` state, `combatant-targeted` CSS, target badge near InputBar, `target_hint` POST field, `_extract_pc_combat_intent` target override *(spec: click-to-target.feature)* |
 | `test_enemy_action_type.py` | `_parse_action_block action_type` field, normalisation to canonical set, inference from `action` when absent, `_build_enemy_turn_system` prompt update, `action_card` SSE `action_type` *(spec: enemy-action-type.feature)* |
 | `test_spell_system.py` | `_build_pc_profiles` spell parsing, `_extract_pc_combat_intent` spell detection, `stream_pc_turn` cast branch, `PendingAttack.is_spell`, `damage_request` SSE *(spec: magic-spell-system.feature)* |
-| `test_healing_spells.py` | `PendingAttack.is_heal`, `stream_pc_turn` heal branch, `heal_request` SSE, `resolve_damage_roll` positive delta, DicePanel heal banner, unconscious→active restore *(spec: healing-spells.feature)* |
+| `test_healing_spells.py` | `PendingAttack.is_heal`, `stream_pc_turn` heal branch, `heal_request` SSE, `resolve_damage_roll` positive delta, DiceTray heal banner, unconscious→active restore *(spec: healing-spells.feature)* |
 | `test_buff_spells.py` | `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects` on turn advance, shield/deflection/luck/natural effect types, ✦ indicator serialisation *(spec: ac-buffs.feature)* |
 | `test_multi_action_turn.py` | Multi-action turn sequencing and edge cases |
 | `test_sse_contract.py` | SSE event shape and field contracts across all streaming endpoints |
@@ -406,14 +406,14 @@ Recent streaming regressions are covered explicitly: `test_stream_filter.py` ass
 | `App.roll-initiatives.test.tsx` | AC-009 App wiring: `handleRollInitiatives` click → `rollInitiatives` API → `setCombatState` + `setCurrentCombatantName`; error message shown and state unchanged on API failure |
 | `CombatPanel.test.tsx` | AC-007 initiative order + `combatant-current`/`combatant-inactive` CSS; AC-008 End Combat callback + disabled prop; AC-009 `HpBar` colour thresholds (green/amber/red/grey via inline style); AC-012 condition chips, title tooltips, empty conditions |
 | `CombatPanelEnemyTurn.test.tsx` | Tier 1.7 CombatPanel controls: Enemy Turn button, disabled PC-attack state, PC Attacks/Enemy Turn phase badges, and Closing state |
-| `DicePanelAttack.test.tsx` | AC-002/003/004/008 attack banners — to-hit (attacker/target/AC/bonus/active-class/`onAttackRoll`), damage (HIT line/expr/Roll Damage enabled), null phase, attack log (hit/miss badges, PC/NPC labels, log-before-skill-history order), V8 `onDamageRoll` receives rolled values not die sides |
+| `DiceTrayAttack.test.tsx` | AC-002/003/004/008 attack banners — to-hit (attacker/target/AC/bonus/active-class/`onAttackRoll`), damage (HIT line/expr/Roll Damage enabled), null phase, attack log (hit/miss badges, PC/NPC labels, log-before-skill-history order), V8 `onDamageRoll` receives rolled values not die sides |
 | `ChatWindow.test.tsx` | Thinking indicator, GM streaming cursor, intro markdown rendering, autoscroll |
 | `Header.test.tsx` | Pre/post-boot controls, provider model options, boot disabled state, View Log handler, purge/Kill inline confirms, rate-limit badge, Benchmarks button, Coverage button |
 | `IntentBar.test.tsx` | 52-char truncation, NPC/skill/location tags, null tags, detecting state, missing-context diagnostic |
 | `CharacterSheet.test.tsx` | Modal close behavior, sheet sections, AC/save/spell tooltips, spell grouping |
 | `CharacterSidebarHealth.test.tsx` | Portrait/title display and HP bar thresholds |
 | `characters.test.tsx` | `useCharacters` summary load success, HTTP failure, fetch rejection, lazy full-sheet fetch and cache reuse |
-| `DicePanel.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display, quick-roll from banner (AC-012) |
+| `DiceTray.test.tsx` | Dice roll UI, history, DC resolution, pending-roll display, quick-roll from banner (AC-012) |
 | `InputBar.test.tsx` | Send/Enter behavior, disabled state, speaker badge, roll injection |
 | `CharacterSidebar.test.tsx` | Character action menu, active speaker halo, loading state |
 | `ApiLogPanel.test.tsx` | API log browser: list view (empty state, row rendering, filename parsing, close behaviours), detail view (status/format/latency/token badges, JSON block, back navigation, error path) |
@@ -436,7 +436,7 @@ Recent streaming regressions are covered explicitly: `test_stream_filter.py` ass
 | `e2e/app-flows.spec.ts` | Mocked-browser flows: boot badge, send turn, roll request, end session cleanup, Kill stuck ending, Purge NPCs toast, character sheet modal |
 | `e2e/combat-flow.spec.ts` | CT-E2E-001a/b/c: `combat_update` SSE → CombatPanel renders in initiative order + `combat-active` layout; HP bar CSS colour shift across two rounds; End Combat fires `DELETE /combat` and panel disappears |
 | `e2e/enemy-turn.spec.ts` | Mocked-browser Tier 1.7 flows: boot into combat, run Enemy Turn and update HP, block Enemy Turn during PC attack prompts, stream close-combat narrative before clearing tracker |
-| `e2e/live-flows.spec.ts` | Live backend + LLM flows: boot/session format checks, log API, end-session recap, character sidebar, generated NPC directory creation, Purge NPCs directory removal, goblin event trigger, combat tracker, dice-panel roll resolution |
+| `e2e/live-flows.spec.ts` | Live backend + LLM flows: boot/session format checks, log API, end-session recap, character sidebar, generated NPC directory creation, Purge NPCs directory removal, goblin event trigger, combat tracker, dice-tray roll resolution |
 
 ---
 
@@ -606,7 +606,7 @@ ollama list                            # confirm model is pulled
 | Per-turn location RAG (`LocationIndex`, alias detection, profile injection, scene persistence) | ✅ Complete |
 | Combat Tracker Tier 1 — `%%COMBAT%%` block parsing, `CombatState`/`Combatant` dataclasses, `CombatPanel` + `HpBar`, layout shift, `combat_update` SSE, `DELETE /combat` endpoint, per-turn GM directive reminder, event-file combat requirements | ✅ Complete |
 | Combat Tracker Tier 1.1 — backend HP authority from round 2, `%%HP%%` delta block, `[CURRENT HP]` context injection | ✅ Complete |
-| Combat Tracker Tier 1.5 — `%%ATTACK%%` block parsing, NPC auto-resolution, PC attack queue, `resolve_attack_roll` / `resolve_damage_roll` / `resume_combat` endpoints, DicePanel to-hit + damage banners, `attack_request` / `attack_result` SSE, `attack_type` carried through to-hit → damage → log | ✅ Complete |
+| Combat Tracker Tier 1.5 — `%%ATTACK%%` block parsing, NPC auto-resolution, PC attack queue, `resolve_attack_roll` / `resolve_damage_roll` / `resume_combat` endpoints, DiceTray to-hit + damage banners, `attack_request` / `attack_result` SSE, `attack_type` carried through to-hit → damage → log | ✅ Complete |
 | Combat party roster injection — `_build_pc_combat_roster` injects all PCs with full HP/AC/init as ready-to-use `%%COMBAT%%` lines when `active_events` are present; LLM no longer lists only the active speaker | ✅ Complete |
 | Combat rules lookup — `CombatRulesIndex` in `api/context/combat_lookup.py`; 12 rule files (`action_*`, `armor_class`, `attack_rolls`, `attacks_of_opportunity`, `hit_points`, `initiative`, `spellcasting`); injected on trigger-phrase match during active combat only | ✅ Complete |
 | Combat Tracker Tier 1.7 — focused per-enemy `%%ACTION%%` query, `POST /enemy_turn`, backend-resolved enemy attacks, Enemy Turn/PC Attacks phase badges, and narrative `POST /close_combat` clear flow | ✅ Complete |
@@ -629,8 +629,8 @@ ollama list                            # confirm model is pulled
 | Combat Tracker Tier 1.8 — active character per turn: `CombatState.current_actor`, `POST /combat/advance_turn`, `InputBar` hostile state + skull icon + taunting placeholder, `set_active_character` API, speaker badge | ✅ Complete |
 | Roll Initiatives — `roll_combat_initiatives`, PC/enemy modifier, `current_actor` set to highest active, auto-roll on round-1 combat event, `POST /combat/roll_initiatives` debug endpoint | ✅ Complete |
 | PC combat turn — `stream_pc_turn`, `POST /pc_turn`, `_extract_pc_combat_intent` weapon/target extraction and fallbacks, attack queue from PC action | ✅ Complete |
-| Magic spell system — `PendingAttack.is_spell`, `stream_pc_turn` `cast` branch, `PendingAttack` spell flow, `damage_request` SSE, `AttackPhase spell_damage`, DicePanel spell banner | ✅ Complete |
-| Healing spells — `PendingAttack.is_heal`, `heal_request` SSE, `AttackPhase spell_heal`, DicePanel heal banner, `resolve_damage_roll` positive delta, unconscious→active restore | ✅ Complete |
+| Magic spell system — `PendingAttack.is_spell`, `stream_pc_turn` `cast` branch, `PendingAttack` spell flow, `damage_request` SSE, `AttackPhase spell_damage`, DiceTray spell banner | ✅ Complete |
+| Healing spells — `PendingAttack.is_heal`, `heal_request` SSE, `AttackPhase spell_heal`, DiceTray heal banner, `resolve_damage_roll` positive delta, unconscious→active restore | ✅ Complete |
 | AC buffs — `Combatant.active_effects`, `_effective_ac`, `_apply_ac_effect`, `_tick_effects` on turn advance, shield/deflection/luck/natural effect types, ✦ indicator in CombatPanel | ✅ Complete |
 | Action economy — `InputBar` action-type row (Standard/Move/Full-Round), `action_type_hint` POST field, visible only on PC combat turn, toggle/reset on send and turn advance | ✅ Complete |
 | Click-to-target — `selectedTarget` state, `combatant-targeted` CSS, target badge near InputBar, `target_hint` POST field, `_extract_pc_combat_intent` target override | ✅ Complete |

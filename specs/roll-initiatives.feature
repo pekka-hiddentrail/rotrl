@@ -1,4 +1,4 @@
-# FEATURE — Automatic Initiative Roll on Combat Event
+﻿# FEATURE — Automatic Initiative Roll on Combat Event
 
 **ID:** roll-initiatives
 **Status:** Approved
@@ -168,7 +168,7 @@ Then  session._await_initiative_roll is True
 And   the "initiative_pending" SSE event is emitted (not "combat_update")
 And   combat_state in the event contains seeded combatants (real PC HP/AC, individual enemy names)
 And   CombatPanel does NOT appear (no combat_update received)
-And   DicePanel shows "⚔ Combat begins — roll for initiative" banner with a roll button
+And   DiceTray shows "⚔ Combat begins — roll for initiative" banner with a roll button
 
 Given the player clicks "Roll for all combatants"
 When  POST /sessions/{id}/combat/roll_initiatives is called
@@ -214,7 +214,7 @@ Then  _parse_event_combatants returns {}
 - Tie-breaking rules (PF1e dex-modifier tiebreak) — ties left as-is
 - Enemy modifier seeding from bestiary (SA-4) — currently from event file `## Combatants` table or flat d20
 - Full stat seeding (HP, AC, attacks) from event file — SA-2 tracks this; `pending_combatants` is already the shared structure
-- Fully automatic silent roll — removed in favour of player-triggered button in DicePanel
+- Fully automatic silent roll — removed in favour of player-triggered button in DiceTray
 
 ---
 
@@ -227,8 +227,8 @@ Then  _parse_event_combatants returns {}
 - `session._await_initiative_roll: bool` — set True on round-1 combat event; causes the SSE layer to emit `initiative_pending` instead of `combat_update`; cleared after emission or after `roll_combat_initiatives`.
 - PC modifier: `pc_profiles[name.lower()]["combat_stats"]["initiative"]` as signed string; parse fails silently to `+0`.
 - Enemy modifier: `pending_combatants[name]["init_mod"]` if present; otherwise `0`.
-- SSE `initiative_pending` carries the seeded-but-unrolled `combat_state`; frontend shows roll button in DicePanel.
+- SSE `initiative_pending` carries the seeded-but-unrolled `combat_state`; frontend shows roll button in DiceTray.
 - SSE `combat_update` carries the rolled, sorted state after `POST /roll_initiatives`.
 - `rollInitiatives(sessionId)` in `ui/src/api.ts`; `handleRollInitiatives` in `App.tsx`.
-- Initiative banner: `.initiative-banner` in `DicePanel.tsx`; `initiativePending` prop from App.tsx.
+- Initiative banner: `.initiative-banner` in `DiceTray.tsx`; `initiativePending` prop from App.tsx.
 - Endpoint `POST /combat/roll_initiatives` is the roll trigger; also usable for debug/tooling.

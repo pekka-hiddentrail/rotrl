@@ -1,4 +1,4 @@
-# Exploratory Tests — Combat Tracker
+﻿# Exploratory Tests — Combat Tracker
 
 Spec: specs/combat-tracker.feature
 
@@ -24,7 +24,7 @@ Chain A and OFF for Chain C (so the player token stream is clean).
 4. ✔ Combatants are listed **highest-initiative-first** (not in the order the LLM wrote them).
 5. ✔ The top combatant's row has a gold glow border (`.combatant-current` style).
 6. ✔ Each row shows ⚡ Init and 🛡 AC values.
-7. ✔ The DicePanel shifts to the left column (between sidebar and chat).
+7. ✔ The DiceTray shifts to the left column (between sidebar and chat).
 8. ✔ `.main-content` has class `combat-active` (inspect element in DevTools).
 
 ---
@@ -66,7 +66,7 @@ condition chips. Live condition mechanics belong to the combat backlog.
 5. ✔ A `DELETE /api/sessions/{id}/combat` request fires immediately.
 6. ✔ Response is `{"combat_state": null}`.
 7. ✔ CombatPanel disappears from the UI.
-8. ✔ DicePanel returns to the right column (combat-active layout reverts).
+8. ✔ DiceTray returns to the right column (combat-active layout reverts).
 9. ✔ `.main-content` no longer has `combat-active` class.
 10. Send a normal (non-combat) turn.
 11. ✔ Turn processes without error — no ghost banner, no stale combat state.

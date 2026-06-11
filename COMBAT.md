@@ -1,4 +1,4 @@
-# Combat in the RotRL GM System
+﻿# Combat in the RotRL GM System
 
 This document describes how combat is tracked, displayed, and ended — from the LLM writing a `%%COMBAT%%` block to the UI panel disappearing when the fight is over.
 
@@ -6,7 +6,7 @@ This document describes how combat is tracked, displayed, and ended — from the
 
 ## Overview
 
-Combat is a shared loop now: the LLM still frames the scene and can start combat with a `%%COMBAT%%` block, but the backend owns the mechanical pieces that must not drift. HP is authoritative after initial combat setup, NPC attacks are rolled server-side, PC attacks go through the DicePanel, and focused enemy turns use a tight `%%ACTION%%` response rather than a broad free-form combat turn.
+Combat is a shared loop now: the LLM still frames the scene and can start combat with a `%%COMBAT%%` block, but the backend owns the mechanical pieces that must not drift. HP is authoritative after initial combat setup, NPC attacks are rolled server-side, PC attacks go through the DiceTray, and focused enemy turns use a tight `%%ACTION%%` response rather than a broad free-form combat turn.
 
 The server stores a `CombatState` object on the session and pushes a `combat_update` SSE event to the UI after every turn or focused combat action. The frontend renders the `CombatPanel` when state is non-null and hides it when state is cleared.
 
@@ -73,7 +73,7 @@ or `"combat_state": null` when no combat is active. This is how the frontend kno
 When `combatState` is non-null in `App.tsx`:
 
 - `CombatPanel` renders in the **right column**.
-- `DicePanel` shifts to the **left column** (adjacent to `CharacterSidebar`).
+- `DiceTray` shifts to the **left column** (adjacent to `CharacterSidebar`).
 - `.main-content` gains the `combat-active` CSS class.
 
 `CombatPanel` renders:
@@ -118,7 +118,7 @@ Current limitation: Tier 1.7 uses a conservative fallback enemy attack profile w
 
 ### LLM signals end — `round: 0`
 
-When the LLM writes `round: 0` in the `%%COMBAT%%` block, the server sets `session.combat_state = None` and emits a `combat_update` with `combat_state: null`. The `CombatPanel` disappears, `DicePanel` returns to the right column.
+When the LLM writes `round: 0` in the `%%COMBAT%%` block, the server sets `session.combat_state = None` and emits a `combat_update` with `combat_state: null`. The `CombatPanel` disappears, `DiceTray` returns to the right column.
 
 The `attack_repelled` event file includes a `### REQUIRED — Combat tracker` section telling the LLM to write `round: 0` when all waves are done.
 

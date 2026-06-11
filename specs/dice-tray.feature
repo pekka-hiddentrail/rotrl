@@ -1,6 +1,6 @@
-# FEATURE — Dice Panel
+﻿# FEATURE — Dice Tray
 
-**ID:** dice-panel
+**ID:** dice-tray
 **Status:** Approved
 **Area:** Frontend
 **Tags:** @dice @roll @pending-roll @history
@@ -10,7 +10,7 @@
 ## Story
 
 > As a **player**,
-> I want a dice panel where I can roll any combination of dice,
+> I want a Dice Tray where I can roll any combination of dice,
 > so that physical rolls are not needed and skill check results are automatically resolved against the pending DC.
 
 The panel accumulates a pending queue of dice, rolls them all at once, and reports the result to both the chat log and the session backend.
@@ -19,7 +19,7 @@ The panel accumulates a pending queue of dice, rolls them all at once, and repor
 
 ## Background
 
-- Given the dice panel is visible in the UI
+- Given the Dice Tray is visible in the UI
 
 ---
 
@@ -92,7 +92,7 @@ And   the speech bubble is shown in the UI only — it is not sent to the backen
 ```gherkin
 Given a roll_request SSE event is received with skill="Diplomacy", dc=15
 When  the event is processed
-Then  the dice panel displays a pending roll banner showing "Diplomacy DC 15 — roll d20"
+Then  the Dice Tray displays a pending roll banner showing "Diplomacy DC 15 — roll d20"
 And   the panel background changes colour to indicate a skill check is pending
 ```
 
@@ -123,7 +123,7 @@ And   the outcome is visible to the player
 
 ```gherkin
 Given the player has completed 12 dice rolls this session
-When  the dice panel roll history is visible
+When  the Dice Tray roll history is visible
 Then  only the most recent 10 rolls are shown
 And   the oldest rolls are discarded from the display
 And   each history entry shows the expression, per-die breakdown, and total
@@ -161,7 +161,7 @@ And   no character is active
 When  the player rolls 1d20 and gets 11
 Then  POST /api/sessions/{id}/resolve_roll is called with rolled=11 (raw total)
 And   no modifier is added
-And   the dice panel shows "No active character — raw roll only"
+And   the Dice Tray shows "No active character — raw roll only"
 ```
 
 ---
@@ -178,7 +178,7 @@ And   Yanyeeku is the active character
 And   Yanyeeku's character data does not include a Spellcraft entry
 When  the player rolls 1d20
 Then  the raw total is sent to resolve_roll unchanged
-And   the dice panel shows "No mapped bonus for Spellcraft"
+And   the Dice Tray shows "No mapped bonus for Spellcraft"
 And   no modifier is added to the total
 ```
 
@@ -192,7 +192,7 @@ And   no modifier is added to the total
 
 ```gherkin
 Given a pending skill roll and an active character with a mapped modifier
-When  the player turns off the "Auto-apply skill bonus" toggle in the dice panel
+When  the player turns off the "Auto-apply skill bonus" toggle in the Dice Tray
 Then  the modifier is not applied and the raw d20 total is submitted
 And   the toggle state is preserved for the remainder of the session
 ```
@@ -286,32 +286,32 @@ Then  no character identity is shown (raw roll, no portrait, no bonus)
 
 > **Implementation note:** `App.tsx` computes `diceSpeaker = activeCharacter ? characterMap[activeCharacter] : pendingRollSpeaker`
 > where `pendingRollSpeaker` is resolved by case-insensitive name lookup against the loaded characters array.
-> The `activeSpeaker` prop received by `DicePanel` is the resolved `diceSpeaker` value.
+> The `activeSpeaker` prop received by `DiceTray` is the resolved `diceSpeaker` value.
 
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────── -->
-### AC-015 — Dice panel hidden before session is booted
+### AC-015 — Dice Tray hidden before session is booted
 <!-- ─────────────────────────────────────────────────────────────────────── -->
 
 ```gherkin
 Given no session has been booted (session === null in App.tsx)
 When  the splash screen is displayed
-Then  the dice panel is NOT rendered in the DOM
+Then  the Dice Tray is NOT rendered in the DOM
 And   no dice buttons, roll history, or pending-roll banner are visible
 
 Given a session has been successfully booted
 When  the boot SSE stream emits "done"
-Then  the dice panel is rendered and fully functional
+Then  the Dice Tray is rendered and fully functional
 And   all previous behaviour (AC-001 through AC-014) applies as normal
 
 Given a session is ended ("End Session" completes)
 When  the session state is cleared (session set to null)
-Then  the dice panel is removed from the DOM again
+Then  the Dice Tray is removed from the DOM again
 ```
 
-**Implementation:** `DicePanel` is wrapped in `{isBooted && (...)}` in `App.tsx`.
-`isBooted` is `session !== null`. No changes to the `DicePanel` component itself.
+**Implementation:** `DiceTray` is wrapped in `{isBooted && (...)}` in `App.tsx`.
+`isBooted` is `session !== null`. No changes to the `DiceTray` component itself.
 
 ---
 
@@ -326,15 +326,15 @@ Then  the dice panel is removed from the DOM again
 
 ## Notes
 
-- See: [INDEX.md §12 — Frontend: Dice Panel](INDEX.md)
+- See: [INDEX.md §12 — Frontend: Dice Tray](INDEX.md)
 - Die types: d4 · d6 · d8 · d10 · d12 · d20 · d100 (SVG polygon shapes)
-- `onRoll(expr, rolls[], total)` callback passed from App.tsx to DicePanel. Returns `Promise<{ passed: boolean } | null>`.
+- `onRoll(expr, rolls[], total)` callback passed from App.tsx to DiceTray. Returns `Promise<{ passed: boolean } | null>`.
 - Roll speech bubble is built in App.tsx's `onRoll` handler: `rawTotal = rolls.reduce(…)`, `modifier = total − rawTotal`. Speaker resolved via `diceSpeaker = activeCharacter ? characterMap[activeCharacter] : pendingRollSpeaker` (see AC-014).
 - The bubble is local-only. It is **not** sent to the backend as a player turn.
 - `InputBar` no longer has `injectedValue` / `injectionId` props — injection was removed in favour of the speech bubble.
 - `POST /api/sessions/{id}/roll` only fires when a session is active; silently skipped otherwise
-- AC-007 through AC-013 implemented in `DicePanel.tsx`. Key exports: `normaliseSkill(s)`, `lookupSkillBonus(skill, speaker)` (pure helpers, independently testable).
-- `onRoll` callback signature changed to `(expr, rolls, total) => Promise<{ passed: boolean } | null>`. App.tsx returns `{ passed }` from `resolveRoll`; DicePanel awaits and updates the history record to show PASSED/FAILED badge.
-- `autoBonus` toggle state lives in DicePanel; resets to ON on session boot (DicePanel is keyed with `diceKey` which increments on boot).
-- `ActiveSpeaker` interface (local to DicePanel): `name`, `portrait`, `color`, `rune`, `skills[{name, total}]`. App.tsx passes the full `CharacterData` object which satisfies this interface. The portrait is used in the roll banner (AC-013); `color` and `rune` are used for the avatar border and fallback letter respectively.
+- AC-007 through AC-013 implemented in `DiceTray.tsx`. Key exports: `normaliseSkill(s)`, `lookupSkillBonus(skill, speaker)` (pure helpers, independently testable).
+- `onRoll` callback signature changed to `(expr, rolls, total) => Promise<{ passed: boolean } | null>`. App.tsx returns `{ passed }` from `resolveRoll`; DiceTray awaits and updates the history record to show PASSED/FAILED badge.
+- `autoBonus` toggle state lives in DiceTray; resets to ON on session boot (DiceTray is keyed with `diceKey` which increments on boot).
+- `ActiveSpeaker` interface (local to DiceTray): `name`, `portrait`, `color`, `rune`, `skills[{name, total}]`. App.tsx passes the full `CharacterData` object which satisfies this interface. The portrait is used in the roll banner (AC-013); `color` and `rune` are used for the avatar border and fallback letter respectively.
 - Skill modifier read from `activeSpeaker.skills[i].total`. Skill name normalisation: `trim → lowercase → collapse whitespace/hyphens/underscores → single space` before map lookup.

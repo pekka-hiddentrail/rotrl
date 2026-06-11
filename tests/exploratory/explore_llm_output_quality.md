@@ -1,4 +1,4 @@
-# Exploratory Tests — LLM Output Quality
+﻿# Exploratory Tests — LLM Output Quality
 
 Spec: specs/response-parsing.feature
 
@@ -52,8 +52,8 @@ Check all four turns:
 ## Chain C — Roll request trigger  <!-- AC-002 -->
 
 1. Send: `I try to persuade the guard to let us into the garrison after hours.`
-2. ✔ Pending roll banner appears on the dice panel showing "Diplomacy" and a DC.
-3. ✔ Dice panel border turns amber and a subtle shadow appears.
+2. ✔ Pending roll banner appears on the Dice Tray showing "Diplomacy" and a DC.
+3. ✔ Dice Tray border turns amber and a subtle shadow appears.
 4. Click d20, click Roll.
 5. ✔ PASSED or FAILED badge appears in history.
 6. ✔ The pre-written success or failure sentence from the `%%ROLL%%` block appears as a GM
