@@ -3428,6 +3428,304 @@ def _inject_context(session: GameSession) -> tuple[str, dict]:
     return system_content, context_info
 
 
+def _process_response(
+    response_text: str,
+    session: "GameSession",
+) -> "tuple[str, Optional[dict], list[str]]":
+    """Parse all structured sections in a completed LLM response.
+
+    Mutates *session* in place (NPC writes, combat state updates, pending_roll,
+    attack queue, etc.) and returns ``(display_text, roll_data, pending_sse)``.
+
+    ``pending_sse`` is a list of pre-formatted ``data: ...\\n\\n`` strings that
+    need to be yielded by the caller *after* this function returns — keeping all
+    SSE emission at the generator level rather than buried inside a plain function.
+    """
+    pending_sse: list[str] = []
+    roll_data: Optional[dict] = None
+
+    _use_sections = bool(_HAS_SECTION_MARKERS_RE.search(response_text))
+
+    if _use_sections:
+        _sections = _parse_response_sections(response_text)
+        display_text = _sections.get("NARRATIVE", "").strip() or response_text.strip()
+
+        # ── %%GENERATE%% ──────────────────────────────────────────────────────
+        # Processed before %%DELTAS%% so new stubs are in the index immediately.
+        _gen_section = _sections.get("GENERATE", "")
+        if _gen_section:
+            for _gf in _parse_bracket_blocks(_gen_section):
+                try:
+                    _body = "\n".join(f"{k}: {v}" for k, v in _gf.items())
+                    _process_generate_block(_body, session)
+                except Exception as _e:
+                    _log(session, f"\n> *[%%GENERATE%% processing error: {_e}]*\n")
+
+        # ── %%DELTAS%% ────────────────────────────────────────────────────────
+        _deltas_section = _sections.get("DELTAS", "")
+        if _deltas_section:
+            for _df in _parse_bracket_blocks(_deltas_section):
+                try:
+                    _write_npc_delta(_df, session)
+                except Exception as _e:
+                    _log(session, f"\n> *[%%DELTAS%% processing error: {_e}]*\n")
+
+        # ── %%EVENT%% ─────────────────────────────────────────────────────────
+        _event_m = _EVENT_LINE_RE.search(response_text)
+        if _event_m:
+            _fired_id = _event_m.group(1).strip()
+            _already_active = any(e.event_id == _fired_id for e in session.active_events)
+            if not _already_active:
+                _entry = _get_event_index().get(_fired_id)
+                if _entry:
+                    session.active_events.append(
+                        ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
+                    )
+                    _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _load_event_zone_data(session, _entry)
+                    # Seed combatants from ## Combatants table and auto-initialize combat state.
+                    # The LLM does not need to write %%COMBAT%% for event-driven combat starts —
+                    # the backend owns the authoritative data; LLM block is discarded this turn.
+                    if _entry.event_type == "combat" and session.combat_state is None:
+                        _seeded = _parse_event_combatants(_entry.content)
+                        if _seeded:
+                            session.pending_combatants.update(_seeded)
+                        # Parse optional PC starting zone from event content
+                        _pcz_m = re.search(r'\*\*PC Starting Zone:\*\*\s*(.+)', _entry.content)
+                        _pc_start_zone = _pcz_m.group(1).strip() if _pcz_m else "default"
+                        if _pc_start_zone != "default":
+                            session.party_zone_id = _pc_start_zone
+                        # Build CombatState: PCs from profiles + enemies from event file
+                        _init_combatants: list = []
+                        for _pk, _pp in session.pc_profiles.items():
+                            _cs = _pp.get("combat_stats", {})
+                            _pname = _cs.get("name", "")
+                            _php   = _cs.get("hp_max", 10) or 10
+                            _pac   = _cs.get("ac",     10) or 10
+                            _pcur  = session.pc_current_hp.get(_pk, _php)
+                            if _pname:
+                                _init_combatants.append(Combatant(
+                                    name=_pname, hp_current=_pcur, hp_max=_php, ac=_pac, initiative=0,
+                                    zone=_pc_start_zone,
+                                ))
+                        for _ek, _ed in session.pending_combatants.items():
+                            _init_combatants.append(Combatant(
+                                name=_ed.get("name", _ek.title()),
+                                hp_current=_ed.get("hp", 5),
+                                hp_max=_ed.get("hp", 5),
+                                ac=_ed.get("ac", 13),
+                                initiative=0,
+                                attacks=_ed.get("attacks", {}),
+                                zone=_ed.get("zone", "default"),
+                            ))
+                        session.combat_state = CombatState(round=1, combatants=_init_combatants)
+                        _refresh_combat_known_zones(session)
+                        session._await_initiative_roll = True
+                        session._skip_combat_block = True
+                        _log(session, f"\n> *[Combat auto-initialized from event file: "
+                                      f"{len(session.pc_profiles)} PC(s) + "
+                                      f"{len(session.pending_combatants)} enemy(ies)]*\n")
+                        pending_sse.append(
+                            f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
+                        )
+                    _write_session_state(session)
+                else:
+                    _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
+
+        # ── %%HP%% — discarded; LLM no longer instructed to write this block ──
+        if _sections.get("HP"):
+            _log(session, "\n> *[WARN: %%HP%% block received and discarded — LLM should not write this]*\n")
+
+        # ── %%COMBAT%% ────────────────────────────────────────────────────────
+        _combat_section = _sections.get("COMBAT", "")
+        if _combat_section:
+            try:
+                # Discard LLM %%COMBAT%% when combat was auto-initialized from an event file
+                # this same turn (round 0 = intentional clear signal, never skip that).
+                if session._skip_combat_block:
+                    session._skip_combat_block = False
+                    _log(session, "\n> *[%%COMBAT%% block discarded — combat auto-initialized from event file]*\n")
+                    _write_session_state(session)
+                    _combat_result = None
+                else:
+                    _combat_result = _parse_combat_block(_combat_section, existing_state=session.combat_state)
+                if _combat_result is not None:
+                    if _combat_result.round == 0:          # intentional clear signal
+                        session.combat_state = None
+                        _log(session, "\n> *[Combat state updated: cleared]*\n")
+                    else:                                   # valid update
+                        _is_round1 = session.combat_state is None
+                        session.combat_state = _combat_result
+                        _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
+                        # Round 1: always seed PC HP/AC from pc_profiles so the
+                        # CombatPanel never shows 0/0 for PCs (B-C03b fix).
+                        if _is_round1 and _combat_result.round == 1:
+                            _seed_pc_stats(session, session.combat_state)
+
+                        # Initiative roll + enemy seeding only when a combat event is active
+                        if _is_round1 and _combat_result.round == 1:
+                            _idx = _get_event_index()
+                            _has_combat_event = any(
+                                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
+                                for ev in session.active_events
+                            )
+                            if _has_combat_event:
+                                _seed_enemy_stats(session, session.combat_state)
+                                session._await_initiative_roll = True
+                                _log(session, "\n> *[Initiative pending — awaiting player roll]*\n")
+                    _write_session_state(session)
+                # None → parse failure; leave session.combat_state unchanged
+            except Exception as _e:
+                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
+
+        # ── %%ATTACK%% (Tier 1.5) ─────────────────────────────────────────────
+        _attack_section = _sections.get("ATTACK", "")
+        if _attack_section and session.combat_state is not None:
+            try:
+                _attacks = _parse_attack_block(_attack_section)
+                for _att in _attacks:
+                    if _is_pc_attacker(_att["attacker"], session):
+                        session.attack_queue.append(PendingAttack(
+                            attacker=_att["attacker"], target=_att["target"],
+                            bonus=_att["bonus"], damage_expr=_att["damage"],
+                            attack_type=_att.get("type", "melee"), is_pc=True,
+                        ))
+                    else:
+                        _npc_result = _resolve_npc_attack(_att, session)
+                        session.attack_results.append(_npc_result)
+                        pending_sse.append(
+                            f"data: {json.dumps({'type': 'attack_result', **_npc_result})}\n\n"
+                        )
+                _log(session, f"\n> *[%%ATTACK%%: {len(_attacks)} attack(s) parsed, "
+                              f"{len(session.attack_queue)} queued for player]*\n")
+            except Exception as _e:
+                _log(session, f"\n> *[%%ATTACK%% processing error: {_e}]*\n")
+
+    else:
+        # ── Fallback: old flat-block format ───────────────────────────────────
+        display_text = response_text
+        _sections = {}
+
+        # %%ROLL%%
+        _roll_m = _ROLL_BLOCK_RE.search(display_text)
+        if _roll_m:
+            _sections["ROLL"] = (
+                f"skill: {_roll_m.group('skill').strip()}\n"
+                f"dc: {_roll_m.group('dc').strip()}\n"
+                f"success: {_roll_m.group('success').strip()}\n"
+                f"failure: {_roll_m.group('failure').strip()}"
+            )
+            display_text = _ROLL_BLOCK_RE.sub("", display_text).rstrip()
+
+        # %%GENERATE%%
+        _gen_matches = list(_GENERATE_BLOCK_RE.finditer(display_text))
+        if _gen_matches:
+            display_text = _GENERATE_BLOCK_RE.sub("", display_text).strip()
+            for _gm in _gen_matches:
+                try:
+                    _process_generate_block(_gm.group(1), session)
+                except Exception as _e:
+                    _log(session, f"\n> *[%%GENERATE%% processing error: {_e}]*\n")
+
+        # %%DELTA%%
+        _delta_matches = list(_DELTA_BLOCK_RE.finditer(display_text))
+        if _delta_matches:
+            display_text = _DELTA_BLOCK_RE.sub("", display_text).strip()
+            for _dm in _delta_matches:
+                try:
+                    _fields = _parse_delta_fields(_dm.group(1))
+                    _fields["knowledge"] = _extract_knowledge_items(_dm.group(1))
+                    _write_npc_delta(_fields, session)
+                except Exception as _e:
+                    _log(session, f"\n> *[%%DELTA%% processing error: {_e}]*\n")
+
+        # %%EVENT%% (flat-block fallback path)
+        _event_m_flat = _EVENT_LINE_RE.search(response_text)
+        if _event_m_flat:
+            _fired_id = _event_m_flat.group(1).strip()
+            _already_active = any(e.event_id == _fired_id for e in session.active_events)
+            if not _already_active:
+                _entry = _get_event_index().get(_fired_id)
+                if _entry:
+                    session.active_events.append(
+                        ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
+                    )
+                    _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _load_event_zone_data(session, _entry)
+                    if _entry.event_type == "combat":
+                        _seeded = _parse_event_combatants(_entry.content)
+                        if _seeded:
+                            session.pending_combatants.update(_seeded)
+                            _log(session, f"\n> *[Combat event seeded {len(_seeded)} combatant(s) into pending_combatants]*\n")
+                    _write_session_state(session)
+                else:
+                    _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
+
+        # %%HP%% (flat-block fallback path) — discarded
+        if "%%HP%%" in response_text.upper():
+            _log(session, "\n> *[WARN: %%HP%% block received and discarded (flat path) — LLM should not write this]*\n")
+
+        # %%COMBAT%% (flat-block fallback path)
+        _combat_m = _COMBAT_BLOCK_RE.search(response_text)
+        if _combat_m:
+            try:
+                _combat_result = _parse_combat_block(_combat_m.group(1), existing_state=session.combat_state)
+                if _combat_result is not None:
+                    if _combat_result.round == 0:
+                        session.combat_state = None
+                        _log(session, "\n> *[Combat state updated (flat): cleared]*\n")
+                    else:
+                        _is_round1_flat = session.combat_state is None
+                        session.combat_state = _combat_result
+                        _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
+                        if _is_round1_flat and _combat_result.round == 1:
+                            _seed_pc_stats(session, session.combat_state)
+                            _idx = _get_event_index()
+                            _has_combat_event = any(
+                                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
+                                for ev in session.active_events
+                            )
+                            if _has_combat_event:
+                                _seed_enemy_stats(session, session.combat_state)
+                                session._await_initiative_roll = True
+                                _log(session, "\n> *[Initiative pending — awaiting player roll (flat path)]*\n")
+                    _write_session_state(session)
+            except Exception as _e:
+                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
+
+        # %%ATTACK%% (flat-block fallback path — Tier 1.5)
+        _attack_m = _ATTACK_BLOCK_RE.search(response_text)
+        if _attack_m and session.combat_state is not None:
+            try:
+                _attacks = _parse_attack_block(_attack_m.group(1))
+                for _att in _attacks:
+                    if _is_pc_attacker(_att["attacker"], session):
+                        session.attack_queue.append(PendingAttack(
+                            attacker=_att["attacker"], target=_att["target"],
+                            bonus=_att["bonus"], damage_expr=_att["damage"],
+                            attack_type=_att.get("type", "melee"), is_pc=True,
+                        ))
+                    else:
+                        _npc_result = _resolve_npc_attack(_att, session)
+                        session.attack_results.append(_npc_result)
+                        pending_sse.append(
+                            f"data: {json.dumps({'type': 'attack_result', **_npc_result})}\n\n"
+                        )
+            except Exception as _e:
+                _log(session, f"\n> *[%%ATTACK%% processing error (flat): {_e}]*\n")
+
+    _roll_fields = _parse_roll_section(_sections.get("ROLL", ""))
+    if _roll_fields:
+        roll_data = {
+            **_roll_fields,
+            "speaker": _speaker_from_user_input(session.messages[-1]["content"]) if session.messages else None,
+        }
+        session.pending_roll = roll_data
+        _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
+
+    return display_text, roll_data, pending_sse
+
+
 def _stream_chat(session: GameSession) -> Generator[str, None, None]:
     session.turn_number += 1
 
@@ -3580,288 +3878,9 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
         yield f"data: {json.dumps({'type': 'rate_limits', **_usage['rate_limits']})}\n\n"
 
     response_text = "".join(accumulated)
-    roll_data: Optional[dict] = None
 
-    # ── Parse response sections ───────────────────────────────────────────────
-    # Primary path: section-based format (%%NARRATIVE%% / %%ROLL%% / %%DELTAS%% / %%GENERATE%%)
-    # Fallback path: old flat-block format (%%DELTA%%…%%END%% etc.) for small models
-    # that ignore the template instruction.
-    _use_sections = bool(_HAS_SECTION_MARKERS_RE.search(response_text))
-
-    if _use_sections:
-        _sections = _parse_response_sections(response_text)
-        display_text = _sections.get("NARRATIVE", "").strip() or response_text.strip()
-
-        # ── %%GENERATE%% ──────────────────────────────────────────────────────
-        # Processed before %%DELTAS%% so new stubs are in the index immediately.
-        _gen_section = _sections.get("GENERATE", "")
-        if _gen_section:
-            for _gf in _parse_bracket_blocks(_gen_section):
-                try:
-                    _body = "\n".join(f"{k}: {v}" for k, v in _gf.items())
-                    _process_generate_block(_body, session)
-                except Exception as _e:
-                    _log(session, f"\n> *[%%GENERATE%% processing error: {_e}]*\n")
-
-        # ── %%DELTAS%% ────────────────────────────────────────────────────────
-        _deltas_section = _sections.get("DELTAS", "")
-        if _deltas_section:
-            for _df in _parse_bracket_blocks(_deltas_section):
-                try:
-                    _write_npc_delta(_df, session)
-                except Exception as _e:
-                    _log(session, f"\n> *[%%DELTAS%% processing error: {_e}]*\n")
-
-        # ── %%EVENT%% ─────────────────────────────────────────────────────────
-        _event_m = _EVENT_LINE_RE.search(response_text)
-        if _event_m:
-            _fired_id = _event_m.group(1).strip()
-            _already_active = any(e.event_id == _fired_id for e in session.active_events)
-            if not _already_active:
-                _entry = _get_event_index().get(_fired_id)
-                if _entry:
-                    session.active_events.append(
-                        ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
-                    )
-                    _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
-                    _load_event_zone_data(session, _entry)
-                    # Seed combatants from ## Combatants table and auto-initialize combat state.
-                    # The LLM does not need to write %%COMBAT%% for event-driven combat starts —
-                    # the backend owns the authoritative data; LLM block is discarded this turn.
-                    if _entry.event_type == "combat" and session.combat_state is None:
-                        _seeded = _parse_event_combatants(_entry.content)
-                        if _seeded:
-                            session.pending_combatants.update(_seeded)
-                        # Parse optional PC starting zone from event content
-                        import re as _re_pcz
-                        _pcz_m = _re_pcz.search(r'\*\*PC Starting Zone:\*\*\s*(.+)', _entry.content)
-                        _pc_start_zone = _pcz_m.group(1).strip() if _pcz_m else "default"
-                        if _pc_start_zone != "default":
-                            session.party_zone_id = _pc_start_zone
-                        # Build CombatState: PCs from profiles + enemies from event file
-                        _init_combatants: list = []
-                        for _pk, _pp in session.pc_profiles.items():
-                            _cs = _pp.get("combat_stats", {})
-                            _pname = _cs.get("name", "")
-                            _php   = _cs.get("hp_max", 10) or 10
-                            _pac   = _cs.get("ac",     10) or 10
-                            # Use tracked HP between combats; fall back to max for first combat
-                            _pcur  = session.pc_current_hp.get(_pk, _php)
-                            if _pname:
-                                _init_combatants.append(Combatant(
-                                    name=_pname, hp_current=_pcur, hp_max=_php, ac=_pac, initiative=0,
-                                    zone=_pc_start_zone,
-                                ))
-                        for _ek, _ed in session.pending_combatants.items():
-                            _init_combatants.append(Combatant(
-                                name=_ed.get("name", _ek.title()),
-                                hp_current=_ed.get("hp", 5),
-                                hp_max=_ed.get("hp", 5),
-                                ac=_ed.get("ac", 13),
-                                initiative=0,
-                                attacks=_ed.get("attacks", {}),
-                                zone=_ed.get("zone", "default"),
-                            ))
-                        session.combat_state = CombatState(round=1, combatants=_init_combatants)
-                        _refresh_combat_known_zones(session)
-                        session._await_initiative_roll = True
-                        session._skip_combat_block = True
-                        _log(session, f"\n> *[Combat auto-initialized from event file: "
-                                      f"{len(session.pc_profiles)} PC(s) + "
-                                      f"{len(session.pending_combatants)} enemy(ies)]*\n")
-                        yield f"data: {json.dumps({'type': 'combat_update', 'combat_state': _serialize_combat_state(session.combat_state)})}\n\n"
-                    _write_session_state(session)
-                else:
-                    _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
-
-        # ── %%HP%% — discarded; LLM no longer instructed to write this block ──
-        if _sections.get("HP"):
-            _log(session, "\n> *[WARN: %%HP%% block received and discarded — LLM should not write this]*\n")
-
-        # ── %%COMBAT%% ────────────────────────────────────────────────────────
-        _combat_section = _sections.get("COMBAT", "")
-        if _combat_section:
-            try:
-                # Discard LLM %%COMBAT%% when combat was auto-initialized from an event file
-                # this same turn (round 0 = intentional clear signal, never skip that).
-                if session._skip_combat_block:
-                    session._skip_combat_block = False
-                    _log(session, "\n> *[%%COMBAT%% block discarded — combat auto-initialized from event file]*\n")
-                    _write_session_state(session)
-                    _combat_result = None
-                else:
-                    _combat_result = _parse_combat_block(_combat_section, existing_state=session.combat_state)
-                if _combat_result is not None:
-                    if _combat_result.round == 0:          # intentional clear signal
-                        session.combat_state = None
-                        _log(session, "\n> *[Combat state updated: cleared]*\n")
-                    else:                                   # valid update
-                        _is_round1 = session.combat_state is None  # True before assignment
-                        session.combat_state = _combat_result
-                        _log(session, f"\n> *[Combat state updated: round {_combat_result.round}]*\n")
-                        # Round 1: always seed PC HP/AC from pc_profiles so the
-                        # CombatPanel never shows 0/0 for PCs (B-C03b fix).
-                        if _is_round1 and _combat_result.round == 1:
-                            _seed_pc_stats(session, session.combat_state)
-
-                        # Initiative roll + enemy seeding only when a combat event is active
-                        if _is_round1 and _combat_result.round == 1:
-                            _idx = _get_event_index()
-                            _has_combat_event = any(
-                                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
-                                for ev in session.active_events
-                            )
-                            if _has_combat_event:
-                                # Seed enemy stats from event file, then wait for player to roll
-                                _seed_enemy_stats(session, session.combat_state)
-                                session._await_initiative_roll = True
-                                _log(session, "\n> *[Initiative pending — awaiting player roll]*\n")
-                    _write_session_state(session)
-                # None → parse failure; leave session.combat_state unchanged
-            except Exception as _e:
-                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
-
-        # ── %%ATTACK%% (Tier 1.5) ─────────────────────────────────────────────
-        _attack_section = _sections.get("ATTACK", "")
-        if _attack_section and session.combat_state is not None:
-            try:
-                _attacks = _parse_attack_block(_attack_section)
-                for _att in _attacks:
-                    if _is_pc_attacker(_att["attacker"], session):
-                        session.attack_queue.append(PendingAttack(
-                            attacker=_att["attacker"], target=_att["target"],
-                            bonus=_att["bonus"], damage_expr=_att["damage"],
-                            attack_type=_att.get("type", "melee"), is_pc=True,
-                        ))
-                    else:
-                        _npc_result = _resolve_npc_attack(_att, session)
-                        session.attack_results.append(_npc_result)
-                        yield f"data: {json.dumps({'type': 'attack_result', **_npc_result})}\n\n"
-                _log(session, f"\n> *[%%ATTACK%%: {len(_attacks)} attack(s) parsed, "
-                              f"{len(session.attack_queue)} queued for player]*\n")
-            except Exception as _e:
-                _log(session, f"\n> *[%%ATTACK%% processing error: {_e}]*\n")
-
-    else:
-        # ── Fallback: old flat-block format ───────────────────────────────────
-        display_text = response_text
-        _sections = {}
-
-        # %%ROLL%%
-        _roll_m = _ROLL_BLOCK_RE.search(display_text)
-        if _roll_m:
-            _sections["ROLL"] = (
-                f"skill: {_roll_m.group('skill').strip()}\n"
-                f"dc: {_roll_m.group('dc').strip()}\n"
-                f"success: {_roll_m.group('success').strip()}\n"
-                f"failure: {_roll_m.group('failure').strip()}"
-            )
-            display_text = _ROLL_BLOCK_RE.sub("", display_text).rstrip()
-
-        # %%GENERATE%%
-        _gen_matches = list(_GENERATE_BLOCK_RE.finditer(display_text))
-        if _gen_matches:
-            display_text = _GENERATE_BLOCK_RE.sub("", display_text).strip()
-            for _gm in _gen_matches:
-                try:
-                    _process_generate_block(_gm.group(1), session)
-                except Exception as _e:
-                    _log(session, f"\n> *[%%GENERATE%% processing error: {_e}]*\n")
-
-        # %%DELTA%%
-        _delta_matches = list(_DELTA_BLOCK_RE.finditer(display_text))
-        if _delta_matches:
-            display_text = _DELTA_BLOCK_RE.sub("", display_text).strip()
-            for _dm in _delta_matches:
-                try:
-                    _fields = _parse_delta_fields(_dm.group(1))
-                    # Promote knowledge to list so _write_npc_delta handles it uniformly
-                    _fields["knowledge"] = _extract_knowledge_items(_dm.group(1))
-                    _write_npc_delta(_fields, session)
-                except Exception as _e:
-                    _log(session, f"\n> *[%%DELTA%% processing error: {_e}]*\n")
-
-        # %%EVENT%% (flat-block fallback path)
-        _event_m_flat = _EVENT_LINE_RE.search(response_text)
-        if _event_m_flat:
-            _fired_id = _event_m_flat.group(1).strip()
-            _already_active = any(e.event_id == _fired_id for e in session.active_events)
-            if not _already_active:
-                _entry = _get_event_index().get(_fired_id)
-                if _entry:
-                    session.active_events.append(
-                        ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
-                    )
-                    _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
-                    _load_event_zone_data(session, _entry)
-                    if _entry.event_type == "combat":
-                        _seeded = _parse_event_combatants(_entry.content)
-                        if _seeded:
-                            session.pending_combatants.update(_seeded)
-                            _log(session, f"\n> *[Combat event seeded {len(_seeded)} combatant(s) into pending_combatants]*\n")
-                    _write_session_state(session)
-                else:
-                    _log(session, f"\n> *[Event ignored: unknown id \"{_fired_id}\"]*\n")
-
-        # %%HP%% (flat-block fallback path) — discarded
-        if "%%HP%%" in response_text.upper():
-            _log(session, "\n> *[WARN: %%HP%% block received and discarded (flat path) — LLM should not write this]*\n")
-
-        # %%COMBAT%% (flat-block fallback path)
-        _combat_m = _COMBAT_BLOCK_RE.search(response_text)
-        if _combat_m:
-            try:
-                _combat_result = _parse_combat_block(_combat_m.group(1), existing_state=session.combat_state)
-                if _combat_result is not None:
-                    if _combat_result.round == 0:
-                        session.combat_state = None
-                        _log(session, "\n> *[Combat state updated (flat): cleared]*\n")
-                    else:
-                        _is_round1_flat = session.combat_state is None
-                        session.combat_state = _combat_result
-                        _log(session, f"\n> *[Combat state updated (flat): round {_combat_result.round}]*\n")
-                        if _is_round1_flat and _combat_result.round == 1:
-                            _seed_pc_stats(session, session.combat_state)
-                            _idx = _get_event_index()
-                            _has_combat_event = any(
-                                (lambda _e: _e is not None and _e.event_type == "combat")(_idx.get(ev.event_id))
-                                for ev in session.active_events
-                            )
-                            if _has_combat_event:
-                                _seed_enemy_stats(session, session.combat_state)
-                                session._await_initiative_roll = True
-                                _log(session, "\n> *[Initiative pending — awaiting player roll (flat path)]*\n")
-                    _write_session_state(session)
-            except Exception as _e:
-                _log(session, f"\n> *[%%COMBAT%% processing error: {_e}]*\n")
-
-        # %%ATTACK%% (flat-block fallback path — Tier 1.5)
-        _attack_m = _ATTACK_BLOCK_RE.search(response_text)
-        if _attack_m and session.combat_state is not None:
-            try:
-                _attacks = _parse_attack_block(_attack_m.group(1))
-                for _att in _attacks:
-                    if _is_pc_attacker(_att["attacker"], session):
-                        session.attack_queue.append(PendingAttack(
-                            attacker=_att["attacker"], target=_att["target"],
-                            bonus=_att["bonus"], damage_expr=_att["damage"],
-                            attack_type=_att.get("type", "melee"), is_pc=True,
-                        ))
-                    else:
-                        _npc_result = _resolve_npc_attack(_att, session)
-                        session.attack_results.append(_npc_result)
-                        yield f"data: {json.dumps({'type': 'attack_result', **_npc_result})}\n\n"
-            except Exception as _e:
-                _log(session, f"\n> *[%%ATTACK%% processing error (flat): {_e}]*\n")
-
-    _roll_fields = _parse_roll_section(_sections.get("ROLL", ""))
-    if _roll_fields:
-        roll_data = {
-            **_roll_fields,
-            "speaker": _speaker_from_user_input(session.messages[-1]["content"]) if session.messages else None,
-        }
-        session.pending_roll = roll_data
-        _log(session, f"\n> *[Roll requested: {roll_data['skill']} DC {roll_data['dc']}]*\n")
+    display_text, roll_data, _pending_sse = _process_response(response_text, session)
+    yield from _pending_sse
 
     # ── Single patch_last if anything was stripped ────────────────────────────
     # Emitting one event after all stripping avoids the UI briefly flashing
