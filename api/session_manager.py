@@ -1895,14 +1895,15 @@ _NARRATIVE_SPEC = (
 )
 
 _ROLL_SPEC = (
-    "%%ROLL%%  — one block when a roll is needed:\n"
+    "%%ROLL%%  — at most ONE block per response, when a skill check is needed:\n"
     "[ skill: <name>  dc: <N>  success: <2 paragraphs>  failure: <2 paragraphs> ]"
 )
 
 _GENERATE_SPEC = (
-    "%%GENERATE%%  — REQUIRED for every NEW named character/location introduced this turn:\n"
+    "%%GENERATE%%  — REQUIRED for every NEW named character/location introduced this turn.\n"
+    "Skip if the name already appears in [ACTIVE SCENE NPCS] — do not re-generate known characters.\n"
     "[ type: npc|location  name: <exact name>  role: <phrase>  appearance: <sentence>"
-    "  location: <place>  summary: <sentence> ]"
+    "  personality: <sentence>  location: <place>  summary: <sentence> ]"
 )
 
 _DELTAS_SPEC = (
