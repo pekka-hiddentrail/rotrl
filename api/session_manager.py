@@ -1956,29 +1956,34 @@ FORBIDDEN in combat — do NOT write GENERATE, DELTAS, ROLL, or EVENT sections.
 Everything after %%NARRATIVE%% is stripped before the player sees the response."""
 
 
-def _build_slim_system_prompt(session_number: int) -> str:
+def _build_slim_system_prompt(
+    session_number: int,
+    pc_profiles: Optional[dict] = None,
+) -> str:
     """Build the fixed base system prompt for this session.
 
     Loaded once at boot and never modified.  Per-turn context (NPC profiles,
     skill rules, location NPCs, format example on turn 1, combat spec when
     active) is injected dynamically by _inject_context.
+
+    ``pc_profiles`` should be pre-built by ``_build_pc_profiles`` so that the
+    system prompt and combat mechanics share the same single source of truth
+    (ui/public/data/player_NN.json).  When omitted the function loads the
+    profiles itself (used by tests and legacy callers).
     """
     repo_root = _REPO_ROOT
 
-    # Party names from player character sheets (best-effort)
+    if pc_profiles is None:
+        pc_profiles = _build_pc_profiles(repo_root / "ui" / "public" / "data")
+
+    # Party block from the JSON profiles — same source of truth as combat mechanics.
     party_lines: list[str] = []
-    players_dir = repo_root / "players"
-    if players_dir.exists():
-        for sheet in sorted(players_dir.glob("*/character_sheet.md")):
-            name = ""
-            cls = ""
-            for line in sheet.read_text(encoding="utf-8").splitlines():
-                if line.startswith("**Name:**"):
-                    name = line.replace("**Name:**", "").strip()
-                elif line.startswith("**Class / Archetype:**"):
-                    cls = line.replace("**Class / Archetype:**", "").strip()
-            if name and cls:
-                party_lines.append(f"  - {name} ({cls})")
+    for _pkey, _prof in sorted(pc_profiles.items()):
+        _cs = _prof.get("combat_stats", {})
+        _name = _cs.get("name", "")
+        _cls = _cs.get("cls_full", "")
+        if _name and _cls:
+            party_lines.append(f"  - {_name} ({_cls})")
 
     party_block = "\n".join(party_lines) if party_lines else "  - (no character files found)"
 
@@ -2161,6 +2166,8 @@ def _build_pc_profiles(data_dir: Path) -> dict:
             # hp_max is used as hp_current on round 1 (PCs start at full HP).
             "combat_stats": {
                 "name": name,
+                "race": race,
+                "cls_full": cls_full,
                 "hp_max": int(hp_max) if str(hp_max).isdigit() else 0,
                 "ac": int(ac_total) if str(ac_total).isdigit() else 10,
                 "initiative": initiative or "+0",
@@ -2185,7 +2192,8 @@ def create_session(
     provider: str = "ollama",
     event_scheduler: bool = False,
 ) -> GameSession:
-    system_prompt = _build_slim_system_prompt(session_number)
+    _pc_profiles = _build_pc_profiles(_REPO_ROOT / "ui" / "public" / "data")
+    system_prompt = _build_slim_system_prompt(session_number, _pc_profiles)
 
     _OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     started = datetime.now()
@@ -2204,7 +2212,7 @@ def create_session(
         num_gpu=num_gpu,
         system_prompt=system_prompt,
         log_path=_OUTPUTS_DIR / log_name,
-        pc_profiles=_build_pc_profiles(_REPO_ROOT / "ui" / "public" / "data"),
+        pc_profiles=_pc_profiles,
     )
 
     # Populate warm events from schedulable event definitions (when scheduler enabled).
