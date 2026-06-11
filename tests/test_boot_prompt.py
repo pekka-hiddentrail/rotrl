@@ -4,7 +4,7 @@ Tests for boot prompt assembly and session-start context resolution.
 Covers:
   - _build_slim_system_prompt structure and required sections
   - Situation block: boot.md > previous recap.md > fallback notice
-  - Party block extracted from character_sheet.md files
+  - Party block extracted from ui/public/data/player_NN.json files
   - Boot delta cleanup: session_NNN.md files deleted for current session only
   - _DELTA_BLOCK_RE: parsing full and minimal %%DELTA%% blocks, stripping from text
   - validate_turn_input
@@ -35,10 +35,10 @@ def _make_session_dir(base: Path, n: int) -> Path:
 
 
 def _make_player(base: Path, slot: int, name: str, cls: str) -> None:
-    d = base / "players" / f"player_{slot:02d}"
+    d = base / "ui" / "public" / "data"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "character_sheet.md").write_text(
-        f"**Name:** {name}\n**Class / Archetype:** {cls}\n",
+    (d / f"player_{slot:02d}.json").write_text(
+        json.dumps({"name": name, "class": cls}),
         encoding="utf-8",
     )
 
@@ -613,19 +613,16 @@ def test_party_class_before_name_does_not_crash(tmp_path, monkeypatch):
 
 
 def test_party_mixed_good_and_malformed_sheets(tmp_path, monkeypatch):
-    """One malformed sheet must not prevent valid sheets from appearing."""
+    """A JSON entry without class must not prevent valid entries from appearing."""
     import api.session_manager as sm
     monkeypatch.setattr(sm, "_REPO_ROOT", tmp_path)
 
-    d1 = tmp_path / "players" / "player_01"
-    d1.mkdir(parents=True)
-    (d1 / "character_sheet.md").write_text("**Name:** Ghostface\n", encoding="utf-8")
-
-    d2 = tmp_path / "players" / "player_02"
-    d2.mkdir(parents=True)
-    (d2 / "character_sheet.md").write_text(
-        "**Name:** Aldric\n**Class / Archetype:** Paladin\n", encoding="utf-8"
-    )
+    d = tmp_path / "ui" / "public" / "data"
+    d.mkdir(parents=True)
+    # player_01 has no class — should be omitted from the party block
+    (d / "player_01.json").write_text(json.dumps({"name": "Ghostface"}), encoding="utf-8")
+    # player_02 has full identity — must appear
+    (d / "player_02.json").write_text(json.dumps({"name": "Aldric", "class": "Paladin"}), encoding="utf-8")
 
     prompt = _build_slim_system_prompt(1)
     assert "Aldric" in prompt

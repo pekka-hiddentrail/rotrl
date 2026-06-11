@@ -1,4 +1,4 @@
-﻿# Manual Testing Guide
+# Manual Testing Guide
 
 Exploratory tests have been split into individual files under `tests/exploratory/`.
 Each file has a `Spec: specs/<id>.feature` header and inline `AC-NNN` references so
@@ -94,7 +94,7 @@ python dev.py --skip-tests
 | [explore_system_prompt.md](tests/exploratory/explore_system_prompt.md) | system-prompt | Chains A-D: format example gate, combat spec gate, combat rules injection, conditional sections + PC profile |
 | [explore_llm_output_quality.md](tests/exploratory/explore_llm_output_quality.md) | response-parsing | Chains A-D: dev-mode markers, narrative quality, roll trigger, combat prose |
 | [explore_npc_system.md](tests/exploratory/explore_npc_system.md) | npc-system | Chains A-D: delta write, auto-stub, NPC promotion, purge |
-| [explore_dice_panel.md](tests/exploratory/explore_dice_panel.md) | dice-panel | Chains A-D: queue/roll, auto-bonus, toggle, history cap |
+| [explore_dice_panel.md](tests/exploratory/explore_dice_panel.md) | dice-tray | Chains A-D: queue/roll, auto-bonus, toggle, history cap |
 | [explore_location_system.md](tests/exploratory/explore_location_system.md) | location-system | Chains A-G: detection, longest alias, scene persistence, combined injection, all-aliases, auto-stub, quality audit |
 | [explore_character_system.md](tests/exploratory/explore_character_system.md) | character-system, session-state | Chains A-K: load, API fail, live edit, malformed JSON, sheet, speaker, sheet-during-stream, HP colour, action menu, active_character persisted to state.json, active_character survives mode changes |
 | [explore_streaming_feel.md](tests/exploratory/explore_streaming_feel.md) | chat-display | Chains A-D: token flow, patch_last, input lockout, error recovery |

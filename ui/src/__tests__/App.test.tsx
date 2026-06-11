@@ -419,7 +419,7 @@ describe('App — send-turn SSE event handling', () => {
     await waitFor(() => expect(screen.getByText('Perception')).toBeInTheDocument())
   })
 
-  it('roll_request event → skill name and DC shown in DicePanel', async () => {
+  it('roll_request event → skill name and DC shown in DiceTray', async () => {
     mockSend.mockImplementation(() =>
       makeGen({
         type: 'roll_request' as const,
@@ -696,7 +696,7 @@ describe('App — attack resolution wiring', () => {
     vi.unstubAllGlobals()
   })
 
-  /** Send a turn that surfaces a PC attack_request banner in the DicePanel. */
+  /** Send a turn that surfaces a PC attack_request banner in the DiceTray. */
   async function triggerAttackRequest() {
     mockSend.mockImplementation(() =>
       makeGen({
@@ -726,7 +726,7 @@ describe('App — attack resolution wiring', () => {
     await waitFor(() => expect(mockResolveAttackRoll).toHaveBeenCalledWith('sess-test', 13))
   })
 
-  it('AC-003 — hit result transitions DicePanel banner to damage phase', async () => {
+  it('AC-003 — hit result transitions DiceTray banner to damage phase', async () => {
     mockResolveAttackRoll.mockResolvedValue({
       hit: true, ac: 13, roll: 13, bonus: 5, total: 18,
       damage_expr: '1d8+3', queue_remaining: 1, next_attack: null,
@@ -1030,7 +1030,7 @@ describe('App — B-C07 doResumeCombat handles attack_request events', () => {
     vi.restoreAllMocks()
   })
 
-  it('attack_request emitted during resume_combat sets attackPhase (DicePanel attack banner)', async () => {
+  it('attack_request emitted during resume_combat sets attackPhase (DiceTray attack banner)', async () => {
     // Turn response: NPC attack that auto-resolves → triggers resume_combat
     mockSend.mockImplementation(() =>
       makeGen(

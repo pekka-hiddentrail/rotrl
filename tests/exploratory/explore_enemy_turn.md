@@ -72,7 +72,7 @@ and initiative advances automatically after the turn resolves.
 2. Click **End Combat**.
 3. ✔ A brief closure narrative streams into the chat (e.g. "The goblins scatter…").
 4. ✔ CombatPanel disappears.
-5. ✔ DicePanel returns to the right column.
+5. ✔ DiceTray returns to the right column.
 6. ✔ Sending a normal narrative turn processes without error.
 
 ---

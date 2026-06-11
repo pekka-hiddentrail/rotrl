@@ -1,4 +1,4 @@
-﻿# Combat System Backlog
+# Combat System Backlog
 
 All combat-related work lives here. [TODO.md](TODO.md) links here rather than carrying the full tier tree inline.
 
@@ -17,7 +17,7 @@ All combat-related work lives here. [TODO.md](TODO.md) links here rather than ca
 
 Items that span multiple combat tiers or require coordination with non-combat layers.
 
-- [ ] **Playwright — attack resolution E2E** — one live flow `attack-resolution-flow` in `live-flows.spec.ts`: boot → trigger combat with mixed NPC+PC attack block → assert `attack_result` SSE updates CombatPanel HP → assert `attack_request` fires and DicePanel shows to-hit banner → roll d20 → hit path: damage banner appears, roll damage, assert `combat_update` reduces HP → assert `POST /resume_combat` called and GM resumes streaming. *(spec: `attack-resolution.feature` AC-002 through AC-005)*
+- [ ] **Playwright — attack resolution E2E** — one live flow `attack-resolution-flow` in `live-flows.spec.ts`: boot → trigger combat with mixed NPC+PC attack block → assert `attack_result` SSE updates CombatPanel HP → assert `attack_request` fires and DiceTray shows to-hit banner → roll d20 → hit path: damage banner appears, roll damage, assert `combat_update` reduces HP → assert `POST /resume_combat` called and GM resumes streaming. *(spec: `attack-resolution.feature` AC-002 through AC-005)*
 - [ ] **Combat initiative active character state** — when combat is active, the current combatant in initiative order should drive `active_character`. Add an API/update path that writes the current initiative actor into the UI and `sessions/session_NNN/state.json`, including enemy turns. When the active actor is an enemy, the input field should switch to a red-ish hostile state with taunting prompt text, show a skull-style icon instead of the character rune, and label the enemy by name (for example `Goblin Warrior 1`).
 - [ ] **Combat turn ownership model** — make the backend, not the LLM, the source of truth for the current combatant and initiative advancement. Store current actor, round, and acted/remaining turn state; emit it to the UI; inject it into the combat prompt as authoritative. The LLM may describe outcomes, but should not be able to drift initiative order or choose whose turn is next.
 - [ ] **Backend-hydrated combat encounter start** — when a combat event starts, resolve the encounter from backend-owned event/encounter descriptions plus canonical bestiary data instead of trusting the LLM to invent monster stats. Determine the minimum LLM responsibility: likely narrative framing, enemy intent, and choosing among valid tactics; backend should supply combatants, HP, AC, initiative modifiers, attacks, saves, XP, and encounter metadata wherever the data exists.
@@ -48,7 +48,7 @@ Items that span multiple combat tiers or require coordination with non-combat la
 - [ ] **Auto-end combat on victory** — when the last enemy combatant reaches 0 HP or changes to `dead`/`fled`/`surrendered`, the backend should immediately close combat without waiting for the LLM to remember `round: 0`. Emit a final `combat_update: null`, persist cleared combat state, and add pytest/Vitest coverage for PC damage, spell damage, and NPC morale/flee paths.
 - [ ] **Post-combat result card** — after combat auto-ends or is manually closed, show a compact combat summary card in chat: victory/defeat/retreat/defused, surviving PCs, defeated/fled enemies, notable HP changes, and next-event hint when one is available.
 - [ ] **Combat close should continue event chain** — when a combat event ends, the backend should evaluate the event chain immediately and start/prime the next event when its trigger is satisfied. The close narration must be `%%NARRATIVE%%`-compatible in non-dev mode so the player sees the text and never sees raw tags.
-- [ ] **Initiative prompt belongs in CombatPanel** — when combat is seeded but initiatives are pending (`round: -1` / `initiative_pending`), render the "Roll Initiatives" control inside the CombatPanel instead of the DicePanel. The dice tray may stay in the left combat layout, but initiative is tracker state and should live with the tracker.
+- [ ] **Initiative prompt belongs in CombatPanel** — when combat is seeded but initiatives are pending (`round: -1` / `initiative_pending`), render the "Roll Initiatives" control inside the CombatPanel instead of the DiceTray. The dice tray may stay in the left combat layout, but initiative is tracker state and should live with the tracker.
 - [ ] **Zone-aware enemy weapon choice** — enemy turn resolution should check attacker and target zones before executing a melee attack. If no valid target is in the same zone, prefer a ranged weapon when one is available; otherwise move toward the nearest target by zone adjacency. Add tests for same-zone melee, adjacent-zone ranged, and non-adjacent movement/default bow selection.
 - [ ] **Spell targeting rules by spell metadata** — buff spells must respect spell target/range data instead of treating every "shield" spell as self-only. `Shield` is personal/self; `Shield of Faith` and `Protection from Evil` are touch/creature-targeted; `Magic Missile` targets creatures at medium range. Add tests for "Ani casts Shield of Faith on Vanx" applying the effect to Vanx, not Ani.
 - [ ] **PC spell narration tag contract** — focused PC spell narration must always request and extract `%%NARRATIVE%%`. Add tests for Magic Missile, Shield, Shield of Faith, Protection from Evil, and Cure Light Wounds so missing narrative tags either retry or produce a clear diagnostic instead of silently showing untagged text.
@@ -62,8 +62,8 @@ Items that span multiple combat tiers or require coordination with non-combat la
 
 - [ ] **Test — `combat_update` SSE carries `conditions: []` when unknown conditions dropped** — the backend silently drops unrecognised condition labels (e.g. `"banana"`) from the combatant. Add a pytest test that sends a `%%COMBAT%%` block with an unknown condition through the full turn pipeline and asserts the emitted `combat_update` SSE event has `conditions: []` for that combatant — not the raw unknown string. Complements the existing `test_unknown_condition_dropped` unit test with an SSE-level assertion. *(exploratory: Chain C step 9–10; spec: combat-tracker.feature AC-012)*
 
-- [x] **Vitest — attack resolution UI** — 15 tests in `DicePanelAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
-- [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DicePanel.tsx `handleDamageRollClick`)*
+- [x] **Vitest — attack resolution UI** — 15 tests in `DiceTrayAttack.test.tsx`: to-hit banner (attacker/target/AC/bonus/active-class/onAttackRoll callback); damage banner (HIT line/damage-expr/Roll Damage disabled+enabled); null phase (no banner, no active class); attack log (hit badge+damage, miss badge+no-damage, NPC label, log-before-skill-history DOM order). *(spec: `attack-resolution.feature` AC-002/AC-003/AC-004/AC-008)*
+- [x] **Bug: `handleDamageRollClick` passes die sides as roll values** — `pending` stores die *sides* (e.g. `[8]` for a d8), not rolled values. `handleDamageRollClick` passes `pending` directly as `rolls`, so `onDamageRoll([8], 8)` is called instead of the actual d8 result. **Fixed:** `pending.map(rollDie)` replaces `[...pending]`. V8 Vitest test added to cover the fix. *(DiceTray.tsx `handleDamageRollClick`)*
 - [x] **Enemy turn auto-advance policy** — implemented: `advance_combat_turn(session)` fires automatically at the end of both `stream_enemy_turn` (enemy turns) and `stream_resume_combat` (PC attack resolution). `GameSession.last_actor` tracks the outgoing actor; `_build_enemy_turn_user` uses it to give the LLM narrative continuity between turns (e.g. "Goblin Warchanter just acted. Now it is Goblin Warrior 1's turn."). B-C09 fixed simultaneously.
 
 ---
@@ -84,7 +84,7 @@ Items that span multiple combat tiers or require coordination with non-combat la
 
 Combat runs through the existing narrative loop — the LLM drives pacing, the system tracks state. Multiple tiers of fidelity, each independently shippable. Tier 1 is complete; Tiers 1.1 and 1.5 establish HP authority and the interactive attack flow. Tier 1.6 replaces the bolted-on combat injections with a purpose-built combat system prompt before Tier 2 adds mechanical depth.
 
-> **Layout note:** when the CombatPanel is visible it occupies the right column. DicePanel moves to the left column (stacked beneath CharacterSidebar), freeing the right for initiative/HP display. Out of combat the layout reverts to current (CharSidebar left · Chat centre · DicePanel right).
+> **Layout note:** when the CombatPanel is visible it occupies the right column. DiceTray moves to the left column (stacked beneath CharacterSidebar), freeing the right for initiative/HP display. Out of combat the layout reverts to current (CharSidebar left · Chat centre · DiceTray right).
 
 ---
 
@@ -124,7 +124,7 @@ combatants:
 
 #### Frontend
 
-- [x] **CB5 — Layout: DicePanel moves left** — `combat-active` CSS class on `.main-content` when `combatState !== null`. CSS flex `order` rules: non-combat: sidebar(1)|chat(2)|dice(3); combat: sidebar(1)|dice(2)|chat(3)|combat(4). DicePanel border swaps sides in combat mode.
+- [x] **CB5 — Layout: DiceTray moves left** — `combat-active` CSS class on `.main-content` when `combatState !== null`. CSS flex `order` rules: non-combat: sidebar(1)|chat(2)|dice(3); combat: sidebar(1)|dice(2)|chat(3)|combat(4). DiceTray border swaps sides in combat mode.
 - [x] **CB6 — `CombatPanel` component** — `ui/src/components/CombatPanel.tsx`. Right column (220 px), shown only when `combatState !== null`. Shows: "⚔ Combat" title + "Round N" badge; initiative list sorted descending; current actor (top) highlighted with gold glow; inactive combatants dimmed; status badges (KO / fled / dead). "End Combat" button calls `DELETE /combat` + clears client state.
 - [x] **CB6.1 — CombatPanel active-turn highlight advances** — `currentCombatantName: string | null` state in `App.tsx` tracks the highlighted combatant by name (not by position). Initialised to the highest-initiative active combatant on the first `combat_update` of a new combat. "Next Turn →" button in `CombatPanel` advances the highlight to the next active combatant in initiative order and wraps at the end of the round. Falls back to the first active combatant when `currentCombatantName` is unset. Resets to `null` on combat clear, end session, and kill-end.
 - [x] **CB7 — HP bar component** — `ui/src/components/HpBar.tsx`. Green > 66%, amber 33–66%, red < 33%, dark-grey at 0. CSS `transition` for animated width changes on HP update.
@@ -205,8 +205,8 @@ Fields: `attacker` (name), `target` (name), `bonus` (e.g. `+4`, `-1`), `damage` 
 
 #### Frontend
 
-- [x] **CB1.5-9 — DicePanel attack flow** — `attackPhase` prop drives to-hit and damage banners; `onAttackRoll`/`onDamageRoll` callbacks in App.tsx call resolve endpoints; auto-resume when `queue_remaining === 0`; stale-closure guard via refs.
-- [x] **CB1.5-10 — DicePanel attack history** — `attackLog` prop rendered above skill-roll history; ⚔ prefix, hit/miss badge, damage total shown.
+- [x] **CB1.5-9 — DiceTray attack flow** — `attackPhase` prop drives to-hit and damage banners; `onAttackRoll`/`onDamageRoll` callbacks in App.tsx call resolve endpoints; auto-resume when `queue_remaining === 0`; stale-closure guard via refs.
+- [x] **CB1.5-10 — DiceTray attack history** — `attackLog` prop rendered above skill-roll history; ⚔ prefix, hit/miss badge, damage total shown.
 - [x] **CB1.5-11 — CombatPanel condition chips** — `conditions: list[str]` on `Combatant` dataclass; `_parse_combatant_line` parses `conditions: [prone, shaken]` field; `_serialize_combat_state` includes it; `CombatPanel` renders chips with `CONDITION_TOOLTIPS` map (17 PF1e conditions).
 
 #### Tests
@@ -426,7 +426,7 @@ interaction model entirely.
 
 - [x] **CB1.8-4 — Party roster init values** — roster already writes modifier strings (e.g. `+2`); no change needed. Enemy modifiers now come from event file table rather than LLM.
 
-- [x] **CB1.8-T — Tests** — `tests/test_roll_initiatives.py` (31 tests): `TestParseEventCombatants` (7), `TestEnemyModifierFromPendingCombatants` (3), `TestAutoRollOnCombatEvent` (3), plus existing AC-001–AC-007 suite. `CombatPanelRollInit.test.tsx`: no-button tests, server-rolled order display, current actor highlight. `App.roll-initiatives.test.tsx`: `initiative_pending` SSE triggers banner, `combat_update` after roll shows CombatPanel. `ui/e2e/initiative-roll.spec.ts` (5 Playwright tests): banner visible before CombatPanel, DicePanel stays right, CombatPanel appears with rolled order, banner disappears, PC HP seeded correctly. 946 pytest + all Vitest + 5 Playwright passing.
+- [x] **CB1.8-T — Tests** — `tests/test_roll_initiatives.py` (31 tests): `TestParseEventCombatants` (7), `TestEnemyModifierFromPendingCombatants` (3), `TestAutoRollOnCombatEvent` (3), plus existing AC-001–AC-007 suite. `CombatPanelRollInit.test.tsx`: no-button tests, server-rolled order display, current actor highlight. `App.roll-initiatives.test.tsx`: `initiative_pending` SSE triggers banner, `combat_update` after roll shows CombatPanel. `ui/e2e/initiative-roll.spec.ts` (5 Playwright tests): banner visible before CombatPanel, DiceTray stays right, CombatPanel appears with rolled order, banner disappears, PC HP seeded correctly. 946 pytest + all Vitest + 5 Playwright passing.
 
 - [ ] **CB1.8-5 — `_COMBAT_SPEC_ROUND1` update for `## Combatants` table** — update the combat system prompt to instruct the LLM that `init:` fields are ignored and that the backend seeds HP/AC from the event file table. LLM should omit `init:` or write `+0` as a placeholder. *Depends on the system prompt work in combat-system-prompt.feature.*
 
@@ -875,10 +875,10 @@ type was spent. This tier adds awareness of the full action menu.
 
 Builds on Tier 1.5 and Tier 2. The `%%ATTACK%%` format is already established; Tier 3 adds PF1e mechanical depth.
 
-- [ ] **CB2-1 — Critical hits** — `%%ATTACK%%` line gains optional `crit_range: 18` (default 20) and `crit_mult: 2` fields. Backend: if natural d20 roll ≥ `crit_range`, roll a confirmation attack (same bonus vs same AC); if confirmed, multiply damage by `crit_mult`. `attack_result` event gains `critical: bool`. DicePanel history shows `⚔ CRITICAL HIT (×2)`.
+- [ ] **CB2-1 — Critical hits** — `%%ATTACK%%` line gains optional `crit_range: 18` (default 20) and `crit_mult: 2` fields. Backend: if natural d20 roll ≥ `crit_range`, roll a confirmation attack (same bonus vs same AC); if confirmed, multiply damage by `crit_mult`. `attack_result` event gains `critical: bool`. DiceTray history shows `⚔ CRITICAL HIT (×2)`.
 - [ ] **CB2-2 — Iterative attacks** — `%%ATTACK%%` line gains optional `sequence: 1/2/3` field. Parser groups lines by attacker; `sequence` is informational (bonus already accounts for the -5/-10 penalty). Backend resolves each line independently in order. No new resolve flow needed — same queue.
 - [ ] **CB2-3 — Combat manoeuvres (CMB/CMD)** — `type: manoeuvre` + `manoeuvre: trip|bull_rush|grapple|disarm|sunder`. Backend: roll CMB vs target CMD (from combatant stats — requires `cmd` field added to `%%COMBAT%%` format). On success, inject corresponding condition into target's next `%%COMBAT%%` update. `attack_result` event includes `manoeuvre` and `success` fields.
-- [ ] **CB2-4 — Attack of Opportunity** — `%%ATTACK%%` line gains `trigger: aoo` field. Resolved exactly like a normal attack; `attack_result` event includes `aoo: true`. DicePanel history labels it `⚔ AoO`. No separate flow needed.
+- [ ] **CB2-4 — Attack of Opportunity** — `%%ATTACK%%` line gains `trigger: aoo` field. Resolved exactly like a normal attack; `attack_result` event includes `aoo: true`. DiceTray history labels it `⚔ AoO`. No separate flow needed.
 
 ---
 

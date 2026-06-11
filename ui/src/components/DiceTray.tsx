@@ -110,7 +110,7 @@ function signedStr(n: number): string {
 
 let nextId = 0
 
-export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPhase = null, attackLog = [], onAttackRoll, onDamageRoll, initiativePending = false, onRollInitiatives }: Props) {
+export default function DiceTray({ pendingRoll, activeSpeaker, onRoll, attackPhase = null, attackLog = [], onAttackRoll, onDamageRoll, initiativePending = false, onRollInitiatives }: Props) {
   const [pending, setPending] = useState<number[]>([])
   const [history, setHistory] = useState<RollRecord[]>([])
   const [autoBonus, setAutoBonus] = useState(true)
@@ -198,7 +198,7 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
   const isAttackActive = attackPhase !== null
 
   return (
-    <aside className={`dice-panel${pendingRoll || isAttackActive || initiativePending ? ' dice-panel-active' : ''}`}>
+    <aside className={`dice-tray${pendingRoll || isAttackActive || initiativePending ? ' dice-tray-active' : ''}`}>
       {initiativePending && onRollInitiatives && (
         <div className="initiative-banner">
           <div className="initiative-banner-label">⚔ Combat begins</div>
@@ -305,7 +305,7 @@ export default function DicePanel({ pendingRoll, activeSpeaker, onRoll, attackPh
           </label>
         </div>
       ) : (
-        <div className="dice-panel-label">Dice</div>
+        <div className="dice-tray-label">Dice</div>
       )}
 
 

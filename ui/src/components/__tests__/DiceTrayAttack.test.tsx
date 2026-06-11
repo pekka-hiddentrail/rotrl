@@ -1,15 +1,15 @@
 /**
- * DicePanel — attack-resolution UI tests.
+ * DiceTray — attack-resolution UI tests.
  *
  * Spec: specs/attack-resolution.feature
  * Covers: AC-002, AC-003, AC-004, AC-008
  *
- * Separate from DicePanel.test.tsx so build_coverage.py can attribute
+ * Separate from DiceTray.test.tsx so build_coverage.py can attribute
  * these ACs to attack-resolution.feature without ambiguity.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import DicePanel from '../DicePanel'
+import DiceTray from '../DiceTray'
 import type { AttackPhase, AttackResult } from '../../types'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ function renderPanel(props: {
   onRoll?: ReturnType<typeof vi.fn>
 } = {}) {
   return render(
-    <DicePanel
+    <DiceTray
       sessionId="s1"
       pendingRoll={null}
       activeSpeaker={null}
@@ -76,7 +76,7 @@ afterEach(() => { vi.restoreAllMocks() })
 
 // ─── AC-003 — to-hit banner ───────────────────────────────────────────────────
 
-describe('DicePanel — AC-003 to-hit banner', () => {
+describe('DiceTray — AC-003 to-hit banner', () => {
   it('renders attacker and target', () => {
     renderPanel({ attackPhase: TO_HIT_PHASE })
     expect(screen.getByText(/Thaelion → Goblin 1/)).toBeInTheDocument()
@@ -88,9 +88,9 @@ describe('DicePanel — AC-003 to-hit banner', () => {
     expect(screen.getByText(/bonus: \+5/)).toBeInTheDocument()
   })
 
-  it('applies dice-panel-active class to aside', () => {
+  it('applies dice-tray-active class to aside', () => {
     const { container } = renderPanel({ attackPhase: TO_HIT_PHASE })
-    expect(container.querySelector('aside')).toHaveClass('dice-panel-active')
+    expect(container.querySelector('aside')).toHaveClass('dice-tray-active')
   })
 
   it('clicking the banner calls onAttackRoll with the rolled d20 value', async () => {
@@ -103,7 +103,7 @@ describe('DicePanel — AC-003 to-hit banner', () => {
 
 // ─── AC-004 — damage banner ───────────────────────────────────────────────────
 
-describe('DicePanel — AC-004 damage banner', () => {
+describe('DiceTray — AC-004 damage banner', () => {
   it('renders HIT and attacker → target', () => {
     renderPanel({ attackPhase: DAMAGE_PHASE })
     expect(screen.getByText(/HIT!.*Thaelion/)).toBeInTheDocument()
@@ -139,21 +139,21 @@ describe('DicePanel — AC-004 damage banner', () => {
 
 // ─── AC-003 — null phase ──────────────────────────────────────────────────────
 
-describe('DicePanel — AC-003 null attack phase', () => {
+describe('DiceTray — AC-003 null attack phase', () => {
   it('no attack banner rendered when attackPhase is null', () => {
     const { container } = renderPanel({ attackPhase: null })
     expect(container.querySelector('.attack-banner')).not.toBeInTheDocument()
   })
 
-  it('no dice-panel-active class when attackPhase and pendingRoll are both null', () => {
+  it('no dice-tray-active class when attackPhase and pendingRoll are both null', () => {
     const { container } = renderPanel({ attackPhase: null })
-    expect(container.querySelector('aside')).not.toHaveClass('dice-panel-active')
+    expect(container.querySelector('aside')).not.toHaveClass('dice-tray-active')
   })
 })
 
 // ─── AC-002, AC-008 — attack log ─────────────────────────────────────────────
 
-describe('DicePanel — AC-002 AC-008 attack log', () => {
+describe('DiceTray — AC-002 AC-008 attack log', () => {
   it('hit entry shows HIT badge and damage total', () => {
     renderPanel({ attackLog: [HIT_RESULT] })
     expect(screen.getByText('HIT')).toBeInTheDocument()

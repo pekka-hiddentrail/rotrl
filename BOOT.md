@@ -148,7 +148,7 @@ POST /api/sessions/{id}/turn  { "input": "We approach the mayor." }
 
 ### Roll resolution (`POST /api/sessions/{id}/resolve_roll`)
 
-After the dice panel sends the player's roll result:
+After the Dice Tray sends the player's roll result:
 
 ```text
 POST /api/sessions/{id}/resolve_roll  { "rolled": 14 }

@@ -1,6 +1,6 @@
-# Exploratory Tests — Dice Panel
+# Exploratory Tests — Dice Tray
 
-Spec: specs/dice-panel.feature
+Spec: specs/dice-tray.feature
 
 **What automated tests cover:** queue accumulation, history limit, auto-bonus logic, toggle,
 normalisation — all with mocked `onRoll`.

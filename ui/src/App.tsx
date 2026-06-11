@@ -10,7 +10,7 @@ import ApiLogPanel from './components/ApiLogPanel'
 import TokenBenchmarks from './components/TokenBenchmarks'
 import CoverageMatrix from './components/CoverageMatrix'
 import EventStatus from './components/EventStatus'
-import DicePanel from './components/DicePanel'
+import DiceTray from './components/DiceTray'
 import CombatPanel from './components/CombatPanel'
 import IntentBar from './components/IntentBar'
 import MusicPlayer from './components/MusicPlayer'
@@ -717,13 +717,15 @@ export default function App() {
       {charsError && <div className="error-bar">Character data: {charsError}</div>}
 
       <div className={`main-content${combatState ? ' combat-active' : ''}`}>
-        <CharacterSidebar
-          characters={characters}
-          loading={charsLoading}
-          activeSpeakerId={activeCharacter}
-          onSetActive={handleCharacterSelect}
-          onOpenSheet={handleOpenSheet}
-        />
+        {isBooted && (
+          <CharacterSidebar
+            characters={characters}
+            loading={charsLoading}
+            activeSpeakerId={activeCharacter}
+            onSetActive={handleCharacterSelect}
+            onOpenSheet={handleOpenSheet}
+          />
+        )}
 
         <div className="chat-area">
           {!isBooted && messages.length === 0 && !streaming && (
@@ -804,7 +806,7 @@ export default function App() {
         )}
 
         {isBooted && (
-          <DicePanel
+          <DiceTray
             key={diceKey}
             sessionId={session?.id ?? null}
             pendingRoll={pendingRoll}
