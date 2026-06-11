@@ -1,4 +1,4 @@
-﻿# Magic System Backlog
+# Magic System Backlog
 
 All spell and magic-related work lives here. [TODO.md](TODO.md) links here.
 

@@ -1,4 +1,4 @@
-﻿# Session Lifecycle
+# Session Lifecycle
 
 This document describes what happens from the moment the player clicks **Boot Session** through to **End Session**. It reflects the current code, not any earlier architecture.
 

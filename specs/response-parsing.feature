@@ -1,4 +1,4 @@
-﻿# FEATURE — Response Parsing
+# FEATURE — Response Parsing
 
 **ID:** response-parsing
 **Status:** Approved

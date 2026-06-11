@@ -1,4 +1,4 @@
-﻿# Manual Testing Guide
+# Manual Testing Guide
 
 Exploratory tests have been split into individual files under `tests/exploratory/`.
 Each file has a `Spec: specs/<id>.feature` header and inline `AC-NNN` references so

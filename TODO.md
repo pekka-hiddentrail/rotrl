@@ -1,4 +1,4 @@
-﻿# Project Todo
+# Project Todo
 
 This file is a working backlog for the RotRL automation project. Items are grouped by area and ordered roughly by impact.
 

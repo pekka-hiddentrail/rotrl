@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Message, SessionInfo, CombatState, AttackPhase, AttackResult, ActiveSpeaker } from './types'
 import type { CharacterData, CharacterSummary } from './data/characters'
 import Header from './components/Header'

@@ -1,4 +1,4 @@
-﻿import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { test, expect, type Locator, type Page } from '@playwright/test'
 

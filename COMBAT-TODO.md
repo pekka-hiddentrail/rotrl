@@ -1,4 +1,4 @@
-﻿# Combat System Backlog
+# Combat System Backlog
 
 All combat-related work lives here. [TODO.md](TODO.md) links here rather than carrying the full tier tree inline.
 

@@ -1,4 +1,4 @@
-﻿# Exploratory Tests — Dice Tray
+# Exploratory Tests — Dice Tray
 
 Spec: specs/dice-tray.feature
 

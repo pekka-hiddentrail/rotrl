@@ -1,4 +1,4 @@
-﻿# RotRL: Agentic GM System
+# RotRL: Agentic GM System
 
 A FastAPI + React system that runs Pathfinder 1st Edition adventures with an AI Game Master. The GM agent manages narrative, NPCs, skill checks, combat tracking, and persistent world state. Groq is the primary LLM provider (fast, cloud-hosted); Anthropic (Claude) and Ollama are also supported.
 

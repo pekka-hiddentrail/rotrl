@@ -1,4 +1,4 @@
-﻿# FEATURE — Combat Tracker (Tier 1)
+# FEATURE — Combat Tracker (Tier 1)
 
 **ID:** combat-tracker
 **Status:** Approved

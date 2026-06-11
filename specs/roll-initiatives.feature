@@ -1,4 +1,4 @@
-﻿# FEATURE — Automatic Initiative Roll on Combat Event
+# FEATURE — Automatic Initiative Roll on Combat Event
 
 **ID:** roll-initiatives
 **Status:** Approved

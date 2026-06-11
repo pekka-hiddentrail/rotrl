@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Character speaker activation, dice-tray roll banner, and active_character
  * state persistence tests.
  *

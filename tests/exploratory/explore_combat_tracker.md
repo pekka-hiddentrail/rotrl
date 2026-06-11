@@ -1,4 +1,4 @@
-﻿# Exploratory Tests — Combat Tracker
+# Exploratory Tests — Combat Tracker
 
 Spec: specs/combat-tracker.feature
 

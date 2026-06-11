@@ -1,4 +1,4 @@
-﻿# Exploratory Tests — Attack Resolution
+# Exploratory Tests — Attack Resolution
 
 > ⚠️ **DEPRECATED** — These chains no longer reflect the current attack flow.
 >

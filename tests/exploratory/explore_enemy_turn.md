@@ -1,4 +1,4 @@
-﻿# Exploratory Tests — Enemy Turn
+# Exploratory Tests — Enemy Turn
 
 Spec: specs/enemy-turn.feature
 

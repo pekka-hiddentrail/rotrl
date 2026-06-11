@@ -1,4 +1,4 @@
-﻿# FEATURE — Dice Tray
+# FEATURE — Dice Tray
 
 **ID:** dice-tray
 **Status:** Approved

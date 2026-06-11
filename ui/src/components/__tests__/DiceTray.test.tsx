@@ -1,4 +1,4 @@
-﻿/**
+/**
  * DiceTray — dice roller, skill bonus, roll history, and banner tests.
  *
  * Spec: specs/dice-tray.feature

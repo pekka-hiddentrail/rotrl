@@ -1,4 +1,4 @@
-﻿# Combat in the RotRL GM System
+# Combat in the RotRL GM System
 
 This document describes how combat is tracked, displayed, and ended — from the LLM writing a `%%COMBAT%%` block to the UI panel disappearing when the fight is over.
 

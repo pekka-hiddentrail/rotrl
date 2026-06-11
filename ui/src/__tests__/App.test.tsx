@@ -1,4 +1,4 @@
-﻿/**
+/**
  * App SSE integration smoke tests
  *
  * Covers boot intro/session setup, send-turn event order (context, token,

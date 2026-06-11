@@ -1,4 +1,4 @@
-﻿# Exploratory Tests — LLM Output Quality
+# Exploratory Tests — LLM Output Quality
 
 Spec: specs/response-parsing.feature
 

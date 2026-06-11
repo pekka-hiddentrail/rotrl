@@ -1,4 +1,4 @@
-﻿/**
+/**
  * DiceTray — attack-resolution UI tests.
  *
  * Spec: specs/attack-resolution.feature

@@ -1,4 +1,4 @@
-﻿# FEATURE — Attack Resolution
+# FEATURE — Attack Resolution
 
 **ID:** attack-resolution
 **Status:** Approved

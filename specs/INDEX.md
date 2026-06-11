@@ -1,4 +1,4 @@
-﻿# Feature Specification Index
+# Feature Specification Index
 
 Quick reference for finding relevant specifications. Use tags to match PR changes to affected specs.
 
