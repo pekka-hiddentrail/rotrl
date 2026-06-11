@@ -717,13 +717,15 @@ export default function App() {
       {charsError && <div className="error-bar">Character data: {charsError}</div>}
 
       <div className={`main-content${combatState ? ' combat-active' : ''}`}>
-        <CharacterSidebar
-          characters={characters}
-          loading={charsLoading}
-          activeSpeakerId={activeCharacter}
-          onSetActive={handleCharacterSelect}
-          onOpenSheet={handleOpenSheet}
-        />
+        {isBooted && (
+          <CharacterSidebar
+            characters={characters}
+            loading={charsLoading}
+            activeSpeakerId={activeCharacter}
+            onSetActive={handleCharacterSelect}
+            onOpenSheet={handleOpenSheet}
+          />
+        )}
 
         <div className="chat-area">
           {!isBooted && messages.length === 0 && !streaming && (
