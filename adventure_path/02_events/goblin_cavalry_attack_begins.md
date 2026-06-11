@@ -1,5 +1,6 @@
 **Event:** goblin_cavalry_attack_begins
 **Type:** combat
+**Location:** festival_square
 **Trigger:** After the fire phase goblins are dealt with, a single mounted goblin commando charges in from the Alleyway
 
 <!-- INJECT -->

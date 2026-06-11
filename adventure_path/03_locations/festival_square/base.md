@@ -10,6 +10,26 @@ Sandpoint's full population plus several dozen out-of-town visitors during the f
 ## Current State
 Open and crowded. Alert level: none — festival security is light. The cobblestones are slippery in front of the serving tables where mead has already been spilled. Sightlines across the square are limited by the tent canopies; anyone wanting to observe the crowd unnoticed can do so from the stage steps or the narrow alley between the chandler's shop and the milliner.
 
+## Zones
+
+| id | name | description | visible | source | tags |
+|----|------|-------------|---------|--------|------|
+| cathedral_stairs | Cathedral Stairs | The raised steps before the new cathedral, exposed and easy to see from across the square. | yes | authored | higher_ground, sanctuary |
+| alleyway | Alleyway | A narrow side lane between shops at the square's edge, good for sudden arrivals and quick exits. | yes | authored | escape_route, shadowed |
+| well | Well | The stone well and open cobbles near it, with room to circle but little cover. | yes | authored | landmark |
+| market_stalls | Market Stalls | Crowded rows of tents, tables, awnings, crates, and spilled festival goods. | yes | authored | cover, crowded |
+| center | Center | The square's central clearing around the swallowtail wagon and main crowd flow. | yes | authored | open, crowded |
+
+## Access Points
+
+| id | from | to | label | state | bidirectional | requirements | description |
+|----|------|----|-------|-------|---------------|--------------|-------------|
+| cathedral_stairs_center | cathedral_stairs | center | Cathedral steps | open | yes | - | Broad stone steps lead down into the main square. |
+| alleyway_center | alleyway | center | Alley mouth | open | yes | - | The side lane opens directly onto the central cobbles. |
+| alleyway_well | alleyway | well | Narrow lane by the well | open | yes | - | The lane bends toward the well along the shopfronts. |
+| well_market_stalls | well | market_stalls | Stall-side path | open | yes | - | A path between vendor ropes leads from the well into the stalls. |
+| market_stalls_center | market_stalls | center | Market gap | open | yes | - | Gaps between tents open into the central clearing. |
+
 <!-- REFERENCE -->
 **District:** Central Sandpoint
 **Type:** Civic / Gathering

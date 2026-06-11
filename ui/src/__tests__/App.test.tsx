@@ -28,6 +28,8 @@ vi.mock('../api', () => ({
   resumeCombat: vi.fn(),
   setActiveCharacter: vi.fn().mockResolvedValue({}),
   advanceCombatTurn: vi.fn().mockResolvedValue({ current_actor: null, is_pc: false }),
+  fetchLocationZones: vi.fn().mockResolvedValue({ zones: [], access_points: [], occupants: [], available_moves: [], current_location: { id: '', name: '' }, current_zone_id: '' }),
+  postZoneMove: vi.fn().mockResolvedValue({ zones: [], access_points: [], occupants: [], available_moves: [], current_location: { id: '', name: '' }, current_zone_id: '' }),
 }))
 
 vi.mock('../data/characters', () => ({

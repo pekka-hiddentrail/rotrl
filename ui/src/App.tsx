@@ -16,7 +16,9 @@ import IntentBar from './components/IntentBar'
 import MusicPlayer from './components/MusicPlayer'
 import { loadCharacterSheet, useCharacters } from './data/characters'
 import SplashHint from './components/SplashHint'
-import { advanceCombatTurn, bootSession, sendTurn, pcTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi } from './api'
+import { advanceCombatTurn, bootSession, sendTurn, pcTurn, endSessionWithRecap, logRoll, resolveRoll, purgeSessionNpcs, closeCombat, runEnemyTurn, resolveAttackRoll, resolveDamageRoll, resumeCombat, rollInitiatives, setActiveCharacter as setActiveCharacterApi, fetchLocationZones, postZoneMove } from './api'
+import type { LocationZonesData } from './api'
+import LocationZonesPanel from './components/LocationZonesPanel'
 
 function SplashPortrait({ c }: { c: CharacterSummary }) {
   const [imgOk, setImgOk] = useState(true)
@@ -81,6 +83,10 @@ export default function App() {
   const [showCoverage,     setShowCoverage]     = useState(false)
   const [showEventStatus,  setShowEventStatus]  = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
+  const [locationZonesData, setLocationZonesData] = useState<LocationZonesData | null>(null)
+  const [zoneMovePending, setZoneMovePending] = useState(false)
+  const [zonePanelCollapsed, setZonePanelCollapsed] = useState(false)
+  const [pendingZoneMove, setPendingZoneMove] = useState<string | null>(null)
   const endAbortRef = useRef<AbortController | null>(null)
   // Refs for reading current state inside async closures (stale closure guard)
   const attackPhaseRef = useRef<AttackPhase>(null)
@@ -91,6 +97,16 @@ export default function App() {
     setAttackLog(prev => { const next = fn(prev); attackLogRef.current = next; return next })
   }
   const { characters, characterMap, loading: charsLoading, error: charsError } = useCharacters()
+
+  // True when it's a PC's turn in combat (not an enemy's turn and not out of combat).
+  const inPcCombatTurn = !!(combatState && currentCombatantName &&
+    Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))
+
+  // Zone movement actor: locked to the current PC during their combat turn; party otherwise.
+  // Never settable manually — prevents the player from moving enemies or out-of-turn actors.
+  const zoneActorId = (inPcCombatTurn && currentCombatantName)
+    ? currentCombatantName.toLowerCase()
+    : 'party'
 
   // Clear the manual combat speaker override whenever the initiative actor changes.
   // This ensures the override only lasts for the turn it was set on.
@@ -138,7 +154,10 @@ export default function App() {
         if (event.type === 'error') throw new Error(event.message)
         if (event.type === 'done') sessionId = event.session_id
       }
-      if (sessionId) setSession({ id: sessionId, sessionNumber, model })
+      if (sessionId) {
+        setSession({ id: sessionId, sessionNumber, model })
+        void refreshLocationZones(sessionId)
+      }
     } catch (e) {
       setMessages([])
       setError(String(e))
@@ -155,16 +174,20 @@ export default function App() {
       ? Object.values(characterMap).find(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()) ?? null
       : null
     const speaker = combatPc ?? (activeCharacter ? characterMap[activeCharacter] : null)
-    const sentInput = speaker ? `@${speaker.name}: "${input}"` : input
+    const zoneMovedTo = pendingZoneMove
+    setPendingZoneMove(null)
+    const zoneSuffix = zoneMovedTo ? ` [Moved to: ${zoneMovedTo}]` : ''
+    const sentInput = speaker ? `@${speaker.name}: "${input}"${zoneSuffix}` : input + zoneSuffix
     setError(null)
     setAttention(null)
     setLastInput(input)
     setIntent(null)
+    const displayParts = [input, selectedTarget ? `→ Target: ${selectedTarget}` : null, zoneMovedTo ? `[Moved to: ${zoneMovedTo}]` : null].filter(Boolean)
     setMessages(prev => [
       ...prev,
       {
         role: 'player',
-        content: selectedTarget ? `${input}\n→ Target: ${selectedTarget}` : input,
+        content: displayParts.join('\n'),
         speaker: speaker
           ? { name: speaker.name, portrait: speaker.portrait, color: speaker.color, rune: speaker.rune }
           : null,
@@ -221,6 +244,7 @@ export default function App() {
       if (!attackPhaseRef.current && attackLogRef.current.length > 0 && session) {
         await doResumeCombat(session.id)
       }
+      if (session) void refreshLocationZones(session.id)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -362,6 +386,40 @@ export default function App() {
     }
   }
 
+  const refreshLocationZones = useCallback(async (sessionId: string) => {
+    try {
+      const data = await fetchLocationZones(sessionId)
+      if (data.zones.length > 0) setLocationZonesData(data)
+    } catch {
+      // non-fatal — panel stays hidden if zones aren't loaded
+    }
+  }, [])
+
+  const handleZoneMove = async (accessPointId: string) => {
+    if (!session || zoneMovePending) return
+    // Resolve destination zone name from current data before the API call —
+    // this is the zone name that was shown on the button, so it's always correct.
+    const move = locationZonesData?.available_moves.find(m => m.access_point_id === accessPointId)
+    const destName = move
+      ? (locationZonesData?.zones.find(z => z.id === move.to_zone_id)?.name ?? move.to_zone_id)
+      : null
+    setZoneMovePending(true)
+    try {
+      const refreshed = await postZoneMove(session.id, zoneActorId, accessPointId)
+      setLocationZonesData(refreshed)
+      if (destName) setPendingZoneMove(destName)
+      if (refreshed.combat_state != null) {
+        setCombatState(refreshed.combat_state)
+        setCurrentCombatantName(refreshed.combat_state.current_actor ?? null)
+      }
+    } catch (e) {
+      setToast(String(e))
+      setTimeout(() => setToast(null), 3000)
+    } finally {
+      setZoneMovePending(false)
+    }
+  }
+
   const handleKillEnd = () => {
     endAbortRef.current?.abort()
     endAbortRef.current = null
@@ -405,6 +463,7 @@ export default function App() {
         }
         if (event.type === 'error') throw new Error(event.message)
       }
+      void refreshLocationZones(session.id)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -701,7 +760,7 @@ export default function App() {
                 onEnemyTurn={handleEnemyTurn}
                 disabled={streaming || ending || enemyTurnStreaming || combatClosing}
                 activeSpeaker={inputActiveSpeaker}
-                inPcCombatTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
+                inPcCombatTurn={inPcCombatTurn}
                 combatWeapons={(() => {
                   if (!combatState || !currentCombatantName) return undefined
                   const pc = Object.values(fullCharacterMap).find(
@@ -727,9 +786,20 @@ export default function App() {
             onAdvanceTurn={handleAdvanceTurn}
             onEnemyTurn={handleEnemyTurn}
             onEndCombat={handleEndCombat}
-            inPcTurn={!!(combatState && currentCombatantName && Object.values(characterMap).some(c => c.name.toLowerCase() === currentCombatantName.toLowerCase()))}
+            inPcTurn={inPcCombatTurn}
             selectedTarget={selectedTarget}
             onSelectTarget={setSelectedTarget}
+          />
+        )}
+
+        {locationZonesData && locationZonesData.zones.length > 0 && (
+          <LocationZonesPanel
+            zonesData={locationZonesData}
+            actorId={zoneActorId}
+            onMove={handleZoneMove}
+            movePending={zoneMovePending || (!!combatState && !inPcCombatTurn)}
+            collapsed={zonePanelCollapsed}
+            onCollapse={setZonePanelCollapsed}
           />
         )}
 

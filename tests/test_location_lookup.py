@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.context.location_lookup import LocationIndex, LocationMatch, _parse_location_base
+from api.context.location_lookup import LocationIndex, LocationMatch, _parse_location_base, _parse_location_zone_graph, parse_zone_adjacency_table
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -141,6 +141,82 @@ class TestParseLocationBase:
 
 
 # ── AC-003: alias detection ───────────────────────────────────────────────────
+
+class TestLocationZoneGraph:
+    def test_parses_zones_and_access_points(self, tmp_path):
+        body = """## Description
+
+A test inn.
+
+## Zones
+
+| id | name | description | visible | source | tags |
+|----|------|-------------|---------|--------|------|
+| common_room | Common Room | Main floor. | yes | authored | social |
+| stables | Stables | Behind the inn. | yes | authored | exterior |
+| hearth_corner | Hearth Corner | Beside the fire. | yes | authored | warm |
+
+## Access Points
+
+| id | from | to | label | state | bidirectional | requirements | description |
+|----|------|----|-------|-------|---------------|--------------|-------------|
+| common_room_stables | common_room | stables | Rear door | open | yes | - | A back door. |
+| common_room_hearth | common_room | hearth_corner | Hearth path | open | yes | - | Between benches. |
+"""
+        p = tmp_path / "base.md"
+        p.write_text(_make_base_md("Inn", "inn", body), encoding="utf-8")
+
+        graph = _parse_location_zone_graph(p, "inn", "Inn")
+
+        assert set(graph.zones) == {"common_room", "stables", "hearth_corner"}
+        assert len(graph.access_points) == 2
+        assert graph.adjacency_by_name()["Stables"] == {"Common Room"}
+        assert graph.adjacency_by_name()["Hearth Corner"] == {"Common Room"}
+        assert "Hearth Corner" not in graph.adjacency_by_name()["Stables"]
+
+    def test_location_index_get_zones_accepts_slug(self, tmp_path):
+        body = """## Description
+
+A plaza.
+
+## Zones
+
+| id | name | description | visible | source | tags |
+|----|------|-------------|---------|--------|------|
+| center | Center | Open square. | yes | authored | open |
+| alleyway | Alleyway | Side lane. | yes | authored | shadowed |
+
+## Access Points
+
+| id | from | to | label | state | bidirectional | requirements | description |
+|----|------|----|-------|-------|---------------|--------------|-------------|
+| alleyway_center | alleyway | center | Alley mouth | open | yes | - | Exit to square. |
+"""
+        idx = _make_index(tmp_path, {
+            "festival_square": _make_base_md("Festival Square", "festival square", body),
+        })
+
+        zones = idx.get_zones("festival_square")
+
+        assert zones["Alleyway"] == {"Center"}
+        assert zones["Center"] == {"Alleyway"}
+
+    def test_legacy_zone_table_parser(self):
+        text = """## Zones - Old Shape
+
+| Zone | Adjacent to | Properties |
+|------|-------------|------------|
+| Cathedral Stairs | Center | higher_ground |
+| Center | Cathedral Stairs, Market Stalls | - |
+| Market Stalls | Center | cover |
+"""
+        zones, props = parse_zone_adjacency_table(text)
+
+        assert zones["Cathedral Stairs"] == {"Center"}
+        assert zones["Center"] == {"Cathedral Stairs", "Market Stalls"}
+        assert props["Cathedral Stairs"] == ["higher_ground"]
+        assert props["Market Stalls"] == ["cover"]
+
 
 class TestDetect:
     def test_detects_single_word_alias(self, tmp_path):

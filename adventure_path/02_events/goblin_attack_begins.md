@@ -1,5 +1,6 @@
 **Event:** goblin_attack_begins
 **Type:** combat
+**Location:** festival_square
 **Trigger:** Father Zantus strikes the thunderstone — a deafening crack silences the crowd, then the screaming begins
 
 <!-- INJECT -->

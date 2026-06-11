@@ -24,6 +24,8 @@ vi.mock('../api', () => ({
   resumeCombat:       vi.fn().mockReturnValue((async function* () {})()),
   rollInitiatives:    vi.fn().mockResolvedValue({ combat_state: null }),
   setActiveCharacter: vi.fn().mockResolvedValue({}),
+  fetchLocationZones: vi.fn().mockResolvedValue({ zones: [], access_points: [], occupants: [], available_moves: [], current_location: { id: '', name: '' }, current_zone_id: '' }),
+  postZoneMove: vi.fn().mockResolvedValue({ zones: [], access_points: [], occupants: [], available_moves: [], current_location: { id: '', name: '' }, current_zone_id: '' }),
 }))
 
 vi.mock('../data/characters', () => ({

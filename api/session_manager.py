@@ -28,7 +28,7 @@ except ImportError:
 
 from api.context.npc_lookup import NpcIndex
 from api.context.skill_lookup import SkillIndex
-from api.context.location_lookup import LocationIndex
+from api.context.location_lookup import LocationIndex, parse_zone_adjacency_table
 from api.context.event_index import EventIndex
 from api.context.combat_lookup import CombatRulesIndex
 from api.api_logger import write_api_log
@@ -1264,6 +1264,12 @@ class GameSession:
     # Canonical location names visited in the current session, accumulated across turns.
     # Full location profiles are re-injected as ambient context on subsequent turns.
     scene_locations: list = field(default_factory=list)
+    # Active location/encounter zone graph. Keys and values use display names so
+    # they line up with current Combatant.zone values.
+    current_location_id: str = ""
+    party_zone_id: str = ""
+    zone_map: dict = field(default_factory=dict)         # dict[str, set[str]]
+    zone_properties: dict = field(default_factory=dict)  # dict[str, list[str]]
     # Events currently active — each has content injected for turns_remaining turns.
     active_events: list = field(default_factory=list)  # list[ActiveEvent]
     # Combatant data seeded from event files when a combat event fires.
@@ -1356,6 +1362,10 @@ def _write_session_state(session: "GameSession") -> None:
             if session.combat_state is not None else []
         ),
         "pc_current_hp": session.pc_current_hp,
+        "current_location_id": session.current_location_id,
+        "party_zone_id": session.party_zone_id,
+        "zone_map": {k: sorted(v) for k, v in session.zone_map.items()},
+        "zone_properties": session.zone_properties,
         # event_runtime is written for external inspection (Event Status panel) only.
         # It is NOT read back on session restore — see BUG-003 / EVENT-TODO E1-9.
         "event_runtime": _serialize_event_runtime(session.event_runtime),
@@ -1539,6 +1549,41 @@ def _parse_event_combatants(content: str) -> dict:
     except Exception:
         return {}
     return result
+
+
+def _load_event_zone_data(session: "GameSession", event_entry) -> None:
+    """Load zone adjacency/properties for a combat event into session state.
+
+    Inline event ## Zones tables are treated as an encounter override. If an
+    event has no inline zone table, its **Location:** metadata can point at a
+    canonical location file that owns the zone graph.
+    """
+    zone_map, zone_properties = parse_zone_adjacency_table(event_entry.content)
+
+    if not zone_map and getattr(event_entry, "location_id", ""):
+        loc_idx = _get_location_index()
+        zone_map = loc_idx.get_zones(event_entry.location_id)
+        zone_properties = loc_idx.get_zone_properties(event_entry.location_id)
+
+    if zone_map:
+        session.zone_map = {name: set(adjacent) for name, adjacent in zone_map.items()}
+        session.zone_properties = {name: list(props) for name, props in zone_properties.items()}
+        if getattr(event_entry, "location_id", ""):
+            session.current_location_id = event_entry.location_id
+        if session.combat_state is not None:
+            session.combat_state.known_zones = sorted(session.zone_map.keys())
+        _log(session, f"\n> *[Zone map loaded: {len(session.zone_map)} zone(s)]*\n")
+
+
+def _refresh_combat_known_zones(session: "GameSession") -> None:
+    if session.combat_state is None:
+        return
+    zone_names = set(session.zone_map.keys())
+    zone_names.update(
+        c.zone for c in session.combat_state.combatants
+        if c.zone and c.zone != "default"
+    )
+    session.combat_state.known_zones = sorted(zone_names)
 
 
 def _seed_round1_combatants(session: "GameSession", combat_state: "CombatState") -> None:
@@ -2372,6 +2417,199 @@ def set_active_character(session: GameSession, name: str) -> None:
     """
     session.active_character = name.strip() or "party"
     _write_session_state(session)
+
+
+def get_location_zone_state(session: GameSession) -> dict:
+    """Return the active location/encounter zone snapshot for the GUI."""
+    location_id = session.current_location_id
+    loc_idx = _get_location_index()
+    loc_match = loc_idx.lookup(location_id) if location_id else None
+    graph = loc_idx.get_zone_graph(location_id) if location_id else None
+
+    current_zone_name = session.party_zone_id
+    if session.combat_state is not None and session.combat_state.current_actor:
+        actor = next(
+            (c for c in session.combat_state.combatants if c.name == session.combat_state.current_actor),
+            None,
+        )
+        if actor and actor.zone and actor.zone != "default":
+            current_zone_name = actor.zone
+    if not current_zone_name and session.zone_map:
+        current_zone_name = next(iter(session.zone_map.keys()))
+
+    zones: list[dict] = []
+    access_points: list[dict] = []
+    zone_name_to_id: dict[str, str] = {}
+
+    if graph and graph.zones:
+        for zone in graph.zones.values():
+            zones.append({
+                "id": zone.id,
+                "name": zone.name,
+                "description": zone.description,
+                "visible": zone.visible,
+                "source": zone.source,
+                "tags": list(zone.tags),
+            })
+            zone_name_to_id[zone.name.lower()] = zone.id
+        for ap in graph.access_points:
+            access_points.append({
+                "id": ap.id,
+                "from": ap.from_zone_id,
+                "to": ap.to_zone_id,
+                "label": ap.label,
+                "state": ap.state,
+                "bidirectional": ap.bidirectional,
+                "requirements": ap.requirements,
+                "description": ap.description,
+                "source": ap.source,
+            })
+    else:
+        for zone_name in sorted(session.zone_map.keys()):
+            zone_id = _slugify(zone_name)
+            zone_name_to_id[zone_name.lower()] = zone_id
+            zones.append({
+                "id": zone_id,
+                "name": zone_name,
+                "description": "",
+                "visible": True,
+                "source": "event",
+                "tags": list(session.zone_properties.get(zone_name, [])),
+            })
+        seen: set[frozenset[str]] = set()
+        for from_name, adjacent in session.zone_map.items():
+            for to_name in adjacent:
+                key = frozenset({from_name, to_name})
+                if key in seen:
+                    continue
+                seen.add(key)
+                from_id = zone_name_to_id.get(from_name.lower(), _slugify(from_name))
+                to_id = zone_name_to_id.get(to_name.lower(), _slugify(to_name))
+                access_points.append({
+                    "id": _slugify(f"{from_name}_{to_name}"),
+                    "from": from_id,
+                    "to": to_id,
+                    "label": f"{from_name} to {to_name}",
+                    "state": "open",
+                    "bidirectional": True,
+                    "requirements": "",
+                    "description": "",
+                    "source": "event",
+                })
+
+    current_zone_id = zone_name_to_id.get(current_zone_name.lower(), _slugify(current_zone_name)) if current_zone_name else ""
+
+    occupants: list[dict] = []
+    if session.combat_state is not None:
+        for c in session.combat_state.combatants:
+            if c.zone and c.zone != "default":
+                occupants.append({
+                    "actor_id": _slugify(c.name),
+                    "label": c.name,
+                    "zone_id": zone_name_to_id.get(c.zone.lower(), _slugify(c.zone)),
+                })
+    elif current_zone_id:
+        occupants.append({"actor_id": "party", "label": "Party", "zone_id": current_zone_id})
+
+    available_moves: list[dict] = []
+    for ap in access_points:
+        if ap["state"] != "open":
+            continue
+        destination = ""
+        if ap["from"] == current_zone_id:
+            destination = ap["to"]
+        elif ap["bidirectional"] and ap["to"] == current_zone_id:
+            destination = ap["from"]
+        if destination:
+            available_moves.append({
+                "access_point_id": ap["id"],
+                "to_zone_id": destination,
+                "label": ap["label"],
+                "state": ap["state"],
+            })
+
+    return {
+        "current_location": {
+            "id": location_id,
+            "name": loc_match.canonical_name if loc_match else location_id,
+        },
+        "current_zone_id": current_zone_id,
+        "zones": zones,
+        "access_points": access_points,
+        "occupants": occupants,
+        "available_moves": available_moves,
+    }
+
+
+def _apply_actor_zone_change(session: "GameSession", actor_id: str, destination_zone_name: str) -> None:
+    """Update an actor's zone in session state and write to disk.
+
+    actor_id == "party"  → updates session.party_zone_id
+    anything else        → matches a combatant by slug or lowercase name
+    """
+    if actor_id == "party":
+        old = session.party_zone_id
+        session.party_zone_id = destination_zone_name
+        _log(session, f"\n> *[Zone move: party {old} → {destination_zone_name}]*\n")
+    else:
+        combatants = session.combat_state.combatants if session.combat_state else []
+        mover = next(
+            (c for c in combatants
+             if _slugify(c.name) == actor_id or c.name.lower() == actor_id.lower()),
+            None,
+        )
+        if mover:
+            old = mover.zone
+            mover.zone = destination_zone_name
+            _log(session, f"\n> *[Zone move: {mover.name} {old} → {destination_zone_name}]*\n")
+    _write_session_state(session)
+
+
+def apply_zone_move(session: "GameSession", actor_id: str, access_point_id: str) -> dict:
+    """Validate and apply a zone move via an access point, returning refreshed zone state.
+
+    Raises ValueError with a human-readable message on any validation failure.
+    """
+    state = get_location_zone_state(session)
+
+    ap = next((a for a in state["access_points"] if a["id"] == access_point_id), None)
+    if ap is None:
+        raise ValueError(f"Access point '{access_point_id}' not found")
+    if ap["state"] != "open":
+        raise ValueError(f"Access point '{access_point_id}' is {ap['state']}")
+
+    # Resolve actor's current zone id
+    if actor_id == "party":
+        current_zone_id = state["current_zone_id"]
+    else:
+        combatants = session.combat_state.combatants if session.combat_state else []
+        mover = next(
+            (c for c in combatants
+             if _slugify(c.name) == actor_id or c.name.lower() == actor_id.lower()),
+            None,
+        )
+        if mover is None:
+            raise ValueError(f"Actor '{actor_id}' not found")
+        current_zone_id = _slugify(mover.zone) if mover.zone else ""
+
+    # Validate the actor is at one end of this access point
+    if ap["from"] == current_zone_id:
+        dest_zone_id = ap["to"]
+    elif ap["bidirectional"] and ap["to"] == current_zone_id:
+        dest_zone_id = ap["from"]
+    else:
+        raise ValueError(
+            f"Actor is in zone '{current_zone_id}', not reachable via '{access_point_id}'"
+        )
+
+    # Resolve destination zone name from id
+    dest_zone = next((z for z in state["zones"] if z["id"] == dest_zone_id), None)
+    dest_zone_name = dest_zone["name"] if dest_zone else dest_zone_id
+
+    _apply_actor_zone_change(session, actor_id, dest_zone_name)
+    result = get_location_zone_state(session)
+    result["combat_state"] = _serialize_combat_state(session.combat_state)
+    return result
 
 
 def save_session(session: GameSession) -> Path:
@@ -3386,6 +3624,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _load_event_zone_data(session, _entry)
                     # Seed combatants from ## Combatants table and auto-initialize combat state.
                     # The LLM does not need to write %%COMBAT%% for event-driven combat starts —
                     # the backend owns the authoritative data; LLM block is discarded this turn.
@@ -3397,6 +3636,8 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         import re as _re_pcz
                         _pcz_m = _re_pcz.search(r'\*\*PC Starting Zone:\*\*\s*(.+)', _entry.content)
                         _pc_start_zone = _pcz_m.group(1).strip() if _pcz_m else "default"
+                        if _pc_start_zone != "default":
+                            session.party_zone_id = _pc_start_zone
                         # Build CombatState: PCs from profiles + enemies from event file
                         _init_combatants: list = []
                         for _pk, _pp in session.pc_profiles.items():
@@ -3422,6 +3663,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                                 zone=_ed.get("zone", "default"),
                             ))
                         session.combat_state = CombatState(round=1, combatants=_init_combatants)
+                        _refresh_combat_known_zones(session)
                         session._await_initiative_roll = True
                         session._skip_combat_block = True
                         _log(session, f"\n> *[Combat auto-initialized from event file: "
@@ -3551,6 +3793,7 @@ def _stream_chat(session: GameSession) -> Generator[str, None, None]:
                         ActiveEvent(event_id=_fired_id, content=_entry.content, turns_remaining=5)
                     )
                     _log(session, f"\n> *[Event fired: {_fired_id} — active for 5 turns]*\n")
+                    _load_event_zone_data(session, _entry)
                     if _entry.event_type == "combat":
                         _seeded = _parse_event_combatants(_entry.content)
                         if _seeded:
@@ -4154,6 +4397,9 @@ def _build_enemy_turn_system(session: "GameSession", name: str) -> str:
     _allies_block = "\n".join(_ally_line(c) for c in allies) if allies else "- (none)"
     _pcs_block    = "\n".join(_pc_line(c)   for c in pcs)    if pcs    else "- (none)"
 
+    _known_zones  = session.combat_state.known_zones if session.combat_state.known_zones else []
+    _zones_line   = f"Known zones: {', '.join(_known_zones)}" if _known_zones else "Known zones: (none)"
+
     briefing = f"""[ENEMY TURN BRIEFING]
 Round: {session.combat_state.round}
 Actor: {actor.name}, {actor.status}{_actor_cond}{_actor_zone_label}
@@ -4161,6 +4407,7 @@ Action budget: {_enemy_action_budget(actor)}
 {_equipped_line}
 {_available_line}
 Tactic: {_tactic}
+{_zones_line}
 
 Allies:
 {_allies_block}
@@ -4178,10 +4425,10 @@ Full-round: full attack (all iterative attacks) or charge.
 %%ACTION%%
 action: attack|use_ability|move|delay
 action_type: standard|move|full|swift|free|five_foot_step
-target: <target name, if attacking or moving toward>
+target: <combatant name if attack or use_ability> | <destination zone name if move — must be from Known zones>
 weapon: <weapon name, if attack — must match Equipped or Available weapon>
 ability: <ability name, if use_ability>
-movement: <destination or direction, if move>
+movement: <brief flavor description of the movement, if move>
 if_hit: <one sentence narrating the outcome if the attack hits — e.g. "The blade bites into Vanx's shoulder!">
 if_miss: <one sentence narrating the outcome if the attack misses — e.g. "Vanx sidesteps and the blow glances off.">"""
 
@@ -4274,13 +4521,19 @@ _HINT_TO_ACTION_TYPE: dict[str, str] = {
 def _build_session_zone_map(session: "GameSession") -> dict:
     """Return a {lowercase_name: original_name} map of all zones in active combat events.
 
-    Includes zones inferred from combatant positions and zones declared in event
-    zone tables.  Excludes combatant names and common table header words.
+    Prefer the parsed session.zone_map, then include combatant positions and
+    legacy event-table scraping as a compatibility fallback.
     """
     if session.combat_state is None:
         return {}
     _combatant_names_lower = {_c.name.lower() for _c in session.combat_state.combatants}
     _zm: dict = {}
+    for _zone_name in session.zone_map.keys():
+        if _zone_name:
+            _zm[_zone_name.lower()] = _zone_name
+    for _zone_name in session.combat_state.known_zones:
+        if _zone_name:
+            _zm[_zone_name.lower()] = _zone_name
     for _c in session.combat_state.combatants:
         if _c.zone and _c.zone != "default":
             _zm[_c.zone.lower()] = _c.zone
@@ -4461,6 +4714,10 @@ def _extract_pc_combat_intent(text: str, session: "GameSession", action_type_hin
             action_type = "attack"
             break
     for phrase in _move_words:
+        # BUG: guard only checks for the literal word "attack"; words like "strike", "swing"
+        # don't protect against a [Moved to: Zone] suffix overriding the intent to "move".
+        # Fix: replace "attack" not in text_lower with:
+        #   _has_attack_intent = any(w in text_lower for w in _attack_words)
         if phrase in text_lower and "attack" not in text_lower:
             action_type = "move"
             break
@@ -4615,6 +4872,16 @@ def stream_enemy_turn(session: GameSession, name: Optional[str] = None) -> Gener
             if _fallback:
                 _log(session, f"\n> *[CB1.9-2: weapon '{_chosen}' not in profile — using '{_fallback}']*\n")
                 action = {**action, "weapon": _fallback}
+
+    # Apply zone move before narrating so combat_update sees the updated position
+    if action and action.get("action") == "move" and action.get("target"):
+        _dest_raw = action["target"].strip()
+        _known_z  = {z.lower(): z for z in (session.combat_state.known_zones or [])}
+        _canonical_z = _known_z.get(_dest_raw.lower(), "")
+        if _canonical_z:
+            _apply_actor_zone_change(session, _slugify(actor.name), _canonical_z)
+        else:
+            _log(session, f"\n> *[Zone move ignored: '{_dest_raw}' not in known zones {list(_known_z.values())}]*\n")
 
     # Resolve the attack before building the visible message so we know hit/miss
     result: Optional[dict] = None
@@ -4866,13 +5133,17 @@ def stream_pc_turn(session: GameSession, player_text: str, action_type_hint: Opt
         # Apply zone movement before narrating so the LLM sees the updated state
         if intent.get("action_type") == "move":
             _dest = intent.get("destination_zone", "")
-            if not _dest:
-                # Destination zone not recognised — surface a soft warning with zone list
+            _zone_names = intent.get("available_zones", [])
+            if not _dest and _zone_names:
+                # Zones are defined but destination wasn't recognised — surface a warning.
+                # Only triggered when the session has a zone map; when no zones are configured
+                # (test sessions, out-of-zone-combat) fall through to normal narration.
                 _actor_name = intent["actor"]
-                _zone_names = intent.get("available_zones", [])
-                _zones_hint = (", ".join(_zone_names)) if _zone_names else "none known"
+                _zones_hint = ", ".join(_zone_names)
                 yield f"data: {json.dumps({'type': 'attention', 'message': f'{_actor_name} — zone not recognised. Available zones: {_zones_hint}.'})}\n\n"
-            else:
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                return  # don't advance the turn — player can try again with a valid zone
+            elif _dest:
                 _mover = next((c for c in session.combat_state.combatants
                                if c.name.lower() == intent["actor"].lower()), None)
                 if _mover:

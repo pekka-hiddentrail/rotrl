@@ -14,6 +14,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [llm-providers.feature](llm-providers.feature) | Backend \| Frontend | `@llm` `@groq` `@ollama` `@provider` | 6 | Groq API, Ollama API, rate-limit headers, `stream_options` fallback, `Header.tsx` model dropdown |
 | [context-detection.feature](context-detection.feature) | Backend | `@context` `@npc` `@skill` `@location` `@token` | 7 | `NpcIndex`, `SkillIndex`, `context` SSE event, `format_short_context()` stub vs full-profile skill gate |
 | [location-system.feature](location-system.feature) | Backend | `@location` `@index` `@generator` `@context` `@injection` | 9 | `LocationIndex`, `location_lookup.py`, `03_locations/`, `scene_locations`, `%%GENERATE%%` stub |
+| [location-zones.feature](location-zones.feature) | Backend \| Frontend \| Content | `@location` `@zone` `@movement` `@ui` `@api` `@generator` `@context` | 13 | Location `## Zones` and `## Access Points`, `LocationZoneGraph`/`LocationZone`/`LocationAccessPoint` dataclasses in `location_lookup.py`, `get_location_zone_state()`, `apply_zone_move()`, `_apply_actor_zone_change()`, `GET /location_zones`, `POST /zone_move`, `LocationZonesPanel.tsx` (order:5 in flex layout), `postZoneMove()` in `api.ts`, `tests/test_location_zones.py` (7 tests), `ui/src/components/__tests__/LocationZonesPanel.test.tsx` (19 tests) — LZ-001–LZ-010 + LZ-013 done; LZ-011/012 (zone generation from prose) pending |
 | [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 6 | Streaming filter, holdback buffer, `patch_last` event, `%%NARRATIVE%%` retry guard |
 | [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `04_rules/skills/` |
@@ -57,7 +58,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [music-calm-playback.feature](music-calm-playback.feature) | Frontend | `@music` `@playback` `@calm` `@ui` `@webaudio` | 14 | `MusicPlayer.tsx`, `ui/src/music/synth.ts`, `ui/src/music/player.ts`, Tone.js `Synth`, phrase scheduling, prefetch pipeline, stop fade, bar indicator (AC-014) |
 | [music-calm-bass-track.feature](music-calm-bass-track.feature) | Backend \| Frontend | `@music` `@generation` `@calm` `@bass` `@symbolic` `@multi-track` | 14 | **Planning** — `CalmBassConfig`, bass register C2–G3, stable degrees only, sparse rhythms, lead/bass density coordination, bar-root weights, phrase arc, `bass_pattern_id` state, separate bass `Tone.Synth`; multi-track `tracks` API shape |
 
-**Total: 433 acceptance criteria across 45 feature files**
+**Total: 446 acceptance criteria across 46 feature files**
 
 ---
 
@@ -113,5 +114,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@stability` | Event pacing conflict controls | readiness vs urgency, arbitration, cooldown protections |
 | `@combat` | Combat tracker panel and state | `api/session_manager.py` `CombatState`, `CombatPanel.tsx`, `HpBar.tsx`, `%%COMBAT%%` block, `api/context/combat_lookup.py` `CombatRulesIndex` |
 | `@layout` | UI column layout switching | `ui/src/index.css` `.main-content.combat-active`, flex `order` rules |
+| `@zone` | Named spatial areas inside combat encounters or canonical locations | `Combatant.zone`, location `## Zones`, Location Zones panel |
+| `@movement` | Actor movement between known positions or zones | Zone access validation, `POST /zone_move`, PC combat movement |
 | `@persistence` | State files written to disk mid-session | `sessions/session_NNN/state.json`, `_write_session_state()` |
 | `@state` | Lightweight "state of play" snapshot | `sessions/state.template.json`, mode/round/events fields |

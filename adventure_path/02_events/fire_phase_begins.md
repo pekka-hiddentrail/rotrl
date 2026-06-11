@@ -1,5 +1,6 @@
 **Event:** fire_phase_begins
 **Type:** combat
+**Location:** festival_square
 **Trigger:** After the first wave is repelled, there is a moment to relax and orient.
 
 <!-- INJECT -->

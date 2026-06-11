@@ -38,6 +38,7 @@ class EventEntry:
     trigger: str        # human/LLM-readable condition description
     content: str        # injectable markdown, everything below <!-- INJECT -->
     event_type: str = ""  # backend metadata: "combat", "aftermath", etc. Not shown to LLM.
+    location_id: str = ""  # stable location slug/canonical name for zone lookup
     # Temperature scheduler fields — populated from ## Schedule section.
     # Events without this section are LLM-triggered only (is_schedulable=False).
     is_schedulable: bool = False
@@ -123,6 +124,7 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
     event_id = ""
     trigger = ""
     event_type = ""
+    location_id = ""
     content_lines: list[str] = []
     in_content = False
     in_schedule = False
@@ -166,6 +168,11 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
             event_type = m.group(1).strip()
             continue
 
+        m = re.match(r"\*\*Location:\*\*\s*(.+)", line, re.IGNORECASE)
+        if m:
+            location_id = m.group(1).strip()
+            continue
+
     if not event_id or not in_content:
         return None
 
@@ -201,6 +208,7 @@ def _parse_event_file(path: Path) -> Optional[EventEntry]:
         trigger=trigger,
         content=content,
         event_type=event_type,
+        location_id=location_id,
         is_schedulable=is_schedulable,
         zones=zones,
         threshold=threshold,
