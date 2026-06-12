@@ -16,7 +16,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [location-system.feature](location-system.feature) | Backend | `@location` `@index` `@generator` `@context` `@injection` | 9 | `LocationIndex`, `location_lookup.py`, `03_locations/`, `scene_locations`, `%%GENERATE%%` stub |
 | [location-zones.feature](location-zones.feature) | Backend \| Frontend \| Content | `@location` `@zone` `@movement` `@ui` `@api` `@generator` `@context` | 13 | Location `## Zones` and `## Access Points`, `LocationZoneGraph`/`LocationZone`/`LocationAccessPoint` dataclasses in `location_lookup.py`, `get_location_zone_state()`, `apply_zone_move()`, `_apply_actor_zone_change()`, `GET /location_zones`, `POST /zone_move`, `LocationZonesPanel.tsx` (order:5 in flex layout), `postZoneMove()` in `api.ts`, `tests/test_location_zones.py` (7 tests), `ui/src/components/__tests__/LocationZonesPanel.test.tsx` (19 tests) — LZ-001–LZ-010 + LZ-013 done; LZ-011/012 (zone generation from prose) pending |
 | [response-parsing.feature](response-parsing.feature) | Backend | `@parsing` `@sections` `@narrative` `@streaming` | 6 | Streaming filter, holdback buffer, `patch_last` event, `%%NARRATIVE%%` retry guard |
-| [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md` |
+| [npc-system.feature](npc-system.feature) | Backend | `@npc` `@index` `@generator` `@knowledge` `@deltas` `@extraction` | 6 | `NpcIndex`, `npc_generator.py`, `base.md`, `knowledge.md`, `npc_extractor.py` (`get_npc_sections`, `list_npc_sections`) |
 | [skill-system.feature](skill-system.feature) | Backend | `@skill` `@detection` `@injection` `@dc` | 5 | `SkillIndex`, `skill_lookup.py`, `04_rules/skills/` |
 | [session-logging.feature](session-logging.feature) | Backend \| Frontend | `@logging` `@session-log` `@api-log` `@dice` | 10 | `api_logger.py`, `*.log.md`, `api_log/`, `section_format_ok`, `ApiLogPanel.tsx` |
 | [session-controls.feature](session-controls.feature) | Frontend | `@header` `@boot` `@provider` `@controls` | 8 | `Header.tsx`, provider toggle, model dropdown, rate-limits badge, kill button, API Logs button |
@@ -92,6 +92,7 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@logging` | Session and API call logs | `api/api_logger.py`, `outputs/` |
 | `@narrative` | Narrative streaming filter | `stream_turn()` holdback buffer, `patch_last` SSE event |
 | `@npc` | NPC database and index | `api/context/npc_lookup.py`, `adventure_path/01_npcs/` |
+| `@extraction` | Section-level NPC/location content extraction for prompt assembly | `api/context/npc_extractor.py` |
 | `@location` | Location profile database and index | `api/context/location_lookup.py`, `adventure_path/03_locations/` |
 | `@ollama` | Ollama provider behaviour | `api/session_manager.py` Ollama branch, `num_ctx`/`num_gpu` |
 | `@parsing` | `%%SECTION%%` response parsing | `stream_turn()` section parser, `%%ROLL%%` / `%%GENERATE%%` / `%%DELTAS%%` |

@@ -29,26 +29,47 @@ Everything below is **reader documentation** — never sent to the model.
 
 ## Personality
 
-<how they speak, react, and what drives them>
+<Voice, psychology, core wound or drive. 
+Detail level scales with Tier:
+  Tier I   — 4 sentences
+  Tier II  — 4 sentences
+  Tier III — 3 sentences
+  Tier IV  — 3 sentences>
 
 ## Appearance
 
-<short physical description — omit if unknown>
+<Physical description. Detail level scales with Tier:
+  Tier I   — 4 sentences
+  Tier II  — 3 sentences
+  Tier III — 2 sentences
+  Tier IV  — 2 sentences>
 
 ## Location & Availability
 
 - <where they are usually found>
 - <when they are available or absent>
 
-## Reaction to PCs
+## GM Notes
 
-<default stance toward unknown adventurers>
+- <Initial attitude toward unknown PCs>
+- <What warms them — specific triggers or actions>
+- <What cools or alienates them>
+- <Voice, mannerism, or speech pattern to maintain>
+- <What to emphasise or avoid in play>
 
 ## Social Checks
 
-- **Diplomacy:** DC <number> for cooperation
-- **Bluff:** DC <number> to deceive
-- **Intimidate:** DC <number> to coerce
+- **<Skill> (<context>):** DC <number> — <outcome>
+  Checks that unlock a Secret should note it explicitly:
+  e.g. DC 18 — unlocks: <secret name> (see Secrets)
+
+## Secrets
+
+<What this NPC knows but will not volunteer. Each secret states its
+unlock condition — a check result, a trust threshold, or a specific trigger.
+GM-only. Never narrated unprompted.>
+
+- **<Secret name>:** <what they know> — *Unlocked by: <condition>*
 
 ## State Handling
 
@@ -64,7 +85,8 @@ Everything below is **reader documentation** — never sent to the model.
 
 ## Narrative Function
 
-<why this NPC exists in play: witness, gatekeeper, rumour source, etc.>
+<Why this NPC exists in play: witness, gatekeeper, rumour source, etc.
+Also absorbs any edge-case notes that don't fit the sections above.>
 ```
 
 ---
@@ -91,31 +113,45 @@ Everything below is **reader documentation** — never sent to the model.
 ## Personality
 
 Brisk, practical, and protective of his inventory. Friendly once he believes someone respects his craft.
+Came up through the smithing trade and has little patience for people who treat tools as decorations.
 
 ## Appearance
 
-Broad-shouldered, smoke-scented, with singed sleeves and careful hands.
+Broad-shouldered, with smoke-scented clothes and careful, deliberate hands. Singed sleeves he never
+bothers replacing — occupational pride, not neglect.
 
 ## Location & Availability
 
 - Usually found at his market stall during daylight.
 - Closes early on high-crowd festival evenings.
 
-## Reaction to PCs
+## GM Notes
 
-Neutral and businesslike at first; becomes cooperative if approached directly and respectfully.
+- Neutral and businesslike on first contact; does not warm quickly but stays professional.
+- Opens up when approached with direct, craft-specific questions — treat him as an expert, not a vendor.
+- Becomes cold if he senses he is being manipulated or rushed.
+- Speaks in short, practical sentences. Never uses flattery. Respects the same in return.
 
 ## Social Checks
 
-- **Diplomacy:** DC 10 for cooperation
-- **Bluff:** DC 12 to deceive
-- **Intimidate:** DC 14 to coerce
+- **Diplomacy (ask about festival materials):** DC 10 — shares inventory details and recent unusual orders
+- **Bluff (mislead him):** DC 12 — cynical; failure makes him immediately suspicious
+- **Intimidate:** DC 14 — complies, then reports to Sheriff Hemlock within the hour
+- **Craft (any):** DC 10 — demonstrating genuine craft knowledge unlocks Helpful attitude immediately
+
+## Secrets
+
+- **Suspicious order:** A man he didn't recognise pre-purchased a bulk firework order three days before
+  the festival and never collected it. He assumed it was a no-show. — *Unlocked by: Diplomacy DC 14 or
+  Knowledge (local) DC 12 establishing PCs are investigating the attack*
 
 ## State Handling
 
-- **If Cooperative:** Shares useful inventory and local rumour details without resistance.
-- **If Distrustful:** Refuses details and refers the party to Sheriff Hemlock.
-- **If Killed:** Merchant district tension rises; guard inquiry opens immediately.
+- **If Cooperative:** Shares inventory, unusual customer details, and local merchant-district rumours freely.
+- **If Distrustful:** Refuses details, refers the party to Sheriff Hemlock, and mentions the encounter to
+  his neighbours.
+- **If Killed:** Merchant district tension rises sharply; guard inquiry opens immediately and PCs are
+  persons of interest.
 
 <!-- REFERENCE -->
 
@@ -126,4 +162,5 @@ Neutral and businesslike at first; becomes cooperative if approached directly an
 ## Narrative Function
 
 Provides local information and commerce access tied to festival materials and suspicious firework activity.
+The uncollected bulk order is a breadcrumb toward pre-planned sabotage if PCs think to ask.
 ```

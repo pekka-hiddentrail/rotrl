@@ -119,7 +119,7 @@ Navigate to **http://localhost:5173** in your browser.
 
 1. **Configure** — pick provider (`groq` recommended), model, session number; uncheck **Dev** for real play
 2. **Boot Session** — the system builds the GM's context (no LLM call at this step); click the button and wait for the ready signal
-3. **Music controls (optional)** — use **Start Music** to begin calm procedural playback. Use **Stop Music** to halt playback. Enable **Music Off** for a hard disable: it stops playback immediately and blocks further phrase fetches until turned off. In Dev mode, **Generate Phrase (Debug)** fetches and displays phrase details without starting playback
+3. **Music controls (optional)** — use **Start Music** to begin calm procedural playback. Use **Stop Music** to halt playback. In Dev mode, **Generate Phrase (Debug)** fetches and displays phrase details without starting playback
 4. **Type your first action** in the input bar and press **Enter** — this triggers the first GM response
 5. **Roll dice** when prompted; the UI shows a Dice Tray. Rolling produces a player speech bubble in chat (e.g. *"Yanyeeku rolled a 13. With bonus of +7 it is a total of 20."*) and automatically submits the result to the backend. If a character is active and the skill is mapped, the modifier is added automatically (toggle in the panel to override)
 6. **Combat** — when the LLM writes a `%%COMBAT%%` block, a live initiative tracker appears in the right column (DiceTray shifts left). It shows HP bars, AC, initiative order, status badges, and a phase badge for PC attacks or enemy turns. When a PC attacks, an attack banner appears in the DiceTray — click to roll d20 (to-hit), then pick dice and click **Roll Damage** on a hit. For enemies, click **Enemy Turn** to run a focused backend-mediated enemy action; the backend resolves AC, attack rolls, damage, and HP. Click **End Combat** to stream a short closure narration and clear the panel; the LLM can also signal end-of-combat by writing `round: 0`
@@ -144,7 +144,6 @@ The GM response is structured internally into sections that are stripped before 
 | `%%DELTAS%%` | Writes updated disposition/location/knowledge to each NPC's file |
 | `%%EVENT%%` | Signals a scene transition — injects event content into context for N turns |
 | `%%COMBAT%%` | Updates the live initiative tracker (`round`, HP, AC, initiative, status per combatant); `round: 0` clears the panel |
-| `%%HP%%` | Non-attack HP changes (traps, poison, healing) — `delta: -N` per named combatant; applied by backend immediately |
 | `%%ATTACK%%` | One line per attack this round — `attacker · target · bonus · damage · type`; NPC attacks auto-resolved, PC attacks queued for player dice |
 | `%%ACTION%%` | Focused enemy-turn response — `action`, `target`, `weapon`/`ability`/`movement`, and `reason`; parsed by the backend and stripped from player-facing text |
 
@@ -187,6 +186,7 @@ rotrl/
 │   ├── api_logger.py              # Per-turn LLM call logging to outputs/api_log/
 │   └── context/
 │       ├── npc_lookup.py          # NpcIndex — detect NPC names, inject full profile (skill active) or short stub
+│       ├── npc_extractor.py       # Section-level NPC parser — get_npc_sections() / list_npc_sections() for prompt builder
 │       ├── skill_lookup.py        # SkillIndex — detect skill triggers, inject rules
 │       ├── location_lookup.py     # LocationIndex — detect locations, inject scene profiles
 │       ├── event_index.py         # EventIndex — load 02_events/, inject on %%EVENT%% tag
@@ -201,19 +201,23 @@ rotrl/
 │       │   └── player.ts          # Calm phrase scheduling over Tone.Transport
 │       ├── types.ts
 │       └── components/
-│           ├── Header.tsx         # Logo + controls (column layout); rate-limit badge
-│           ├── MusicPlayer.tsx    # Calm music controls + Music Off toggle + debug phrase view
-│           ├── ChatWindow.tsx     # Message list + thinking indicator
-│           ├── InputBar.tsx       # Player input textarea
-│           ├── IntentBar.tsx      # NPC/skill context + scene NPC chips (fixed bottom)
+│           ├── Header.tsx             # Logo + controls (column layout); rate-limit badge
+│           ├── MusicPlayer.tsx        # Calm music controls (Start/Stop) + debug phrase view
+│           ├── ChatWindow.tsx         # Message list + thinking indicator
+│           ├── InputBar.tsx           # Player input textarea
+│           ├── IntentBar.tsx          # NPC/skill context + scene NPC chips (fixed bottom)
 │           ├── CharacterSidebar.tsx
 │           ├── CharacterSheet.tsx
-│           ├── DiceTray.tsx      # Dice roller + attack banners (to-hit / damage) — feeds result back to API
-│           ├── CombatPanel.tsx    # Live initiative tracker (visible during combat)
-│           ├── HpBar.tsx          # HP bar with colour thresholds (green/amber/red/grey)
-│           ├── CoverageMatrix.tsx # Feature AC coverage + code-line coverage modal (two tabs)
-│           ├── ApiLogPanel.tsx    # In-app API call log browser (list + JSON detail view)
-│           └── EventStatus.tsx    # Event scheduler status panel (overlay, Tools dropdown)
+│           ├── MessageBubble.tsx      # Player/GM chat bubble with speaker label and portrait
+│           ├── SplashHint.tsx         # Rotating hint pool on pre-boot splash screen
+│           ├── DiceTray.tsx           # Dice roller + attack banners (to-hit / damage) — feeds result back to API
+│           ├── CombatPanel.tsx        # Live initiative tracker (visible during combat)
+│           ├── HpBar.tsx              # HP bar with colour thresholds (green/amber/red/grey)
+│           ├── LocationZonesPanel.tsx # Zone movement panel — combatant locations, queues zone moves
+│           ├── TokenBenchmarks.tsx    # Token benchmark overlay (Tools dropdown)
+│           ├── CoverageMatrix.tsx     # Feature AC coverage + code-line coverage modal (two tabs)
+│           ├── ApiLogPanel.tsx        # In-app API call log browser (list + JSON detail view)
+│           └── EventStatus.tsx        # Event scheduler status panel (overlay, Tools dropdown)
 │
 ├── adventure_path/
 │   ├── 00_system_authority/       # Non-negotiable GM rules — adjudication, PF1e scope
@@ -229,9 +233,11 @@ rotrl/
 │   ├── 10_spells/                 # Canonical spell markdown + class indexes (SpellIndex follow-up)
 │   └── 90_shared_references/      # Shared reference tables
 │
+├── ui/public/data/
+│   └── player_NN.json             # Player identity source — name, class, race, stats (read by backend + frontend)
+│
 ├── players/
 │   ├── player_01/
-│   │   ├── character_sheet.md     # Name, class, stats
 │   │   └── player_knowledge.md    # Facts this player's character knows
 │   ├── PLAYER_CHARACTERS.md
 │   └── PLAYER_LIMITS_AND_EXPECTATIONS.md
@@ -250,7 +256,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 1265 pytest tests
+├── tests/                         # ~1362 pytest tests
 ├── ui/src/components/__tests__/    # Vitest component tests
 ├── ui/src/__tests__/               # Vitest App SSE integration tests
 ├── ui/e2e/                         # Playwright browser-flow tests
@@ -341,7 +347,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 1265+ pytest tests passing across 47 test files:
+**Backend:** 1362 pytest tests collected across 48 test files (1304 typically passing; remainder skipped due to missing API keys):
 
 | File | Covers |
 |------|--------|
@@ -354,6 +360,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks` (multi-line and single-line inline blocks — includes Ameiko turn-5 regression case), section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
 | `test_npc_lookup_extended.py` | `detect_all`, `lookup`, status/knowledge reads, `_parse_base` |
+| `test_npc_extractor.py` | `get_npc_sections`, `list_npc_sections`, `_slugify`, `_find_base_md` (slug + canonical name resolution), `_parse_block`, `_parse_npc_file` (above/below-line split), `_match_key` (exact, prefix, longest-key tie-breaking) — 58 tests |
 | `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC short-stub vs full-profile selection (skill gate), no-location-NPC-injection, skill/location/event injection, context metadata, turn-1 format example injection, full combat spec injection when active, conditional section specs (ROLL/DELTAS gated on detection), PC narrative+mechanical profile injection, PC combat roster injected on round-1 spec with `active_events`, implicit NPC injection from `scene_npcs` when player doesn't name an NPC |
 | `test_end_session.py` | `_parse_turns_from_log`, `_enforce_recap_header`, `stream_end_session` errors |
 | `test_stream_filter.py` | `_stream_with_narrative_filter` — dev pass-through, narrative extraction, split tokens |
@@ -395,7 +402,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_music_generation.py` | Tier 0 calm phrase generator: degree mapping, bar totals, deterministic seeds, register constraints, cadence rule, repetition/descending/eighth-ratio guards, motif carry-forward |
 | `test_music_api.py` | `POST /api/music/calm/next_phrase` schema contract, API validation 422 path, and structured `generation_failed` 422 response |
 
-**Frontend:** Vitest tests passing across 27 test files (run separately — `cd ui && npm run test`):
+**Frontend:** Vitest tests passing across 29 test files (run separately — `cd ui && npm run test`):
 
 Recent streaming regressions are covered explicitly: `test_stream_filter.py` asserts dev mode passes raw `%%EVENT%%` tokens while full mode hides them, `test_event_injection.py` asserts event tags do not leak to player-visible non-dev chat, `ChatWindow.test.tsx` covers empty GM bubbles with three thinking dots, and `App.enemy-turn.test.tsx` covers the enemy-turn pre-token loading state.
 
@@ -428,6 +435,7 @@ Recent streaming regressions are covered explicitly: `test_stream_filter.py` ass
 | `InputBarHostile.test.tsx` | InputBar hostile state: skull icon, taunting placeholder text, send button disabled *(spec: combat-active-character.feature)* |
 | `ClickToTarget.test.tsx` | Click-to-target combatant row — `combatant-targeted` CSS class, target badge near InputBar, clear on non-combat *(spec: click-to-target.feature)* |
 | `MultiActionBar.test.tsx` | Multi-action bar component — action sequencing UI |
+| `musicApi.test.ts` | `POST /api/music/calm/next_phrase` API contract, 422 error path, `generation_failed` response shape |
 
 **E2E:** 13 mocked Playwright tests plus 11 live Playwright tests passing in Chromium:
 
@@ -449,7 +457,7 @@ POST /api/sessions
   └─ create_session()
        ├─ delete this session's NPC delta files (session_NNN.md per NPC)
        ├─ clear NPC knowledge files (session 1 only — full reset)
-       ├─ _build_slim_system_prompt() — reads players/, sessions/session_NNN/boot.md
+       ├─ _build_slim_system_prompt() — reads ui/public/data/player_NN.json, sessions/session_NNN/boot.md
        ├─ _parse_scene_npcs_from_boot() — restores scene_npcs from boot.md if section present
        └─ yields: done SSE event with session_id   (no LLM call)
 
@@ -473,7 +481,6 @@ POST /api/sessions/{id}/turn  (repeated each exchange)
        │    %%DELTAS%%   → write NPC status + knowledge files
        │    %%EVENT%%    → add event to active_events (TTL=5 turns); silently ignored if unknown or duplicate
        │    %%COMBAT%%   → update session.combat_state (round=0 clears; malformed block preserves existing state)
-       │    %%HP%%       → non-attack HP deltas (traps, poison, healing) applied via _apply_hp_deltas
        │    %%ATTACK%%   → NPC attacks auto-resolved (_resolve_npc_attack → HP delta + attack_result SSE);
        │                   PC attacks queued (PendingAttack) → attack_request SSE emitted per PC attack
        ├─ yield combat_update SSE event (serialised CombatState dict or null)
@@ -621,7 +628,7 @@ ollama list                            # confirm model is pulled
 | `scene_npcs` persisted across sessions — written to `boot.md`, restored on `create_session` | ✅ Complete |
 | Session number auto-increments after successful End Session | ✅ Complete |
 | Character action menu opens to the right of the avatar (AC-012) | ✅ Complete |
-| Test suites — 1265+ pytest · Vitest · 15 Playwright mocked · 11 live Playwright tests | ✅ Complete |
+| Test suites — 1362 pytest collected · Vitest · 15 Playwright mocked · 11 live Playwright tests | ✅ Complete |
 | System Authority docs (`00_system_authority/` — human-reference; CORE BEHAVIOR / GM STYLE hardcoded in prompt) | ✅ Complete |
 | World Setting + Campaign Setting docs | ✅ Complete |
 | Book I Act I — all 12 encounter docs written (PF1e), FESTIVAL_ENCOUNTER.md, event files, NPC/location profiles | ✅ Complete |
@@ -641,6 +648,8 @@ ollama list                            # confirm model is pulled
 | Event Status debug panel — `EventStatus.tsx`, `GET /api/sessions/{id}/event_status`, readiness bars, threshold markers, status badges (ACTIVE/ELIGIBLE/FROZEN/WARMING/DONE), TTL bar, opens fresh on click | ✅ Complete |
 | Implicit NPC injection from `scene_npcs` — when player doesn't name an NPC the most recently tracked NPC's profile is injected; full profile when skill active, short stub otherwise | ✅ Complete |
 | Single-line bracket block parsing — `_BRACKET_BLOCK_INLINE_RE` + `_parse_inline_block_fields` handle `[ key: val  key: val ]` on one line; fixes silently-dropped `%%DELTAS%%` blocks | ✅ Complete |
+| NPC section extractor — `api/context/npc_extractor.py`: `get_npc_sections()` / `list_npc_sections()`; case-insensitive prefix matching, above/below `<!-- REFERENCE -->` split; 58 tests | ✅ Complete |
+| NPC base.md format — canonical format extended with `## GM Notes` (replaces Reaction to PCs), `## Secrets` (with Diplomacy/Sense Motive unlock DCs), `## Social Checks`, `## State Handling`; all 20 Swallowtail Festival NPCs have complete base.md files | ✅ Complete |
 | Roll outcome fed into next GM turn directive | 🔴 Not done — GM narrates blind after resolve |
 | Session crash recovery (in-memory sessions lost on restart) | 🔴 Not started |
 | Acts II–III of Burnt Offerings | 🔴 In progress — sinspawn, Glassworks, Catacombs, Thistletop pending |

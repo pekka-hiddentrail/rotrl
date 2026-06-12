@@ -53,10 +53,17 @@ And   dot-prefixed session NPC folders are included if their base.md exists
 Given an NPC base.md file
 Then  the file starts with "# Canonical Name"
 And   "**Aliases:**" and "**Locations:**" fields appear before "<!-- REFERENCE -->"
-And   sections Personality, Appearance, Location & Availability, Reaction to PCs appear before "<!-- REFERENCE -->"
+And   sections Personality, Appearance, Location & Availability, GM Notes, Social Checks, Secrets, State Handling appear before "<!-- REFERENCE -->"
 And   Tier, Role, and Flags fields appear after "<!-- REFERENCE -->"
+And   Narrative Function section appears after "<!-- REFERENCE -->"
 And   content below "<!-- REFERENCE -->" is never injected into any prompt
 ```
+
+**Notes:**
+- `## GM Notes` is the canonical section for initial attitude, roleplay voice, what warms/cools the NPC, and emphasis guidance. Replaces the older "Reaction to PCs" section name.
+- `## Secrets` lists plot-relevant hidden facts with unlock conditions (Diplomacy DC, Sense Motive DC, etc.). Optional — only present when the NPC has secrets to surface.
+- `## Social Checks` lists all relevant skill DCs with outcome descriptions.
+- All sections are optional except Name, Aliases, Locations, Personality, and State Handling.
 
 ---
 
