@@ -302,13 +302,12 @@ The **Swallowtail Festival** opening adventure has been fully implemented with:
   - Knowledge boundaries (what scholars know vs. unknowns vs. forbidden inventions)
   - Session notes protocol for multi-session continuity
 
-- **GM Agent integration** (src/agents/gm_boot_agent.py)
-  - Loads all campaign files in hierarchical order
-  - Constructs comprehensive GM prompt from authority pyramid
-  - Interactive session loop with player input → GM adjudication
-  - Session persistence (outputs/session_XXX_notes.json)
+- **GM backend integration** (`api/session_manager.py`)
+  - `_build_slim_system_prompt()` assembles system authority, party, and situation at boot (no LLM call)
+  - Per-turn `_inject_context()` adds NPC profiles, skill rules, location context, and event blocks
+  - Session persistence: `outputs/*.log.md`, `outputs/api_log/*.json`, `sessions/session_NNN/`
 
-**To play**: See [QUICKSTART_GM.md](../QUICKSTART_GM.md)
+**To play**: See [README.md](README.md) — Boot Session section
 
 ---
 
@@ -323,4 +322,4 @@ The **Swallowtail Festival** opening adventure has been fully implemented with:
 
 ---
 
-**Status Updated:** Feb 10, 2026 | **Campaign Files:** 5/5 substantially populated | **Escalation Phases:** 6 fully defined
+**Status Updated:** Jun 12, 2026 | **Campaign Files:** 5/5 substantially populated | **Escalation Phases:** 6 fully defined

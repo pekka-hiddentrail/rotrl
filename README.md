@@ -187,6 +187,7 @@ rotrl/
 │   ├── api_logger.py              # Per-turn LLM call logging to outputs/api_log/
 │   └── context/
 │       ├── npc_lookup.py          # NpcIndex — detect NPC names, inject full profile (skill active) or short stub
+│       ├── npc_extractor.py       # Section-level NPC parser — get_npc_sections() / list_npc_sections() for prompt builder
 │       ├── skill_lookup.py        # SkillIndex — detect skill triggers, inject rules
 │       ├── location_lookup.py     # LocationIndex — detect locations, inject scene profiles
 │       ├── event_index.py         # EventIndex — load 02_events/, inject on %%EVENT%% tag
@@ -250,7 +251,7 @@ rotrl/
 │   ├── *.log.md                   # Live session logs
 │   └── api_log/                   # Per-turn LLM payloads
 │
-├── tests/                         # 1265 pytest tests
+├── tests/                         # ~1362 pytest tests
 ├── ui/src/components/__tests__/    # Vitest component tests
 ├── ui/src/__tests__/               # Vitest App SSE integration tests
 ├── ui/e2e/                         # Playwright browser-flow tests
@@ -341,7 +342,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 
 `python dev.py` runs the backend pytest suite before starting the API and UI. It does not run Vitest or Playwright, so use `npm run test` and `npm run test:e2e` from `ui/` before merging frontend changes.
 
-**Backend:** 1265+ pytest tests passing across 47 test files:
+**Backend:** ~1362 pytest tests passing across 48 test files:
 
 | File | Covers |
 |------|--------|
@@ -354,6 +355,7 @@ If Playwright reports a missing browser binary after a fresh install, run `cd ui
 | `test_response_sections.py` | `_parse_response_sections`, `_parse_bracket_blocks` (multi-line and single-line inline blocks — includes Ameiko turn-5 regression case), section marker detection |
 | `test_skill_lookup.py` | Trigger detection, longest-match, word boundary, `_parse_skill_file` |
 | `test_npc_lookup_extended.py` | `detect_all`, `lookup`, status/knowledge reads, `_parse_base` |
+| `test_npc_extractor.py` | `get_npc_sections`, `list_npc_sections`, `_slugify`, `_find_base_md` (slug + canonical name resolution), `_parse_block`, `_parse_npc_file` (above/below-line split), `_match_key` (exact, prefix, longest-key tie-breaking) — 58 tests |
 | `test_inject_context.py` | `_inject_context` per-turn system prompt assembly, NPC short-stub vs full-profile selection (skill gate), no-location-NPC-injection, skill/location/event injection, context metadata, turn-1 format example injection, full combat spec injection when active, conditional section specs (ROLL/DELTAS gated on detection), PC narrative+mechanical profile injection, PC combat roster injected on round-1 spec with `active_events`, implicit NPC injection from `scene_npcs` when player doesn't name an NPC |
 | `test_end_session.py` | `_parse_turns_from_log`, `_enforce_recap_header`, `stream_end_session` errors |
 | `test_stream_filter.py` | `_stream_with_narrative_filter` — dev pass-through, narrative extraction, split tokens |
@@ -641,6 +643,8 @@ ollama list                            # confirm model is pulled
 | Event Status debug panel — `EventStatus.tsx`, `GET /api/sessions/{id}/event_status`, readiness bars, threshold markers, status badges (ACTIVE/ELIGIBLE/FROZEN/WARMING/DONE), TTL bar, opens fresh on click | ✅ Complete |
 | Implicit NPC injection from `scene_npcs` — when player doesn't name an NPC the most recently tracked NPC's profile is injected; full profile when skill active, short stub otherwise | ✅ Complete |
 | Single-line bracket block parsing — `_BRACKET_BLOCK_INLINE_RE` + `_parse_inline_block_fields` handle `[ key: val  key: val ]` on one line; fixes silently-dropped `%%DELTAS%%` blocks | ✅ Complete |
+| NPC section extractor — `api/context/npc_extractor.py`: `get_npc_sections()` / `list_npc_sections()`; case-insensitive prefix matching, above/below `<!-- REFERENCE -->` split; 58 tests | ✅ Complete |
+| NPC base.md format — canonical format extended with `## GM Notes` (replaces Reaction to PCs), `## Secrets` (with Diplomacy/Sense Motive unlock DCs), `## Social Checks`, `## State Handling`; all 20 Swallowtail Festival NPCs have complete base.md files | ✅ Complete |
 | Roll outcome fed into next GM turn directive | 🔴 Not done — GM narrates blind after resolve |
 | Session crash recovery (in-memory sessions lost on restart) | 🔴 Not started |
 | Acts II–III of Burnt Offerings | 🔴 In progress — sinspawn, Glassworks, Catacombs, Thistletop pending |

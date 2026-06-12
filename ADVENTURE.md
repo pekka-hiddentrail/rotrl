@@ -73,14 +73,26 @@ adventure_path/
 ├── 01_npcs/                       — Live NPC profiles (read by NpcIndex at runtime)
 │   ├── _NPC_TEMPLATE.md                    Template for new NPC directories
 │   ├── _DELTA_TEMPLATE.md                  Template for per-turn delta blocks
-│   ├── abstalar_zantus/                    base.md · knowledge.md · session_002.md
-│   ├── aldern_foxglove/                    base.md
-│   ├── ameiko_kaijitsu/                    base.md
-│   ├── belor_hemlock/                      base.md · knowledge.md
-│   ├── kendra_deverin/                     base.md · knowledge.md · session_003.md
-│   ├── lonjiku_kaijitsu/                   base.md
-│   ├── nualia_tobyn/                       base.md
-│   ├── tsuto_kaijitsu/                     base.md
+│   ├── abstalar_zantus/                    base.md · knowledge.md (festival priest)
+│   ├── aldern_foxglove/                    base.md (noble survivor)
+│   ├── alma_avertin/                       base.md (baker)
+│   ├── ameiko_kaijitsu/                    base.md (innkeeper, Rusty Dragon)
+│   ├── belor_hemlock/                      base.md · knowledge.md (sheriff)
+│   ├── brodert_quink/                      base.md (sage)
+│   ├── cyrdak_drokkus/                     base.md (theater owner)
+│   ├── daviren_hosk/                       base.md (stablemaster)
+│   ├── gaven_deverin/                      base.md (farmer)
+│   ├── jargie_quinn/                       base.md (one-legged fisherman)
+│   ├── kendra_deverin/                     base.md · knowledge.md · session_003.md (mayor)
+│   ├── larz_rovanky/                       base.md (tanner)
+│   ├── lonjiku_kaijitsu/                   base.md (Ameiko's father)
+│   ├── naffer_vosk/                        base.md (gravedigger)
+│   ├── niska_mvashti/                      base.md (Varisian seer)
+│   ├── nualia_tobyn/                       base.md (main villain)
+│   ├── rynshinn_povalli/                   base.md (seamstress)
+│   ├── tsuto_kaijitsu/                     base.md (antagonist)
+│   ├── turch_sterglus/                     base.md (fishmonger)
+│   ├── ven_vinder/                         base.md (general store owner)
 │   └── .{slug}/                            Dot-prefixed = session NPC (auto-created, not yet promoted)
 │
 ├── 04_rules/                      — Skill and rule files (read by SkillIndex at runtime)
@@ -215,6 +227,7 @@ Session-generated locations (from `%%GENERATE%%` blocks with `type: location`) a
 | [api/session_manager.py](api/session_manager.py) | `_build_slim_system_prompt`, `_inject_context`, `_stream_chat`, NPC/delta writes |
 | [api/main.py](api/main.py) | All FastAPI routes |
 | [api/context/npc_lookup.py](api/context/npc_lookup.py) | `NpcIndex` singleton, alias detection |
+| [api/context/npc_extractor.py](api/context/npc_extractor.py) | Section-level NPC parser — `get_npc_sections()` / `list_npc_sections()` for targeted prompt assembly |
 | [api/context/skill_lookup.py](api/context/skill_lookup.py) | `SkillIndex`, trigger detection |
 | [api/context/location_lookup.py](api/context/location_lookup.py) | `LocationIndex` singleton, location alias detection and profile injection |
 | [api/context/event_index.py](api/context/event_index.py) | `EventIndex` singleton — loads `02_events/`, maps event_id → EventEntry, generates event map |
