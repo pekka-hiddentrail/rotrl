@@ -156,11 +156,33 @@ Section-level context assembly — inject exactly what the scene needs, no more.
 
 ### Prompt builder (new work)
 
-- [ ] **ContextSpec per scene type** — declarative definition of which NPC sections, location fields, and rule tags to inject for each scene type. NPC depth keyed on Tier × scene type: Tier I/II always get full profiles; Tier III get personality + reaction in social scenes, personality-only in dungeon/exploration; Tier IV get name-only. Candidate scene types: SOCIAL, DUNGEON, COMBAT, FESTIVAL, REST, INVESTIGATION. Store as a Python dataclass or YAML config under `adventure_path/00_system_authority/`.
+Spec: `specs/prompt-builder.feature` — 10 ACs. New files: `api/context/prompt_builder.py`, `tests/test_prompt_builder.py`.
 
-- [ ] **Scene type classification** — determines which ContextSpec applies. Three signal sources in priority order: (1) explicit `session.scene_type` override (GM toggle — highest priority, lowest effort); (2) `current_location_id` maps to a default scene type (dungeon locations → DUNGEON, town locations → SOCIAL, etc.); (3) intent label from the current turn extends existing intent detection. Classification must be < 1 ms — no LLM call.
+#### Phase 1 — Backend foundation
 
-- [ ] **PromptBuilder** — assembles context string from current `GameSession` + ContextSpec, using `get_npc_sections()` for NPC content, equivalent extractors for location sections, and tag-based rule lookup. Replaces the monolithic string-concatenation in `_inject_context`. Output is the same string format — no API or SSE changes needed.
+- [ ] **PB-1 — `ContextSlot` + `BuiltSlot` + `AssembledPrompt` dataclasses** — `api/context/prompt_builder.py`: `ContextSlot(key, label, source, sections, token_budget, scene_types, parent=None, optional=False)`, `BuiltSlot(key, label, parent, token_count, content, included)`, `AssembledPrompt(content, slots)`. *(AC-002, AC-005)*
+
+- [ ] **PB-2 — `SCENE_SLOTS` config dict** — module-level `dict[str, list[ContextSlot]]` with entries for `"social"`, `"exploration"`, `"dungeon"`, `"skill_challenge"`. No `"combat"` entry — guarded explicitly by PB-4. NPC section filters per scene type: social → `["Personality", "GM Notes", "Social Checks"]`, exploration → `["Personality", "Appearance"]`, dungeon → `["Appearance", "State Handling"]`, skill_challenge → `["Social Checks", "Secrets"]`. *(AC-003, AC-004)*
+
+- [ ] **PB-3 — `classify_scene(session) → str`** — pure Python, no LLM call, < 1 ms. Priority order: `session.combat_state` → active combat event → `session.scene_npcs` non-empty → `session.scene_locations` non-empty → default `"social"`. *(AC-001)*
+
+- [ ] **PB-4 — `PromptBuilder.assemble()` core** — takes `session` + optional `scene_type_override`; iterates `SCENE_SLOTS[scene_type]`; resolves each slot from its data source via `get_npc_sections()` / `NpcIndex` / `SkillIndex` / `LocationIndex`; enforces `token_budget` (truncate at last newline within budget); builds `BuiltSlot` list with `included=False` for optional empties; raises `ValueError("Use _build_combat_system_prompt() for combat scenes")` when `scene_type == "combat"`. Returns `AssembledPrompt`. *(AC-005, AC-006, AC-007, AC-008, AC-009)*
+
+- [ ] **PB-5 — Tests (`tests/test_prompt_builder.py`, ~30 tests)** — `classify_scene` 5 cases (combat_state, active combat event, scene_npcs, scene_locations, empty default); `ContextSlot`/`BuiltSlot`/`AssembledPrompt` field presence + defaults; `SCENE_SLOTS` structure (all 4 keys, no combat, required slots present); NPC section filter per scene type; token_budget truncation at line boundary; optional slot `included=False` on empty source; combat scene raises `ValueError`; slot hierarchy preserved in `BuiltSlot` list.
+
+#### Phase 2 — Preview API and frontend panel
+
+- [ ] **PB-P2-API — `GET /api/sessions/{id}/prompt_preview`** — returns `{"scene_type": str, "total_tokens": int, "slots": [...BuiltSlot...]}`. Supports `?scene_type=` query override. 404 on unknown session, 400 on invalid type. Read-only — does NOT affect the live session or `_inject_context`. *(AC-010)*
+
+- [ ] **PB-P2-UI — `PromptBuilderPanel.tsx`** — debug/dev panel (parallel to `EventStatus.tsx`). Scene-type badge at top, expandable hierarchical slot list with indentation by parent, per-slot token bar (used / budget), full slot content preview on expand. Opens from Tools dropdown or debug bar.
+
+#### Phase 3 — Wire into live turns
+
+- [ ] **PB-P3 — Feature flag `session.use_prompt_builder: bool`** — when `True`, `_inject_context()` calls `PromptBuilder.assemble()` instead of the monolithic string-concat path. Default `False`. Enables slot-by-slot migration with the old path live behind the flag.
+
+- [ ] **PB-P3 — Migrate `_inject_context()` slots one by one** — with flag live, migrate in order: `gm_instructions`, `party`, `encounter_spec`, `history`, NPC profiles, skills, location. Verify all `test_inject_context.py` tests pass after each slot transfer.
+
+#### Phase 4 — Token efficiency
 
 - [ ] **Rules library tag index** — `04_rules/` is already organised into subdirectories (combat, skills, feats, classes, traits). Add a lightweight index (`04_rules/_INDEX.md` or inline `tags:` front-matter in each file) so PromptBuilder can pull rules by semantic tag (`[traps]`, `[doors]`, `[darkness]`, `[social]`) without loading every file. Skills are already handled by `SkillIndex`; combat and feats are the gap.
 
@@ -173,6 +195,14 @@ Section-level context assembly — inject exactly what the scene needs, no more.
 - [ ] **NPC context injection ordering** — when multiple NPCs are in scene, inject in recency order (most recently mentioned first) so the char-limit cutoff drops least-recently-seen NPCs. *(blocked on M4)*
 
 - [ ] **`knowledge.md` age-out across long campaigns** — knowledge items grow unboundedly. When injecting, only include entries from the last N sessions; archive older entries to `knowledge_archive.md`. Prevents prompt bloat over a multi-session campaign.
+
+### Compliance and formatting
+
+- [ ] **Fix `[SECTIONS ACTIVE THIS TURN]` passive header — LLM echoes instead of obeys** — `api/session_manager.py` ~line 3349: the header `[SECTIONS ACTIVE THIS TURN]` reads as a list label; on turn 2 `llama-3.3-70b-versatile` echoes the section markers verbatim and asks the user for the next action instead of writing a GM response. Fix: replace with an imperative command — `"Write your response using ONLY the following sections:\n"`. Also update any cross-reference comment at ~line 2022 that names the current header string. Symptom only observed on turn 2+; turn 1 is fine because the `_FORMAT_EXAMPLE` block primes the model.
+
+- [ ] **Audit `_active_specs` injection for other passive-label anti-patterns** — review each spec constant (`_NARRATIVE_SPEC`, `_ROLL_SPEC`, `_GENERATE_SPEC`, `_DELTAS_SPEC`) for phrasing that describes rather than commands. Each spec should open with an imperative verb ("Write…", "Include…", "Emit…") not a noun phrase. Most visible on smaller/cheaper models.
+
+- [ ] **Add regression test: second-turn response must not surface raw section spec as narrative** — `tests/test_response_sections.py`: given a mocked LLM reply that echoes the spec block verbatim (the failure mode above), assert `_parse_response_sections` returns an empty narrative and does NOT pass spec text through to the player stream.
 
 ### Injection quality
 

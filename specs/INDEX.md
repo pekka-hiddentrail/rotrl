@@ -57,8 +57,9 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | [music-api-contract.feature](music-api-contract.feature) | Backend \| Frontend | `@music` `@api` `@calm` `@symbolic` `@contract` | 8 | `POST /api/music/calm/next_phrase`, `CalmPhrase` response schema, `NoteEvent` event shape, `PhraseState` motif state, 422 error contract; AC-008 (planning) multi-track `tracks` shape |
 | [music-calm-playback.feature](music-calm-playback.feature) | Frontend | `@music` `@playback` `@calm` `@ui` `@webaudio` | 14 | `MusicPlayer.tsx`, `ui/src/music/synth.ts`, `ui/src/music/player.ts`, Tone.js `Synth`, phrase scheduling, prefetch pipeline, stop fade, bar indicator (AC-014) |
 | [music-calm-bass-track.feature](music-calm-bass-track.feature) | Backend \| Frontend | `@music` `@generation` `@calm` `@bass` `@symbolic` `@multi-track` | 14 | **Planning** — `CalmBassConfig`, bass register C2–G3, stable degrees only, sparse rhythms, lead/bass density coordination, bar-root weights, phrase arc, `bass_pattern_id` state, separate bass `Tone.Synth`; multi-track `tracks` API shape |
+| [prompt-builder.feature](prompt-builder.feature) | Backend | `@prompt` `@injection` `@context` `@builder` `@scene` | 10 | `ContextSlot` dataclass, `BuiltSlot`, `AssembledPrompt`, `SCENE_SLOTS` dict (social/exploration/dungeon/skill_challenge), `classify_scene()`, `PromptBuilder.assemble()`, per-scene NPC section filters, token_budget enforcement, combat deferral guard, `GET /api/sessions/{id}/prompt_preview` — `api/context/prompt_builder.py`, `tests/test_prompt_builder.py` |
 
-**Total: 446 acceptance criteria across 46 feature files**
+**Total: 456 acceptance criteria across 47 feature files**
 
 ---
 
@@ -113,6 +114,8 @@ Quick reference for finding relevant specifications. Use tags to match PR change
 | `@temperature` | Readiness-based event warming and trigger chance | `event_runtime`, scheduler tick, threshold/pity logic |
 | `@chain` | Deterministic event node progression | `active_chain_id`, `active_node_id`, hard transitions |
 | `@stability` | Event pacing conflict controls | readiness vs urgency, arbitration, cooldown protections |
+| `@builder` | Declarative prompt assembly via slot config | `api/context/prompt_builder.py`, `ContextSlot`, `SCENE_SLOTS`, `PromptBuilder` |
+| `@scene` | Scene type classification and slot routing | `classify_scene()`, scene_type signals, per-scene NPC section filters |
 | `@combat` | Combat tracker panel and state | `api/session_manager.py` `CombatState`, `CombatPanel.tsx`, `HpBar.tsx`, `%%COMBAT%%` block, `api/context/combat_lookup.py` `CombatRulesIndex` |
 | `@layout` | UI column layout switching | `ui/src/index.css` `.main-content.combat-active`, flex `order` rules |
 | `@zone` | Named spatial areas inside combat encounters or canonical locations | `Combatant.zone`, location `## Zones`, Location Zones panel |
