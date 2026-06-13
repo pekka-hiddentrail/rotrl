@@ -8,16 +8,16 @@ LocationIndex, npc_extractor) and the final system prompt string.
 
 The assembly pipeline is:
 
-    classify_scene(session)                       → scene_type: str
+    classify_scene(session)                        → scene_type: str
         ↓
-    SCENE_SLOTS[scene_type]                       → list[ContextSlot]
+    SCENE_SLOTS[scene_type]                        → list[ContextSlot]
         ↓
-    PromptBuilder(session).assemble(scene_type)   → AssembledPrompt
+    PromptBuilder(session).assemble(scene_type)    → AssembledPrompt
         ↓
-    AssembledPrompt.content                       → system prompt string
-    AssembledPrompt.slots                         → list[BuiltSlot]  (for preview panel)
+    AssembledPrompt.content                        → system prompt string
+    AssembledPrompt.slots                          → list[BuiltSlot]  (for preview panel)
 
-Phase 1 (this file): dataclasses, SCENE_SLOTS config, classify_scene(), PromptBuilder stub.
+Phase 1 (this file): dataclasses, SCENE_SLOTS config, classify_scene(), PromptBuilder core.
 Phase 2: GET /api/sessions/{id}/prompt_preview + PromptBuilderPanel.tsx.
 Phase 3: session.use_prompt_builder flag wires assemble() into _inject_context().
 
@@ -30,26 +30,21 @@ See: specs/prompt-builder.feature, TODO.md §Prompt Optimization §Prompt builde
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
+from api.context.npc_extractor import get_npc_sections
 
 if TYPE_CHECKING:
     # Avoid circular import — GameSession is only needed for type hints.
     from api.session_manager import GameSession  # noqa: F401
+    from api.context.event_index import EventIndex  # noqa: F401
+    from api.context.npc_lookup import NpcIndex  # noqa: F401
+    from api.context.skill_lookup import SkillIndex  # noqa: F401
+    from api.context.location_lookup import LocationIndex  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Valid source identifiers for ContextSlot.source
 # ---------------------------------------------------------------------------
-# "npc_extractor"      — get_npc_sections() from api/context/npc_extractor.py
-# "npc_lookup"         — NpcIndex full profile from api/context/npc_lookup.py
-# "skill_lookup"       — SkillIndex profile from api/context/skill_lookup.py
-# "location_lookup"    — LocationIndex profile from api/context/location_lookup.py
-# "event"              — active event content from EventIndex
-# "history"            — trimmed session.messages (text)
-# "gm_instructions"    — static GM authority / style text
-# "party"              — PC profiles from session pc_profiles
-# "active_participants"— scene_npcs list (names only)
-# "deltas"             — per-NPC recent delta summaries
-
 _VALID_SOURCES = frozenset({
     "npc_extractor",
     "npc_lookup",
@@ -77,24 +72,19 @@ class ContextSlot:
     ------
     key : str
         Machine identifier used in BuiltSlot and the preview API response.
-        Example: "npc_profiles", "gm_instructions", "history".
     label : str
-        Human-readable label shown in the PromptBuilderPanel.
-        Example: "NPC Profiles", "GM Instructions".
+        Human-readable label shown in PromptBuilderPanel.
     source : str
-        Which data source provides the raw content.
-        Must be one of _VALID_SOURCES.
+        Which data source provides the raw content. Must be in _VALID_SOURCES.
     sections : list[str]
-        For source="npc_extractor": the exact section names to request via
+        For source="npc_extractor": exact section names to request via
         get_npc_sections().  Pass [] to request all above-line sections.
         For other sources: unused (pass []).
     token_budget : int
         Maximum character count for the assembled slot content.
         PromptBuilder truncates at the last newline within this limit.
     scene_types : list[str]
-        The scene types that include this slot.
-        ["social", "exploration"] means the slot only appears in social and
-        exploration scenes.  Use ["*"] for all non-combat scenes (future).
+        Scene types that include this slot.
     parent : str | None
         Key of the parent slot (for hierarchy display in the panel).
         None for top-level slots.
@@ -110,7 +100,7 @@ class ContextSlot:
     sections: list[str]
     token_budget: int
     scene_types: list[str]
-    parent: str | None = None
+    parent: Optional[str] = None
     optional: bool = False
 
 
@@ -119,31 +109,18 @@ class BuiltSlot:
     """
     The assembled result for one ContextSlot after PromptBuilder.assemble().
 
-    This is the per-slot payload returned by the preview endpoint and used
-    by PromptBuilderPanel.tsx to display the hierarchy, token bars, and
-    content previews.
-
     Fields
     ------
-    key : str
-        Matches the originating ContextSlot.key.
-    label : str
-        Matches the originating ContextSlot.label.
-    parent : str | None
-        Matches the originating ContextSlot.parent.
-    token_count : int
-        Actual character count of `content` after truncation.
-        Always <= the slot's token_budget.
-    content : str
-        The assembled content string for this slot.
-        Empty string when included=False.
-    included : bool
-        True if the slot content is part of the assembled prompt.
-        False when the slot is optional and the data source returned empty.
+    key : str        — matches the originating ContextSlot.key
+    label : str      — matches the originating ContextSlot.label
+    parent : str | None  — matches the originating ContextSlot.parent
+    token_count : int    — actual character count of `content` after truncation
+    content : str        — the assembled text for this slot
+    included : bool      — False when optional and data source returned empty
     """
     key: str
     label: str
-    parent: str | None
+    parent: Optional[str]
     token_count: int
     content: str
     included: bool
@@ -156,15 +133,9 @@ class AssembledPrompt:
 
     Fields
     ------
-    content : str
-        The assembled system prompt string (all included slot contents
-        concatenated in order).
-    slots : list[BuiltSlot]
-        One entry per ContextSlot in the scene's SCENE_SLOTS list,
-        in depth-first order (children immediately after their parent).
-        This list is used by the preview API and PromptBuilderPanel.
-    scene_type : str
-        The scene type that was used for assembly.
+    content : str           — assembled system prompt string (included slots joined)
+    slots : list[BuiltSlot] — one entry per slot in depth-first order
+    scene_type : str        — the scene type used for assembly
     """
     content: str
     slots: list[BuiltSlot]
@@ -174,16 +145,6 @@ class AssembledPrompt:
 # ---------------------------------------------------------------------------
 # SCENE_SLOTS — the declarative context specification
 # ---------------------------------------------------------------------------
-# Each key is a scene type string returned by classify_scene().
-# Each value is an ordered list of ContextSlot instances.
-# The order determines injection order in the assembled prompt and
-# display order in the PromptBuilderPanel.
-#
-# Token budgets are approximate character counts (1 token ≈ 4 chars).
-# The global cap is _GROQ_MAX_SYSTEM_CHARS = 30,000.  The sum of all
-# token_budget values per scene type should stay well under that limit.
-#
-# "combat" is intentionally absent — PromptBuilder raises ValueError for it.
 
 SCENE_SLOTS: dict[str, list[ContextSlot]] = {
 
@@ -510,73 +471,104 @@ _VALID_SCENE_TYPES = frozenset(SCENE_SLOTS.keys())
 
 
 # ---------------------------------------------------------------------------
+# Token budget helper
+# ---------------------------------------------------------------------------
+
+def _truncate_at_line_boundary(text: str, max_chars: int) -> str:
+    """
+    Truncate *text* to at most *max_chars* characters, breaking only at a
+    newline boundary so no line is cut mid-word.
+
+    Rules:
+    - If len(text) <= max_chars, return text unchanged.
+    - Otherwise, take text[:max_chars] and find the last newline.
+    - If a newline exists, truncate there (preserving the last complete line).
+    - If no newline exists within the window, return the full text rather than
+      truncating to an empty string (never drop non-empty content entirely).
+    """
+    if len(text) <= max_chars:
+        return text
+    window = text[:max_chars]
+    cut = window.rfind("\n")
+    if cut > 0:
+        return window[:cut]
+    # No newline in the window — return as-is to avoid losing all content.
+    return text
+
+
+# ---------------------------------------------------------------------------
 # classify_scene
 # ---------------------------------------------------------------------------
 
-def classify_scene(session: "GameSession") -> str:
+def classify_scene(
+    session: "GameSession",
+    event_index: Optional["EventIndex"] = None,
+) -> str:
     """
     Derive the current scene type from session state.
 
-    Rules (evaluated in priority order):
-    1. session.combat_state is not None  →  "combat"
-    2. Active event with event_type "combat"  →  "combat"
-    3. session.scene_npcs is non-empty  →  "social"
-    4. session.scene_locations is non-empty  →  "exploration"
-    5. Default  →  "social"
+    Priority order (first match wins):
+    1. session.combat_state is not None              →  "combat"
+    2. active scheduled event has event_type="combat"→  "combat"
+       (requires event_index; skipped when event_index is None)
+    3. session.scene_npcs is non-empty               →  "social"
+    4. session.scene_locations is non-empty          →  "exploration"
+    5. default                                       →  "social"
+
+    Parameters
+    ----------
+    session : GameSession
+        The live session object.
+    event_index : EventIndex | None
+        Optional event index for checking the active scheduled event type.
+        When None, signal #2 is skipped (session.combat_state still catches
+        all combat states that have been fully initialised).
 
     Returns
     -------
     str
-        One of "combat", "social", "exploration", "dungeon", "skill_challenge".
-        Note: "combat" is returned here but PromptBuilder.assemble() will
-        raise ValueError for it — the caller must route to
-        _build_combat_system_prompt() instead.
-
-    Notes
-    -----
-    - Pure Python, no LLM call, < 1 ms.
-    - Does not consult session.current_location_id for dungeon/skill_challenge
-      classification yet — those scene types are manually invoked or will be
-      added as a signal in Phase 2.
+        One of: "combat", "social", "exploration".
+        Note: PromptBuilder.assemble() raises ValueError for "combat" —
+        the caller must route to _build_combat_system_prompt() instead.
     """
-    raise NotImplementedError(
-        "classify_scene() is not yet implemented. "
-        "Implementation guide:\n"
-        "  1. if session.combat_state is not None: return 'combat'\n"
-        "  2. for event in session.active_events:\n"
-        "         if getattr(event, 'event_type', None) == 'combat': return 'combat'\n"
-        "  3. if session.scene_npcs: return 'social'\n"
-        "  4. if session.scene_locations: return 'exploration'\n"
-        "  5. return 'social'"
-    )
+    # 1. Active combat tracker
+    if session.combat_state is not None:
+        return "combat"
+
+    # 2. Active scheduled event is a combat event
+    if event_index is not None:
+        active_event_id = getattr(
+            getattr(session, "event_runtime", None), "active_event_id", None
+        )
+        if active_event_id:
+            entry = event_index.get(active_event_id)
+            if entry is not None and getattr(entry, "event_type", "") == "combat":
+                return "combat"
+
+    # 3. Named NPCs are in the scene
+    if session.scene_npcs:
+        return "social"
+
+    # 4. Named locations have been entered
+    if session.scene_locations:
+        return "exploration"
+
+    # 5. Default
+    return "social"
 
 
 # ---------------------------------------------------------------------------
 # PromptBuilder
 # ---------------------------------------------------------------------------
 
-def _truncate_at_line_boundary(text: str, max_chars: int) -> str:
-    """
-    Truncate *text* to at most *max_chars* characters, breaking only at
-    a newline boundary so no line is split mid-word.
-
-    If the text is already within budget, it is returned unchanged.
-    If no newline exists within the budget window, the whole text is
-    returned (never truncate to empty).
-    """
-    raise NotImplementedError(
-        "_truncate_at_line_boundary() is not yet implemented. "
-        "Implementation guide:\n"
-        "  if len(text) <= max_chars: return text\n"
-        "  window = text[:max_chars]\n"
-        "  cut = window.rfind('\\n')\n"
-        "  return window[:cut] if cut > 0 else text  # never truncate to empty"
-    )
-
-
 class PromptBuilder:
     """
     Assembles a system prompt from declarative slot config + live session state.
+
+    Inject optional indexes for testing or for callers that already hold them:
+
+        PromptBuilder(session)                          # uses lazy imports
+        PromptBuilder(session, npc_index=mock_idx)      # test-friendly
 
     Usage
     -----
@@ -584,28 +576,37 @@ class PromptBuilder:
     >>> system_prompt = assembled.content
     >>> slots_for_panel = assembled.slots
 
-    With an override (for the preview endpoint):
+    With scene type override (for the preview endpoint):
     >>> assembled = PromptBuilder(session).assemble(scene_type_override="exploration")
 
     Raises
     ------
     ValueError
-        If the resolved scene type is "combat".  Combat prompt assembly is
-        the responsibility of _build_combat_system_prompt() in session_manager.py.
+        If the resolved scene type is "combat" — use _build_combat_system_prompt().
+    ValueError
+        If scene_type_override is not a valid type.
     """
 
-    def __init__(self, session: "GameSession") -> None:
-        """
-        Parameters
-        ----------
-        session : GameSession
-            The live session whose state drives classification and data lookup.
-        """
+    def __init__(
+        self,
+        session: "GameSession",
+        *,
+        npc_index: Optional["NpcIndex"] = None,
+        skill_index: Optional["SkillIndex"] = None,
+        location_index: Optional["LocationIndex"] = None,
+        event_index: Optional["EventIndex"] = None,
+    ) -> None:
         self._session = session
+        self._npc_index = npc_index
+        self._skill_index = skill_index
+        self._location_index = location_index
+        self._event_index = event_index
+
+    # ── Public method ─────────────────────────────────────────────────────────
 
     def assemble(
         self,
-        scene_type_override: str | None = None,
+        scene_type_override: Optional[str] = None,
     ) -> AssembledPrompt:
         """
         Assemble the system prompt for the current session.
@@ -613,108 +614,265 @@ class PromptBuilder:
         Parameters
         ----------
         scene_type_override : str | None
-            When provided, bypasses classify_scene() and uses this scene type
-            directly.  Used by the preview API endpoint
-            (GET /api/sessions/{id}/prompt_preview?scene_type=exploration).
+            Bypasses classify_scene() and uses this scene type directly.
+            Used by the preview endpoint (?scene_type=exploration).
             Must be a key in SCENE_SLOTS or "combat" (which still raises).
 
         Returns
         -------
         AssembledPrompt
-            .content  — assembled system prompt string
-            .slots    — list[BuiltSlot] in depth-first order
-            .scene_type — the scene type that was used
+            .content    — assembled system prompt string
+            .slots      — list[BuiltSlot] in depth-first order
+            .scene_type — the scene type used
 
         Raises
         ------
         ValueError
-            If scene_type resolves to "combat" (directly or via override).
+            If scene_type resolves to "combat".
         ValueError
-            If scene_type_override is provided but not a valid type.
-
-        Notes
-        -----
-        Implementation guide (Phase 1):
-
-        1. Resolve scene_type:
-               scene_type = scene_type_override or classify_scene(self._session)
-               if scene_type_override and scene_type_override not in SCENE_SLOTS | {"combat"}:
-                   raise ValueError(f"Invalid scene_type: {scene_type_override!r}")
-
-        2. Guard against combat:
-               if scene_type == "combat":
-                   raise ValueError(
-                       "Use _build_combat_system_prompt() for combat scenes"
-                   )
-
-        3. Iterate slots and build content:
-               slots = SCENE_SLOTS[scene_type]
-               built: list[BuiltSlot] = []
-               content_parts: list[str] = []
-
-               for slot in slots:
-                   raw = self._fetch(slot)          # dispatch to data source
-                   truncated = _truncate_at_line_boundary(raw, slot.token_budget)
-                   included = bool(truncated) or not slot.optional
-                   built.append(BuiltSlot(
-                       key=slot.key, label=slot.label, parent=slot.parent,
-                       token_count=len(truncated), content=truncated,
-                       included=included,
-                   ))
-                   if included and truncated:
-                       content_parts.append(truncated)
-
-        4. Return:
-               return AssembledPrompt(
-                   content="\\n\\n".join(content_parts),
-                   slots=built,
-                   scene_type=scene_type,
-               )
+            If scene_type_override is provided but not a recognised type.
         """
-        raise NotImplementedError(
-            "PromptBuilder.assemble() is not yet implemented. "
-            "See the docstring for the implementation guide."
+        # Resolve scene type
+        if scene_type_override is not None:
+            all_types = _VALID_SCENE_TYPES | {"combat"}
+            if scene_type_override not in all_types:
+                raise ValueError(
+                    f"Invalid scene_type_override: {scene_type_override!r}. "
+                    f"Valid values: {sorted(all_types)}"
+                )
+            scene_type = scene_type_override
+        else:
+            scene_type = classify_scene(self._session, self._event_index)
+
+        # Guard: combat is handled elsewhere
+        if scene_type == "combat":
+            raise ValueError(
+                f"PromptBuilder cannot assemble combat scenes. "
+                f"Use _build_combat_system_prompt() for combat scenes."
+            )
+
+        slots = SCENE_SLOTS[scene_type]
+        built: list[BuiltSlot] = []
+        content_parts: list[str] = []
+
+        for slot in slots:
+            raw = self._fetch(slot)
+            truncated = _truncate_at_line_boundary(raw, slot.token_budget)
+
+            if slot.optional and not truncated.strip():
+                # Optional + empty → include=False, zero tokens
+                built.append(BuiltSlot(
+                    key=slot.key,
+                    label=slot.label,
+                    parent=slot.parent,
+                    token_count=0,
+                    content="",
+                    included=False,
+                ))
+            else:
+                included = bool(truncated.strip()) or not slot.optional
+                built.append(BuiltSlot(
+                    key=slot.key,
+                    label=slot.label,
+                    parent=slot.parent,
+                    token_count=len(truncated),
+                    content=truncated,
+                    included=included,
+                ))
+                if truncated:
+                    content_parts.append(truncated)
+
+        return AssembledPrompt(
+            content="\n\n".join(content_parts),
+            slots=built,
+            scene_type=scene_type,
         )
+
+    # ── Private: data source dispatch ────────────────────────────────────────
 
     def _fetch(self, slot: ContextSlot) -> str:
         """
         Fetch raw content for *slot* from its data source.
 
-        Dispatch table:
-        - "gm_instructions"   → static GM authority text from system prompt
-        - "party"             → pc_profiles text from session
-        - "event"             → active event content from session.active_events
-        - "npc_extractor"     → get_npc_sections() for each NPC in scene_npcs,
-                                 filtered by slot.sections; concatenated
-        - "npc_lookup"        → NpcIndex full profile for each scene NPC
-        - "skill_lookup"      → SkillIndex profile for detected skills
-        - "location_lookup"   → LocationIndex profile for current_location_id
-        - "active_participants"→ "\n".join(session.scene_npcs)
-        - "deltas"            → recent delta summaries from session NPC delta files
-        - "history"           → trimmed session.messages rendered as text
-
-        Returns "" (empty string) if the source has no content for this session.
-
-        Notes
-        -----
-        Implementation guide:
-
-            if slot.source == "npc_extractor":
-                parts = []
-                for npc_name in self._session.scene_npcs:
-                    sections = get_npc_sections(npc_name, slot.sections or None)
-                    # sections is dict[str, str | None]; skip None values
-                    for section_text in sections.values():
-                        if section_text:
-                            parts.append(section_text)
-                return "\\n\\n".join(parts)
-
-            if slot.source == "active_participants":
-                return "\\n".join(self._session.scene_npcs)
-
-            ... etc.
+        Returns "" when the source has no content for the current session.
+        Never raises — missing data is an empty string.
         """
-        raise NotImplementedError(
-            f"PromptBuilder._fetch() not yet implemented for source={slot.source!r}. "
-            "See the docstring for the implementation guide."
-        )
+        src = slot.source
+
+        if src == "gm_instructions":
+            return self._session.system_prompt or ""
+
+        if src == "party":
+            return self._fetch_party()
+
+        if src == "event":
+            return self._fetch_event()
+
+        if src == "npc_extractor":
+            return self._fetch_npc_extractor(slot.sections)
+
+        if src == "npc_lookup":
+            return self._fetch_npc_lookup()
+
+        if src == "active_participants":
+            names = list(self._session.scene_npcs)
+            return "\n".join(names) if names else ""
+
+        if src == "location_lookup":
+            return self._fetch_location(slot.sections)
+
+        if src == "skill_lookup":
+            return self._fetch_skill()
+
+        if src == "history":
+            return self._fetch_history()
+
+        if src == "deltas":
+            # Phase 2+: delta summaries built from NPC session files.
+            # Return empty for now so optional delta slots are cleanly omitted.
+            return ""
+
+        return ""
+
+    # ── Fetch helpers ─────────────────────────────────────────────────────────
+
+    def _fetch_party(self) -> str:
+        """Return PC narrative profiles joined together."""
+        profiles = getattr(self._session, "pc_profiles", {})
+        if not profiles:
+            return ""
+        parts = []
+        for _name, profile in profiles.items():
+            narrative = profile.get("narrative", "")
+            if narrative:
+                parts.append(narrative)
+        return "\n\n".join(parts)
+
+    def _fetch_event(self) -> str:
+        """Return active event content blocks joined together."""
+        active_events = getattr(self._session, "active_events", [])
+        if not active_events:
+            return ""
+        parts = [ev.content for ev in active_events if getattr(ev, "content", "")]
+        return "\n\n".join(parts)
+
+    def _fetch_npc_extractor(self, sections: list[str]) -> str:
+        """
+        Return section-filtered NPC content for all NPCs in scene_npcs.
+
+        Calls get_npc_sections() for each NPC with the slot's section list.
+        Missing sections (returned as None) are silently skipped.
+        FileNotFoundError (unknown NPC) is silently swallowed — the NPC may
+        be a session stub without a base.md yet.
+        """
+        scene_npcs = getattr(self._session, "scene_npcs", [])
+        if not scene_npcs:
+            return ""
+
+        all_parts: list[str] = []
+        for npc_name in scene_npcs:
+            try:
+                result = get_npc_sections(
+                    npc_name,
+                    sections if sections else None,
+                )
+            except (FileNotFoundError, OSError):
+                continue
+
+            # Collect section values in the order requested; skip None/empty
+            canonical_name = result.get("Name", npc_name)
+            npc_parts: list[str] = [f"### {canonical_name}"]
+            for key, value in result.items():
+                if key == "Name":
+                    continue
+                if value:
+                    npc_parts.append(f"**{key}**\n{value}")
+
+            if len(npc_parts) > 1:  # more than just the header
+                all_parts.append("\n\n".join(npc_parts))
+
+        return "\n\n---\n\n".join(all_parts)
+
+    def _fetch_npc_lookup(self) -> str:
+        """Return full NPC profiles via NpcIndex for NPCs in scene_npcs."""
+        idx = self._npc_index
+        if idx is None:
+            try:
+                from api.session_manager import _npc_index as _g  # lazy import
+                idx = _g
+            except ImportError:
+                return ""
+
+        scene_npcs = getattr(self._session, "scene_npcs", [])
+        parts = []
+        for npc_name in scene_npcs:
+            match = idx.lookup(npc_name)
+            if match:
+                parts.append(idx.format_context(match))
+        return "\n\n".join(parts)
+
+    def _fetch_location(self, sections: list[str]) -> str:
+        """
+        Return location profile for the session's current_location_id.
+
+        When sections is non-empty, it's a hint for which part of the location
+        profile to return (e.g. ["Zones"]). For Phase 1 this is treated as a
+        full-profile request since LocationIndex profiles are single-block text.
+        """
+        idx = self._location_index
+        if idx is None:
+            try:
+                from api.session_manager import _location_index as _g
+                idx = _g
+            except ImportError:
+                return ""
+
+        loc_id = getattr(self._session, "current_location_id", "") or ""
+        if not loc_id:
+            # Fall back to first scene_location if current_location_id not set
+            scene_locations = getattr(self._session, "scene_locations", [])
+            if scene_locations:
+                loc_id = scene_locations[0]
+
+        if not loc_id:
+            return ""
+
+        match = idx.lookup(loc_id)  # type: ignore[attr-defined]
+        if match is None:
+            return ""
+        return match.profile_text or ""
+
+    def _fetch_skill(self) -> str:
+        """
+        Return skill rules for the active skill in the current scene.
+
+        Phase 1: No detected skill is stored on the session yet — skill
+        detection happens per-turn in _inject_context() from player input.
+        Returns "" until Phase 3 wires a session.detected_skills field.
+        """
+        # TODO (Phase 3): add session.detected_skills: list[str] and look them up here.
+        return ""
+
+    def _fetch_history(self) -> str:
+        """
+        Return session message history formatted as plain text.
+
+        Formats each message as "PLAYER: ..." or "GM: ..." lines.
+        The actual turn-window trimming is the responsibility of _inject_context();
+        here we format whatever is currently in session.messages.
+        """
+        messages = getattr(self._session, "messages", [])
+        if not messages:
+            return ""
+
+        role_labels = {"user": "PLAYER", "assistant": "GM", "system": "SYSTEM"}
+        lines: list[str] = []
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "system":
+                continue  # system prompt is the gm_instructions slot
+            label = role_labels.get(role, role.upper())
+            lines.append(f"{label}: {content}")
+
+        return "\n".join(lines)
